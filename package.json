@@ -1,0 +1,20 @@
+{
+  "name": "social-media-scheduler",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up",
+    "build": "pnpm -r build",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "pnpm -r test -- --run",
+    "db:generate": "pnpm --filter @sms/db exec drizzle-kit generate",
+    "db:migrate": "pnpm --filter @sms/db exec drizzle-kit migrate"
+  },
+  "devDependencies": {
+    "eslint": "~10.2.0",
+    "prettier": "~3.8.1",
+    "tsx": "~4.21.0",
+    "typescript": "~5.9.3"
+  }
+}
