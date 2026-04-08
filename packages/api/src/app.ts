@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cookieParser from 'cookie-parser';
 import type { Redis } from 'ioredis';
 import type { Sql } from 'postgres';
@@ -13,6 +14,8 @@ import { errorHandler } from './middleware/error-handler.js';
 import { createHealthRouter } from './routes/health.js';
 import { createSetupRouter } from './routes/setup.js';
 import { createAuthRouter } from './routes/auth.js';
+import { createRecoveryRouter } from './routes/recovery.js';
+import { createSettingsRouter } from './routes/settings.js';
 
 interface AppDependencies {
   redis: Redis;
@@ -34,6 +37,12 @@ export function createApp({ redis, sql, db, sessionSecret }: AppDependencies) {
 
   app.use(createSetupRouter({ db }));
   app.use(createAuthRouter({ db, redis }));
+  app.use(createRecoveryRouter({ db, redis }));
+  app.use(createSettingsRouter({ db, redis }));
+
+  const MEDIA_DIR = process.env.MEDIA_DIR || './data/media';
+  app.use('/avatars', express.static(path.join(MEDIA_DIR, 'avatars')));
+
   app.use(createHealthRouter({ redis, sql }));
 
   app.use((_req, res) => {
