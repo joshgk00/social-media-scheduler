@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
 
-const SESSION_PREFIX = 'sms:sess:';
+export const SESSION_PREFIX = 'sms:sess:';
 
 // Redis SCAN is O(N) over all keys matching the prefix. For a single-user app
 // with at most a handful of concurrent sessions, this is efficient. For a

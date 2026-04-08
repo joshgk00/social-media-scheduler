@@ -6,6 +6,7 @@ function createMockRedis() {
   return {
     ping: vi.fn().mockResolvedValue('PONG'),
     get: vi.fn().mockResolvedValue(Date.now().toString()),
+    on: vi.fn(),
   } as any;
 }
 
@@ -16,13 +17,22 @@ function createMockSql() {
   );
 }
 
+function createTestApp() {
+  return createApp({
+    redis: createMockRedis(),
+    sql: createMockSql(),
+    db: {} as any,
+    sessionSecret: 'test-secret-that-is-long-enough-for-session',
+  });
+}
+
 describe('Middleware', () => {
   beforeEach(() => {
     process.env.CSRF_SECRET = 'a'.repeat(64);
   });
 
   it('responses include X-Request-Id header with UUID format', async () => {
-    const app = createApp({ redis: createMockRedis(), sql: createMockSql() });
+    const app = createTestApp();
     const res = await request(app).get('/health');
 
     expect(res.headers['x-request-id']).toBeDefined();
@@ -31,7 +41,7 @@ describe('Middleware', () => {
   });
 
   it('responses include helmet security headers', async () => {
-    const app = createApp({ redis: createMockRedis(), sql: createMockSql() });
+    const app = createTestApp();
     const res = await request(app).get('/health');
 
     expect(res.headers['x-content-type-options']).toBe('nosniff');
@@ -39,14 +49,14 @@ describe('Middleware', () => {
   });
 
   it('GET requests are not blocked by CSRF middleware', async () => {
-    const app = createApp({ redis: createMockRedis(), sql: createMockSql() });
+    const app = createTestApp();
     const res = await request(app).get('/health');
 
     expect(res.status).not.toBe(403);
   });
 
   it('POST requests without CSRF token return 403', async () => {
-    const app = createApp({ redis: createMockRedis(), sql: createMockSql() });
+    const app = createTestApp();
     const res = await request(app)
       .post('/health')
       .send({ test: true });
@@ -55,7 +65,7 @@ describe('Middleware', () => {
   });
 
   it('preserves existing X-Request-Id header from client', async () => {
-    const app = createApp({ redis: createMockRedis(), sql: createMockSql() });
+    const app = createTestApp();
     const customId = '550e8400-e29b-41d4-a716-446655440000';
     const res = await request(app)
       .get('/health')

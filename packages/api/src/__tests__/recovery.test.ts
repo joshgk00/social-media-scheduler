@@ -11,6 +11,9 @@ const mockHashPassword = vi.fn();
 const mockUserExists = vi.fn();
 const mockCreateUser = vi.fn();
 const mockUpdateLastLogin = vi.fn();
+const mockGetSecurityQuestions = vi.fn();
+const mockResetPasswordAndDisableTotp = vi.fn();
+const mockReplaceSecurityQuestions = vi.fn();
 
 vi.mock('../services/auth.service.js', () => ({
   findUserByEmail: (...args: unknown[]) => mockFindUserByEmail(...args),
@@ -20,6 +23,9 @@ vi.mock('../services/auth.service.js', () => ({
   userExists: (...args: unknown[]) => mockUserExists(...args),
   createUser: (...args: unknown[]) => mockCreateUser(...args),
   updateLastLogin: (...args: unknown[]) => mockUpdateLastLogin(...args),
+  getSecurityQuestions: (...args: unknown[]) => mockGetSecurityQuestions(...args),
+  resetPasswordAndDisableTotp: (...args: unknown[]) => mockResetPasswordAndDisableTotp(...args),
+  replaceSecurityQuestions: (...args: unknown[]) => mockReplaceSecurityQuestions(...args),
 }));
 
 vi.mock('../services/totp.service.js', () => ({
@@ -33,6 +39,7 @@ const mockInvalidateOtherSessions = vi.fn();
 vi.mock('../services/session.service.js', () => ({
   invalidateAllSessions: (...args: unknown[]) => mockInvalidateAllSessions(...args),
   invalidateOtherSessions: (...args: unknown[]) => mockInvalidateOtherSessions(...args),
+  SESSION_PREFIX: 'sms:sess:',
 }));
 
 const mockArgon2Verify = vi.fn();
@@ -98,6 +105,11 @@ describe('POST /api/auth/recover/verify-email', () => {
       id: 'user-id',
       email: 'test@example.com',
     });
+    mockGetSecurityQuestions.mockResolvedValue([
+      { questionIndex: 0, answerHash: '$argon2id$hashed' },
+      { questionIndex: 1, answerHash: '$argon2id$hashed' },
+      { questionIndex: 2, answerHash: '$argon2id$hashed' },
+    ]);
 
     const app = createTestApp();
     const res = await request(app)
@@ -105,7 +117,7 @@ describe('POST /api/auth/recover/verify-email', () => {
       .send({ email: 'test@example.com' });
 
     expect(res.status).toBe(200);
-    expect(res.body.questionsConfigured).toBeDefined();
+    expect(res.body.questionsConfigured).toBe(true);
   });
 
   it('returns questionsConfigured: false for unknown email (no user enumeration)', async () => {
@@ -125,6 +137,7 @@ describe('POST /api/auth/recover/verify-email', () => {
       id: 'user-id',
       email: 'test@example.com',
     });
+    mockGetSecurityQuestions.mockResolvedValue([]);
 
     const app = createTestApp();
     const res = await request(app)

@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { loginSchema, totpVerifySchema } from '@sms/shared';
-import type { Redis } from 'ioredis';
 import type { Db } from '@sms/db';
 
 import { findUserByEmail, verifyPassword, getUserById, updateLastLogin } from '../services/auth.service.js';
@@ -8,10 +7,12 @@ import { verifyTotpCode } from '../services/totp.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { loginLimiter } from '../middleware/rate-limiter.js';
 import { generateCsrfToken } from '../middleware/csrf.js';
+import { createLogger } from '@sms/shared';
+
+const logger = createLogger('auth-routes');
 
 interface AuthDependencies {
   db: Db;
-  redis: Redis;
 }
 
 export function createAuthRouter({ db }: AuthDependencies) {
@@ -71,7 +72,7 @@ export function createAuthRouter({ db }: AuthDependencies) {
     await new Promise<void>((resolve, reject) => {
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
-    updateLastLogin(db, user.id).catch(() => {});
+    updateLastLogin(db, user.id).catch((err) => logger.warn({ err, userId: user.id }, 'Failed to update last login'));
     res.json({ requiresTwoFactor: false });
   });
 
@@ -90,14 +91,14 @@ export function createAuthRouter({ db }: AuthDependencies) {
     }
 
     if (req.session.twoFactorExpiresAt && Date.now() > req.session.twoFactorExpiresAt) {
-      req.session.destroy(() => {});
+      req.session.destroy((err) => { if (err) logger.warn({ err }, 'Session destroy failed'); });
       res.status(401).json({ error: 'Session expired. Please sign in again.' });
       return;
     }
 
     const user = await getUserById(db, req.session.pendingUserId);
     if (!user || !user.totpEnabled || !user.totpSecret) {
-      req.session.destroy(() => {});
+      req.session.destroy((err) => { if (err) logger.warn({ err }, 'Session destroy failed'); });
       res.status(401).json({ error: 'Invalid authentication state.' });
       return;
     }
@@ -116,12 +117,12 @@ export function createAuthRouter({ db }: AuthDependencies) {
     await new Promise<void>((resolve, reject) => {
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
-    updateLastLogin(db, user.id).catch(() => {});
+    updateLastLogin(db, user.id).catch((err) => logger.warn({ err, userId: user.id }, 'Failed to update last login'));
     res.json({ success: true });
   });
 
   router.post('/api/auth/logout', requireAuth, (req, res) => {
-    req.session.destroy(() => {});
+    req.session.destroy((err) => { if (err) logger.warn({ err }, 'Session destroy failed'); });
     res.clearCookie('sms.sid');
     res.json({ success: true });
   });

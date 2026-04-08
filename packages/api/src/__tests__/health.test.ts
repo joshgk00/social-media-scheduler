@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
+import type { RequestHandler } from 'express';
+
+vi.mock('../middleware/csrf.js', () => ({
+  doubleCsrfProtection: ((_req: any, _res: any, next: any) => next()) as RequestHandler,
+  generateCsrfToken: (_req: any, _res: any) => 'test-csrf-token',
+}));
 
 function createMockRedis(overrides: Record<string, any> = {}) {
   return {
     ping: vi.fn().mockResolvedValue('PONG'),
     get: vi.fn().mockResolvedValue(Date.now().toString()),
+    on: vi.fn(),
     ...overrides,
   } as any;
 }
@@ -23,13 +30,22 @@ function createMockSql(healthy = true) {
   );
 }
 
+function createTestApp(redisOverrides: Record<string, any> = {}, healthySql = true) {
+  return createApp({
+    redis: createMockRedis(redisOverrides),
+    sql: createMockSql(healthySql),
+    db: {} as any,
+    sessionSecret: 'test-secret-that-is-long-enough-for-session',
+  });
+}
+
 describe('GET /health', () => {
   beforeEach(() => {
     process.env.CSRF_SECRET = 'a'.repeat(64);
   });
 
   it('returns 200 with JSON body containing status, timestamp, and checks', async () => {
-    const app = createApp({ redis: createMockRedis(), sql: createMockSql() });
+    const app = createTestApp();
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(200);
@@ -39,7 +55,7 @@ describe('GET /health', () => {
   });
 
   it('response checks contains postgres, redis, worker, pendingJobs, lastPublish', async () => {
-    const app = createApp({ redis: createMockRedis(), sql: createMockSql() });
+    const app = createTestApp();
     const res = await request(app).get('/health');
 
     expect(res.body.checks).toHaveProperty('postgres');
@@ -51,8 +67,7 @@ describe('GET /health', () => {
 
   it('returns healthy status when all dependencies are up and worker heartbeat is fresh', async () => {
     const freshHeartbeat = Date.now().toString();
-    const redis = createMockRedis({ get: vi.fn().mockResolvedValue(freshHeartbeat) });
-    const app = createApp({ redis, sql: createMockSql() });
+    const app = createTestApp({ get: vi.fn().mockResolvedValue(freshHeartbeat) });
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(200);
@@ -60,11 +75,10 @@ describe('GET /health', () => {
   });
 
   it('returns 503 degraded when any dependency is down', async () => {
-    const redis = createMockRedis({
+    const app = createTestApp({
       ping: vi.fn().mockRejectedValue(new Error('Redis down')),
       get: vi.fn().mockRejectedValue(new Error('Redis down')),
     });
-    const app = createApp({ redis, sql: createMockSql() });
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(503);
@@ -72,7 +86,7 @@ describe('GET /health', () => {
   });
 
   it('returns degraded when postgres is down but redis is up', async () => {
-    const app = createApp({ redis: createMockRedis(), sql: createMockSql(false) });
+    const app = createTestApp({}, false);
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(503);
@@ -83,8 +97,7 @@ describe('GET /health', () => {
 
   it('returns degraded when worker heartbeat is stale (>60s old)', async () => {
     const staleTime = (Date.now() - 120_000).toString();
-    const redis = createMockRedis({ get: vi.fn().mockResolvedValue(staleTime) });
-    const app = createApp({ redis, sql: createMockSql() });
+    const app = createTestApp({ get: vi.fn().mockResolvedValue(staleTime) });
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(503);
@@ -94,8 +107,7 @@ describe('GET /health', () => {
   });
 
   it('returns degraded when worker heartbeat is null (never set)', async () => {
-    const redis = createMockRedis({ get: vi.fn().mockResolvedValue(null) });
-    const app = createApp({ redis, sql: createMockSql() });
+    const app = createTestApp({ get: vi.fn().mockResolvedValue(null) });
     const res = await request(app).get('/health');
 
     expect(res.status).toBe(503);
@@ -105,10 +117,9 @@ describe('GET /health', () => {
   });
 
   it('worker check handles redis.get failure gracefully', async () => {
-    const redis = createMockRedis({
+    const app = createTestApp({
       get: vi.fn().mockRejectedValue(new Error('Redis get failed')),
     });
-    const app = createApp({ redis, sql: createMockSql() });
     const res = await request(app).get('/health');
 
     expect(res.body.checks.worker.alive).toBe(false);

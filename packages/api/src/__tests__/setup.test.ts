@@ -20,6 +20,9 @@ vi.mock('../services/auth.service.js', () => ({
   getUserById: (...args: unknown[]) => mockGetUserById(...args),
   updateLastLogin: (...args: unknown[]) => mockUpdateLastLogin(...args),
   hashPassword: (...args: unknown[]) => mockHashPassword(...args),
+  getSecurityQuestions: vi.fn().mockResolvedValue([]),
+  resetPasswordAndDisableTotp: vi.fn().mockResolvedValue(undefined),
+  replaceSecurityQuestions: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../services/totp.service.js', () => ({

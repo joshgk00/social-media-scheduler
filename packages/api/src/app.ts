@@ -30,18 +30,18 @@ export function createApp({ redis, sql, db, sessionSecret }: AppDependencies) {
   app.use(correlationId);
   app.use(httpLogger);
   app.use(securityHeaders);
-  app.use(express.json());
+  app.use(express.json({ limit: '16kb' }));
   app.use(cookieParser());
   app.use(createSessionMiddleware(redis, sessionSecret));
   app.use(doubleCsrfProtection);
 
   app.use(createSetupRouter({ db }));
-  app.use(createAuthRouter({ db, redis }));
+  app.use(createAuthRouter({ db }));
   app.use(createRecoveryRouter({ db, redis }));
   app.use(createSettingsRouter({ db, redis }));
 
-  const MEDIA_DIR = process.env.MEDIA_DIR || './data/media';
-  app.use('/avatars', express.static(path.join(MEDIA_DIR, 'avatars')));
+  const mediaDir = process.env.MEDIA_DIR || './data/media';
+  app.use('/avatars', express.static(path.join(mediaDir, 'avatars')));
 
   app.use(createHealthRouter({ redis, sql }));
 

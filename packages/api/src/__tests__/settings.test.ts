@@ -12,6 +12,10 @@ const mockUserExists = vi.fn();
 const mockCreateUser = vi.fn();
 const mockUpdateLastLogin = vi.fn();
 
+const mockGetSecurityQuestions = vi.fn();
+const mockResetPasswordAndDisableTotp = vi.fn();
+const mockReplaceSecurityQuestions = vi.fn();
+
 vi.mock('../services/auth.service.js', () => ({
   findUserByEmail: (...args: unknown[]) => mockFindUserByEmail(...args),
   verifyPassword: (...args: unknown[]) => mockVerifyPassword(...args),
@@ -20,6 +24,9 @@ vi.mock('../services/auth.service.js', () => ({
   userExists: (...args: unknown[]) => mockUserExists(...args),
   createUser: (...args: unknown[]) => mockCreateUser(...args),
   updateLastLogin: (...args: unknown[]) => mockUpdateLastLogin(...args),
+  getSecurityQuestions: (...args: unknown[]) => mockGetSecurityQuestions(...args),
+  resetPasswordAndDisableTotp: (...args: unknown[]) => mockResetPasswordAndDisableTotp(...args),
+  replaceSecurityQuestions: (...args: unknown[]) => mockReplaceSecurityQuestions(...args),
 }));
 
 const mockGenerateTotpSecret = vi.fn();
@@ -36,6 +43,7 @@ const mockInvalidateAllSessions = vi.fn();
 vi.mock('../services/session.service.js', () => ({
   invalidateOtherSessions: (...args: unknown[]) => mockInvalidateOtherSessions(...args),
   invalidateAllSessions: (...args: unknown[]) => mockInvalidateAllSessions(...args),
+  SESSION_PREFIX: 'sms:sess:',
 }));
 
 const mockArgon2Hash = vi.fn().mockResolvedValue('$argon2id$hashed');

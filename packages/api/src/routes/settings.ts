@@ -1,8 +1,6 @@
 import { Router } from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path, { resolve } from 'path';
 import { unlink, mkdir } from 'node:fs/promises';
-import argon2 from 'argon2';
 import multer from 'multer';
 import sharp from 'sharp';
 import { eq } from 'drizzle-orm';
@@ -13,18 +11,19 @@ import {
   totpVerifySchema,
   totpDisableSchema,
   securityQuestionsSchema,
+  createLogger,
 } from '@sms/shared';
 import type { Redis } from 'ioredis';
 import type { Db } from '@sms/db';
 import { users, securityQuestions } from '@sms/db';
 
-import { verifyPassword, hashPassword, getUserById } from '../services/auth.service.js';
+import { verifyPassword, hashPassword, getUserById, replaceSecurityQuestions } from '../services/auth.service.js';
 import { generateTotpSecret, verifyTotpCode } from '../services/totp.service.js';
-import { invalidateOtherSessions } from '../services/session.service.js';
+import { invalidateOtherSessions, SESSION_PREFIX } from '../services/session.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 
-const MEDIA_DIR = process.env.MEDIA_DIR || './data/media';
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const logger = createLogger('settings-routes');
 
 interface SettingsDependencies {
   db: Db;
@@ -34,6 +33,7 @@ interface SettingsDependencies {
 export function createSettingsRouter({ db, redis }: SettingsDependencies) {
   const router = Router();
 
+  const MEDIA_DIR = process.env.MEDIA_DIR || './data/media';
   const avatarDir = path.join(MEDIA_DIR, 'avatars');
 
   const upload = multer({
@@ -67,14 +67,14 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
       return;
     }
 
-    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    const profilePatch: Record<string, unknown> = { updatedAt: new Date() };
     const { firstName, lastName, username, email } = parsed.data;
-    if (firstName !== undefined) updateData.firstName = firstName;
-    if (lastName !== undefined) updateData.lastName = lastName;
-    if (username !== undefined) updateData.username = username;
-    if (email !== undefined) updateData.email = email.toLowerCase().trim();
+    if (firstName !== undefined) profilePatch.firstName = firstName;
+    if (lastName !== undefined) profilePatch.lastName = lastName;
+    if (username !== undefined) profilePatch.username = username;
+    if (email !== undefined) profilePatch.email = email.toLowerCase().trim();
 
-    await db.update(users).set(updateData).where(eq(users.id, req.session.userId!));
+    await db.update(users).set(profilePatch).where(eq(users.id, req.session.userId!));
 
     const user = await getUserById(db, req.session.userId!);
     if (!user) {
@@ -127,8 +127,8 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
     }
 
     const { currentPassword, newPassword } = parsed.data;
-    const valid = await verifyPassword(user.passwordHash, currentPassword);
-    if (!valid) {
+    const isPasswordValid = await verifyPassword(user.passwordHash, currentPassword);
+    if (!isPasswordValid) {
       res.status(401).json({ error: 'Current password is incorrect.' });
       return;
     }
@@ -176,8 +176,8 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
     }
 
     const { code } = parsed.data;
-    const valid = verifyTotpCode(req.session.pendingTotpSecret, code);
-    if (!valid) {
+    const isTotpCodeValid = verifyTotpCode(req.session.pendingTotpSecret, code);
+    if (!isTotpCodeValid) {
       res.status(401).json({ error: 'Invalid code. Make sure your authenticator time is synced.' });
       return;
     }
@@ -214,14 +214,14 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
 
     const { password, code } = parsed.data;
 
-    const passwordValid = await verifyPassword(user.passwordHash, password);
-    if (!passwordValid) {
+    const isPasswordValid = await verifyPassword(user.passwordHash, password);
+    if (!isPasswordValid) {
       res.status(401).json({ error: 'Invalid password or code.' });
       return;
     }
 
-    const codeValid = verifyTotpCode(user.totpSecret!, code);
-    if (!codeValid) {
+    const isTotpCodeValid = verifyTotpCode(user.totpSecret!, code);
+    if (!isTotpCodeValid) {
       res.status(401).json({ error: 'Invalid password or code.' });
       return;
     }
@@ -262,35 +262,19 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
 
     const { questions } = parsed.data;
 
-    // Delete existing security questions for this user
-    await db.delete(securityQuestions).where(
-      eq(securityQuestions.userId, req.session.userId!),
-    );
-
-    // Insert new questions with hashed answers
-    for (const q of questions) {
-      // Normalization: toLowerCase() + trim() only. Must match the normalization
-      // in POST /api/auth/recover/verify-answers.
-      const normalizedAnswer = q.answer.toLowerCase().trim();
-      const answerHash = await argon2.hash(normalizedAnswer, { type: argon2.argon2id });
-
-      await db.insert(securityQuestions).values({
-        userId: req.session.userId!,
-        questionIndex: q.questionIndex,
-        answerHash,
-      });
-    }
+    // Atomic: delete + insert in a single transaction with parallel argon2 hashing
+    await replaceSecurityQuestions(db, req.session.userId!, questions);
 
     res.json({ success: true });
   });
 
   router.get('/api/settings/sessions', requireAuth, async (req, res) => {
-    let count = 0;
-    const stream = redis.scanStream({ match: 'sms:sess:*', count: 100 });
+    let sessionCount = 0;
+    const stream = redis.scanStream({ match: `${SESSION_PREFIX}*`, count: 100 });
     for await (const keys of stream) {
-      count += (keys as string[]).length;
+      sessionCount += (keys as string[]).length;
     }
-    res.json({ count });
+    res.json({ count: sessionCount });
   });
 
   router.post('/api/settings/sessions/logout-others', requireAuth, async (req, res) => {
@@ -330,11 +314,15 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
         // Clean up old avatar file if user already has one
         const user = await getUserById(db, req.session.userId!);
         if (user?.profileImagePath) {
-          const oldPath = path.join(MEDIA_DIR, user.profileImagePath);
-          try {
-            await unlink(oldPath);
-          } catch {
-            // Old file may already be deleted
+          // Path traversal guard: ensure resolved path stays within MEDIA_DIR
+          const resolvedMedia = resolve(MEDIA_DIR);
+          const oldPath = resolve(path.join(MEDIA_DIR, user.profileImagePath));
+          if (oldPath.startsWith(resolvedMedia + path.sep)) {
+            try {
+              await unlink(oldPath);
+            } catch {
+              // Old file may already be deleted
+            }
           }
         }
 
@@ -359,6 +347,7 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
         } catch {
           // Best-effort cleanup
         }
+        logger.error({ err: error, userId: req.session.userId }, 'Avatar processing failed');
         res.status(400).json({ error: 'Invalid or corrupt image file.' });
       }
     });
