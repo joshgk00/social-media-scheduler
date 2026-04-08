@@ -6,8 +6,6 @@ const {
 } = doubleCsrf({
   getSecret: () => process.env.CSRF_SECRET!,
   getSessionIdentifier: (req) => {
-    // TODO(phase-2): Replace with actual session ID once express-session is wired up.
-    // Until then, single shared identifier is acceptable for single-user app.
     return (req as any).session?.id ?? 'anonymous';
   },
   cookieOptions: {

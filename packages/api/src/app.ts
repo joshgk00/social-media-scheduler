@@ -6,6 +6,7 @@ import type { Sql } from 'postgres';
 import { correlationId } from './middleware/correlation-id.js';
 import { httpLogger } from './middleware/logger.js';
 import { securityHeaders } from './middleware/security-headers.js';
+import { createSessionMiddleware } from './middleware/session.js';
 import { doubleCsrfProtection } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createHealthRouter } from './routes/health.js';
@@ -13,9 +14,10 @@ import { createHealthRouter } from './routes/health.js';
 interface AppDependencies {
   redis: Redis;
   sql: Sql;
+  sessionSecret: string;
 }
 
-export function createApp({ redis, sql }: AppDependencies) {
+export function createApp({ redis, sql, sessionSecret }: AppDependencies) {
   const app = express();
 
   app.use(correlationId);
@@ -23,6 +25,7 @@ export function createApp({ redis, sql }: AppDependencies) {
   app.use(securityHeaders);
   app.use(express.json());
   app.use(cookieParser());
+  app.use(createSessionMiddleware(redis, sessionSecret));
   app.use(doubleCsrfProtection);
 
   app.use(createHealthRouter({ redis, sql }));
