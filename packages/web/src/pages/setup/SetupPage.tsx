@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { setupSchema, type SetupInput } from '@sms/shared';
@@ -90,9 +90,9 @@ export default function SetupPage() {
               <Alert variant="destructive" className="mb-4">
                 <AlertDescription>
                   Account already exists.{' '}
-                  <a href="/login" className="underline">
+                  <Link to="/login" className="underline">
                     Sign in instead.
-                  </a>
+                  </Link>
                 </AlertDescription>
               </Alert>
             )}

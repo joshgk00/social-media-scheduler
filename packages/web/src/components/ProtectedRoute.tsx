@@ -8,7 +8,8 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) return <PageSkeleton />;
   if (isError || !user) {
-    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+    const fullPath = location.pathname + location.search + location.hash;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(fullPath)}`} replace />;
   }
   return <>{children}</>;
 }

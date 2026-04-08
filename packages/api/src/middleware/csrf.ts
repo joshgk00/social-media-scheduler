@@ -6,7 +6,7 @@ const {
 } = doubleCsrf({
   getSecret: () => process.env.CSRF_SECRET!,
   getSessionIdentifier: (req) => {
-    return (req as any).session?.id ?? 'anonymous';
+    return req.sessionID ?? 'anonymous';
   },
   cookieOptions: {
     sameSite: 'strict',

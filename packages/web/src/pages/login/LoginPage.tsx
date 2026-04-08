@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams, Link } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, totpVerifySchema, type LoginInput, type TotpVerifyInput } from '@sms/shared';
@@ -202,12 +202,12 @@ export default function LoginPage() {
                     </Button>
 
                     <div className="text-center">
-                      <a
-                        href="/recover"
+                      <Link
+                        to="/recover"
                         className="text-sm text-muted-foreground hover:text-foreground underline"
                       >
                         Forgot password?
-                      </a>
+                      </Link>
                     </div>
                   </form>
                 </Form>
