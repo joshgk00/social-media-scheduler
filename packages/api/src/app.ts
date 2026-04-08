@@ -16,6 +16,9 @@ import { createSetupRouter } from './routes/setup.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createRecoveryRouter } from './routes/recovery.js';
 import { createSettingsRouter } from './routes/settings.js';
+import { createProfilesRouter } from './routes/profiles.js';
+import { createPostsRouter } from './routes/posts.js';
+import { createTagsRouter } from './routes/tags.js';
 
 interface AppDependencies {
   redis: Redis;
@@ -30,7 +33,7 @@ export function createApp({ redis, sql, db, sessionSecret }: AppDependencies) {
   app.use(correlationId);
   app.use(httpLogger);
   app.use(securityHeaders);
-  app.use(express.json({ limit: '16kb' }));
+  app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.use(createSessionMiddleware(redis, sessionSecret));
   app.use(doubleCsrfProtection);
@@ -39,6 +42,10 @@ export function createApp({ redis, sql, db, sessionSecret }: AppDependencies) {
   app.use(createAuthRouter({ db }));
   app.use(createRecoveryRouter({ db, redis }));
   app.use(createSettingsRouter({ db, redis }));
+
+  app.use(createProfilesRouter({ db }));
+  app.use(createPostsRouter({ db }));
+  app.use(createTagsRouter({ db }));
 
   const mediaDir = process.env.MEDIA_DIR || './data/media';
   app.use('/avatars', express.static(path.join(mediaDir, 'avatars')));
