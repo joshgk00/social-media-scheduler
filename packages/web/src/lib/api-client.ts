@@ -87,6 +87,10 @@ export const apiClient = {
     return mutationRequest<T>('PUT', path, data);
   },
 
+  async delete<T = unknown>(path: string): Promise<T> {
+    return mutationRequest<T>('DELETE', path);
+  },
+
   async postFormData<T = unknown>(path: string, formData: FormData): Promise<T> {
     const token = await getCsrfToken();
     const res = await fetch(path, {
