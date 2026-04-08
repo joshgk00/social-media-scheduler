@@ -187,7 +187,66 @@ A self-hosted social media scheduling tool for personal business use, running as
 <!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
+### Module Structure
+
+- Services expose factory functions (`createApp`, `createWorker`) — no top-level side effects
+- Dependencies injected via factory params, not imported globals
+- Env vars read inside functions at runtime, never at module scope
+- Paths resolve relative to module via `import.meta.url` + `dirname()`, never `process.cwd()`
+
+### Error Handling
+
+- Every async op needs explicit error handling — no fire-and-forget promises
+- Unawaited promises: `.catch()` with logging
+- Shutdown: individual try-catch per resource; one failure must not skip the rest
+- Resource cleanup in `finally` blocks, not sequential `await`
+- No empty catch blocks — at minimum log the error
+- Wrap low-level errors (crypto, drivers) with application context before rethrowing
+
+### Naming
+
+- Booleans: `is`/`are`/`has`/`should` prefix — `isPasswordValid` not `valid`
+- No generic names (`data`, `result`, `count`) — use domain terms: `userInput`, `sessionCount`
+- No ad-hoc abbreviations (`qc`, `sq`) — spell out. Standard abbrevs (`id`, `url`, `db`) OK
+- Single-letter vars only in trivial arrows (`x => x.id`) — never for time, counts, domain values
+- Translate library jargon to domain terms: `validationOffset` not `delta`
+- Names reflect domain semantics, not implementation: `resetToEmailStep` not `resetToStep1`
+- Collapse single-use intermediates when inline expression is clear
+- Descriptive loop indices when multiple are in scope
+
+### Validation
+
+- Enum-like Zod strings (dateFormat, timezone) → `z.enum()` or validate against allowlist
+- Remove schema fields no handler reads — schemas document actual contract
+- Multi-step DB mutations (delete + re-insert) → `db.transaction()`
+
+### Type Safety
+
+- Import actual types from libraries — never `any` for external deps
+- All function params and returns explicitly typed
+- No `any`/`unknown` in interfaces without narrowing
+
+### Testing
+
+- Security-critical code (middleware, auth, encryption): 100% branch coverage
+- Test both success AND failure paths for middleware and async ops
+- No conditional assertions (`if (x) expect(...)`) — assert precondition first
+- Shared test setup → `__tests__/helpers/`
+- `vi.useFakeTimers()` for interval/timeout code
+
+### Dependencies
+
+- Production deps: tilde `~` (patch-only). Dev deps: tilde preferred, caret OK
+- CLAUDE.md version specs must match installed versions
+- Shared patterns across packages → extract to `@sms/shared`
+
+### Docker & Infrastructure
+
+- Containers: non-root user via `USER` directive
+- Dev ports: `127.0.0.1` only, never `0.0.0.0`
+- All services (Redis, PostgreSQL) require authentication
+- Separate prod/dev config files, not conditionals
+- Production nginx: gzip + static asset cache headers
 <!-- GSD:conventions-end -->
 
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->
