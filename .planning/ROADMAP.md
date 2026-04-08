@@ -53,13 +53,14 @@ Plans:
   2. User can enable TOTP 2FA, and subsequent logins require the TOTP code
   3. User can change password, disable 2FA, and set security questions from the account page
   4. User can configure timezone, date format, profile image, and entries-per-page in settings
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 02-01-PLAN.md — DB schema, shared Zod schemas, session/auth/rate-limit middleware
+- [ ] 02-02-PLAN.md — Frontend shell: shadcn/ui, React Router, TanStack Query, auth guards
+- [ ] 02-03-PLAN.md — Auth services and routes: setup, login (with 2FA), logout, CSRF
+- [ ] 02-04-PLAN.md — Recovery, password change, settings API, 2FA settings, security questions
+- [ ] 02-05-PLAN.md — Schema push, SetupPage, LoginPage, RecoverPage
+- [ ] 02-06-PLAN.md — SettingsPage with modals, human verification checkpoint
 **UI hint**: yes
 
 ### Phase 3: Twitter Profile & Post Creation
@@ -234,7 +235,7 @@ Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could the
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure & Foundation | 0/5 | Planning complete | - |
-| 2. Authentication & User Account | 0/TBD | Not started | - |
+| 2. Authentication & User Account | 0/6 | Planning complete | - |
 | 3. Twitter Profile & Post Creation | 0/TBD | Not started | - |
 | 4. Publish Worker & Scheduled Posts | 0/TBD | Not started | - |
 | 5. Queue Engine | 0/TBD | Not started | - |

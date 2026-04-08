@@ -8,18 +8,19 @@ const DATABASE_URL = requireEnv('DATABASE_URL');
 const REDIS_URL = requireEnv('REDIS_URL');
 requireEnv('ENCRYPTION_KEY');
 requireEnv('CSRF_SECRET');
+const SESSION_SECRET = requireEnv('SESSION_SECRET');
 
 async function main() {
   logger.info('Running database migrations...');
   await runMigrations(DATABASE_URL);
   logger.info('Migrations complete');
 
-  const { sql } = createDbClient(DATABASE_URL);
+  const { sql, db } = createDbClient(DATABASE_URL);
 
   const redis = new Redis(REDIS_URL);
   redis.on('error', (err) => logger.error({ err }, 'Redis connection error'));
 
-  const app = createApp({ redis, sql });
+  const app = createApp({ redis, sql, db, sessionSecret: SESSION_SECRET });
   const port = parseInt(process.env.PORT || '3000', 10);
 
   app.listen(port, () => {

@@ -11,6 +11,9 @@
     "db:generate": "pnpm --filter @sms/db exec drizzle-kit generate",
     "db:migrate": "pnpm --filter @sms/db exec drizzle-kit migrate"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["argon2", "sharp", "esbuild"]
+  },
   "devDependencies": {
     "eslint": "~10.2.0",
     "prettier": "~3.8.1",

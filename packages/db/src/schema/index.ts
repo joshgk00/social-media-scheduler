@@ -1,2 +1,2 @@
-// Schema definitions added by feature phases.
-// Phase 1 establishes migration infrastructure only (D-07).
+export { users } from './users.js';
+export { securityQuestions } from './security-questions.js';
