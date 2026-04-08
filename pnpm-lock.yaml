@@ -35,6 +35,9 @@ importers:
       csrf-csrf:
         specifier: ~4.0.3
         version: 4.0.3
+      drizzle-orm:
+        specifier: ~0.45.2
+        version: 0.45.2(postgres@3.4.9)
       express:
         specifier: ~5.2.1
         version: 5.2.1

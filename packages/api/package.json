@@ -16,6 +16,7 @@
     "connect-redis": "~9.0.0",
     "cookie-parser": "^1.4.7",
     "csrf-csrf": "~4.0.3",
+    "drizzle-orm": "~0.45.2",
     "express": "~5.2.1",
     "express-rate-limit": "~7.5.1",
     "express-session": "~1.18.2",
