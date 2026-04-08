@@ -1,0 +1,62 @@
+services:
+  api:
+    build:
+      target: development
+    volumes:
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/db/src:/app/packages/db/src
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:9229:9229"
+    command: ["npx", "tsx", "watch", "packages/api/src/index.ts"]
+
+  worker:
+    build:
+      target: development
+    volumes:
+      - ./packages/worker/src:/app/packages/worker/src
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/db/src:/app/packages/db/src
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+    ports:
+      - "127.0.0.1:9230:9229"
+    command: ["npx", "tsx", "watch", "packages/worker/src/index.ts"]
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./packages/web:/app/packages/web
+      - ./packages/shared:/app/packages/shared
+      - ./package.json:/app/package.json
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - web_node_modules:/app/node_modules
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      NODE_ENV: development
+    command: ["sh", "-c", "corepack enable && pnpm --filter @sms/web dev -- --host 0.0.0.0"]
+
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  nginx:
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:8080:80"
+
+volumes:
+  web_node_modules:
