@@ -2,15 +2,15 @@ import type { PostStatus } from '@sms/shared';
 import { Badge } from '../ui/badge';
 import { cn } from '@/lib/utils';
 
-const STATUS_CONFIG: Record<PostStatus, { label: string; className: string }> = {
-  draft: { label: 'Draft', className: 'bg-gray-100 text-gray-700 border-gray-200' },
-  scheduled: { label: 'Scheduled', className: 'bg-blue-100 text-blue-700 border-blue-200' },
-  queued: { label: 'Queued', className: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-  publishing: { label: 'Publishing', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-  published: { label: 'Published', className: 'bg-green-100 text-green-700 border-green-200' },
-  failed: { label: 'Failed', className: 'bg-red-100 text-red-700 border-red-200' },
-  auto_destructing: { label: 'Auto-destructing', className: 'bg-orange-100 text-orange-700 border-orange-200' },
-  destroyed: { label: 'Destroyed', className: 'bg-gray-200 text-gray-500 border-gray-300' },
+const STATUS_STYLES: Record<PostStatus, { bg: string; text: string; border: string; label: string }> = {
+  draft: { bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border', label: 'Draft' },
+  scheduled: { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/20', label: 'Scheduled' },
+  queued: { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/20', label: 'Queued' },
+  publishing: { bg: 'bg-amber-400/10', text: 'text-amber-400', border: 'border-amber-400/20', label: 'Publishing' },
+  published: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/20', label: 'Published' },
+  failed: { bg: 'bg-destructive/10', text: 'text-destructive', border: 'border-destructive/20', label: 'Failed' },
+  auto_destructing: { bg: 'bg-amber-400/10', text: 'text-amber-400', border: 'border-amber-400/20', label: 'Deleting' },
+  destroyed: { bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border', label: 'Destroyed' },
 };
 
 interface PostStatusBadgeProps {
@@ -18,10 +18,10 @@ interface PostStatusBadgeProps {
 }
 
 export function PostStatusBadge({ status }: PostStatusBadgeProps) {
-  const config = STATUS_CONFIG[status] ?? { label: status, className: '' };
+  const style = STATUS_STYLES[status] ?? { bg: '', text: '', border: '', label: status };
   return (
-    <Badge variant="outline" className={cn('font-medium', config.className)}>
-      {config.label}
+    <Badge variant="outline" className={cn(style.bg, style.text, style.border, 'text-xs font-semibold')}>
+      {style.label}
     </Badge>
   );
 }
