@@ -6,3 +6,13 @@ export * from './schemas/settings.js';
 export * from './schemas/recovery.js';
 export { SECURITY_QUESTIONS, type SecurityQuestionIndex } from './constants/security-questions.js';
 export { DATE_FORMATS, ENTRIES_PER_PAGE_OPTIONS } from './constants/date-formats.js';
+export {
+  POST_STATUSES,
+  POST_STATE_TRANSITIONS,
+  isValidTransition,
+  transitionPost,
+  EDITABLE_STATES,
+  DELETABLE_STATES,
+  NON_INTERACTIVE_STATES,
+  type PostStatus,
+} from './constants/post-states.js';
