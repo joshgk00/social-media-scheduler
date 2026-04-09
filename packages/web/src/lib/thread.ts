@@ -12,6 +12,6 @@ export function serializeThread(tweets: TweetSegment[]): string {
 export function deserializeThread(text: string): TweetSegment[] {
   return text.split(THREAD_SEPARATOR).map(segment => ({
     id: crypto.randomUUID(),
-    text: segment.trim(),
+    text: segment,
   }));
 }

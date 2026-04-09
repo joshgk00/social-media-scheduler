@@ -398,13 +398,9 @@ export default function PostsPage() {
               <TableBody>
                 {table.getRowModel().rows.map(row => (
                   <Fragment key={row.id}>
-                    <TableRow
-                      onClick={() => row.toggleExpanded()}
-                    >
+                    <TableRow>
                       {row.getVisibleCells().map(cell => (
-                        <TableCell key={cell.id} onClick={(e) => {
-                          if (cell.column.id === 'actions') e.stopPropagation();
-                        }}>
+                        <TableCell key={cell.id}>
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </TableCell>
                       ))}

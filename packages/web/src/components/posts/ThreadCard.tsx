@@ -57,7 +57,7 @@ export function ThreadCard({
             aria-label={`Drag to reorder tweet ${index + 1} of ${total}`}
             className="min-w-[44px] min-h-[44px] flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
           >
-            <GripVertical className="h-5 w-5" />
+            <GripVertical className="h-4 w-4" />
           </button>
           <span className="text-xs font-semibold text-muted-foreground">
             {index + 1}/{total}
