@@ -1,4 +1,5 @@
-import { parseTweet } from 'twitter-text';
+import twitterText from 'twitter-text';
+const { parseTweet } = twitterText;
 
 export interface CharacterCountResult {
   weightedLength: number;
