@@ -191,21 +191,39 @@ export async function updatePost(
       }
     }
 
-    // postVersion and status are already validated against the SELECT above.
-    // Within this transaction, the row cannot change between SELECT and UPDATE,
-    // so the only way the UPDATE affects zero rows is if the row was deleted.
+    // Atomic optimistic lock: include post_version in the WHERE clause so a
+    // concurrent writer that bumped the version between our SELECT and UPDATE
+    // (possible under read-committed isolation) gets zero rows updated here.
+    // The read-check above catches stale input early with a clear error;
+    // this guard catches the narrow race window where the row changes
+    // between SELECT and UPDATE inside this transaction.
     const updatedRows = await tx.update(posts)
       .set(updateFields)
       .where(
         and(
           eq(posts.id, postId),
           eq(posts.userId, userId),
+          eq(posts.postVersion, input.postVersion),
         ),
       )
       .returning({ id: posts.id });
 
     if (updatedRows.length === 0) {
-      throw new PostServiceError('This post was deleted by another session.', 409);
+      // Zero rows means one of: row deleted, or version bumped by a concurrent
+      // writer. Re-query to distinguish so the client sees an accurate error.
+      const stillExists = await tx
+        .select({ id: posts.id })
+        .from(posts)
+        .where(and(eq(posts.id, postId), eq(posts.userId, userId)))
+        .limit(1);
+
+      if (stillExists.length === 0) {
+        throw new PostServiceError('This post was deleted by another session.', 409);
+      }
+      throw new PostServiceError(
+        'This post was modified elsewhere. Refresh to see the latest version.',
+        409,
+      );
     }
 
     if (input.tagIds !== undefined) {
