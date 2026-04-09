@@ -16,23 +16,9 @@ import {
 import { Plus } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ThreadCard } from './ThreadCard';
+import type { TweetSegment } from '../../lib/thread';
 
 const MAX_THREAD_TWEETS = 25;
-
-export interface TweetSegment {
-  id: string;
-  text: string;
-}
-
-/**
- * Thread serialization rules:
- * - Internal state: Array<{ id: string; text: string }> (canonical)
- * - Storage format: tweets joined with '[[tweet]]' separator
- * - Serialization (array -> string): tweets.map(t => t.text).join('[[tweet]]')
- * - Deserialization (string -> array): text.split('[[tweet]]').map(t => ({ id: crypto.randomUUID(), text: t.trim() }))
- * - ONLY parse [[tweet]] when isThread flag is true on the post
- * - Serialization happens in page components (NewPostPage/EditPostPage), NOT here
- */
 
 interface ThreadEditorProps {
   tweets: TweetSegment[];

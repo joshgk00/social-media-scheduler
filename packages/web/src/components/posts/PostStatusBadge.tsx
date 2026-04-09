@@ -1,6 +1,6 @@
 import type { PostStatus } from '@sms/shared';
 import { Badge } from '../ui/badge';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 
 const STATUS_STYLES: Record<PostStatus, { bg: string; text: string; border: string; label: string }> = {
   draft: { bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border', label: 'Draft' },

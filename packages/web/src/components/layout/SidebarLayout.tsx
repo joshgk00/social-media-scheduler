@@ -43,9 +43,9 @@ export function SidebarLayout() {
           </Button>
         </header>
 
-        <main className="flex-1 overflow-auto p-6 lg:p-8">
+        <div className="flex-1 overflow-auto p-6 lg:p-8">
           <Outlet />
-        </main>
+        </div>
       </div>
     </div>
   );

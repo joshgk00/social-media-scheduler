@@ -79,6 +79,10 @@ export default function NewPostPage() {
   const watchedProfileId = form.watch('profileId');
   const watchedScheduledAt = form.watch('scheduledAt');
   const watchedText = form.watch('text');
+  const watchedTagIds = form.watch('tagIds');
+  const watchedNotes = form.watch('notes');
+  const watchedHasSpinnableText = form.watch('hasSpinnableText');
+  const watchedAutoDestructAfter = form.watch('autoDestructAfter');
 
   const { data: conflicts } = useCheckConflicts(
     watchedProfileId,
@@ -278,7 +282,7 @@ export default function NewPostPage() {
           <div className="space-y-2">
             <Label>Tags</Label>
             <TagSelector
-              selected={form.watch('tagIds')}
+              selected={watchedTagIds}
               onChange={(ids) => form.setValue('tagIds', ids)}
               onManage={() => setIsTagManageOpen(true)}
               tags={tagList ?? []}
@@ -291,7 +295,7 @@ export default function NewPostPage() {
             <Textarea
               id="post-notes"
               placeholder="Internal notes (not published)..."
-              value={form.watch('notes')}
+              value={watchedNotes}
               onChange={(e) => form.setValue('notes', e.target.value)}
               rows={3}
             />
@@ -301,7 +305,7 @@ export default function NewPostPage() {
           <div className="flex items-center gap-3">
             <Switch
               id="spinnable-toggle"
-              checked={form.watch('hasSpinnableText')}
+              checked={watchedHasSpinnableText}
               onCheckedChange={(checked) => form.setValue('hasSpinnableText', checked)}
             />
             <div>
@@ -314,7 +318,7 @@ export default function NewPostPage() {
 
           {/* Auto-destruct picker */}
           <AutoDestructPicker
-            value={form.watch('autoDestructAfter')}
+            value={watchedAutoDestructAfter}
             onChange={(value) => form.setValue('autoDestructAfter', value)}
           />
 

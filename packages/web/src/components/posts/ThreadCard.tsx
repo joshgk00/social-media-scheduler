@@ -91,6 +91,7 @@ export function ThreadCard({
           rows={3}
           placeholder="What's happening?"
           className="resize-none"
+          aria-label={`Tweet ${index + 1} text`}
         />
         <div className="flex items-center justify-between mt-2">
           <CharacterCountRing text={text} size="sm" />

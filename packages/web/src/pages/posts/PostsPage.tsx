@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   useReactTable,
@@ -61,11 +61,11 @@ function ExpandedPostRow({ post }: { post: Post }) {
         </div>
       )}
       {post.status === 'failed' && post.failureReason && (
-        <div className="flex items-start gap-2 rounded-md bg-red-50 p-3 border border-red-200">
-          <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 border border-destructive/20">
+          <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
           <div>
-            <h4 className="text-sm font-medium text-red-800">Failure Reason</h4>
-            <p className="text-sm text-red-700">{post.failureReason}</p>
+            <h4 className="text-sm font-medium text-destructive">Failure Reason</h4>
+            <p className="text-sm text-destructive/80">{post.failureReason}</p>
           </div>
         </div>
       )}
@@ -376,9 +376,8 @@ export default function PostsPage() {
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.map(row => (
-                  <>
+                  <Fragment key={row.id}>
                     <TableRow
-                      key={row.id}
                       className="cursor-pointer"
                       onClick={() => row.toggleExpanded()}
                     >
@@ -397,7 +396,7 @@ export default function PostsPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

@@ -72,9 +72,14 @@ export function AutoDestructPicker({ value, onChange }: AutoDestructPickerProps)
             <Input
               type="number"
               min={1}
+              max={365}
               value={amount}
-              onChange={(e) => handleAmountChange(parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value, 10);
+                handleAmountChange(isNaN(parsed) ? 1 : parsed);
+              }}
               className="w-20"
+              aria-label="Auto-destruct duration amount"
             />
             <Select value={unit} onValueChange={handleUnitChange}>
               <SelectTrigger className="w-32">

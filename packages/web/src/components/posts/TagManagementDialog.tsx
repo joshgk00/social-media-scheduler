@@ -29,6 +29,7 @@ export function TagManagementDialog({ open, onOpenChange }: TagManagementDialogP
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
   const [editingTagName, setEditingTagName] = useState('');
   const [editingTagColor, setEditingTagColor] = useState('#6b7280');
+  const [deletingTag, setDeletingTag] = useState<{ id: string; name: string } | null>(null);
 
   function handleCreateTag() {
     const trimmedName = newTagName.trim();
@@ -71,8 +72,13 @@ export function TagManagementDialog({ open, onOpenChange }: TagManagementDialogP
   }
 
   function handleDeleteTag(tagId: string, tagName: string) {
-    if (!window.confirm(`Delete tag '${tagName}'? It will be removed from all posts.`)) return;
-    deleteTagMutation.mutate(tagId, {
+    setDeletingTag({ id: tagId, name: tagName });
+  }
+
+  function confirmDeleteTag() {
+    if (!deletingTag) return;
+    deleteTagMutation.mutate(deletingTag.id, {
+      onSuccess: () => setDeletingTag(null),
       onError: (error) => {
         toast.error(error instanceof Error ? error.message : 'Failed to delete tag');
       },
@@ -203,6 +209,29 @@ export function TagManagementDialog({ open, onOpenChange }: TagManagementDialogP
           )}
         </ScrollArea>
       </DialogContent>
+
+      <Dialog open={deletingTag !== null} onOpenChange={(isOpen) => { if (!isOpen) setDeletingTag(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete tag?</DialogTitle>
+            <DialogDescription>
+              Delete tag &lsquo;{deletingTag?.name}&rsquo;? It will be removed from all posts.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setDeletingTag(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteTag}
+              disabled={deleteTagMutation.isPending}
+            >
+              {deleteTagMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

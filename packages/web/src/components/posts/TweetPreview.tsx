@@ -12,12 +12,11 @@ interface TweetPreviewProps {
 interface TweetCardProps {
   text: string;
   profile: TweetPreviewProps['profile'];
-  isFirst: boolean;
   showThread?: boolean;
   mediaFiles?: Array<{ url: string; type: string }>;
 }
 
-function TweetCard({ text, profile, isFirst: _isFirst, showThread, mediaFiles }: TweetCardProps) {
+function TweetCard({ text, profile, showThread, mediaFiles }: TweetCardProps) {
   const displayName = profile?.displayName ?? 'Select a profile';
   const handle = profile?.handle ?? '@username';
   const initials = displayName.slice(0, 2).toUpperCase();
@@ -86,7 +85,6 @@ export function TweetPreview({ text, profile, isThread, tweets, mediaFiles }: Tw
               key={tweet.id}
               text={tweet.text}
               profile={profile}
-              isFirst={tweetIndex === 0}
               showThread={tweetIndex < tweets.length - 1}
               mediaFiles={tweetIndex === 0 ? mediaFiles : undefined}
             />
@@ -96,7 +94,6 @@ export function TweetPreview({ text, profile, isThread, tweets, mediaFiles }: Tw
         <TweetCard
           text={text}
           profile={profile}
-          isFirst={true}
           mediaFiles={mediaFiles}
         />
       )}

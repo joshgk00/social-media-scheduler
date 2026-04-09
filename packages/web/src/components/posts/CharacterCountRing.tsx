@@ -1,5 +1,5 @@
-import { getCharacterCount } from '@/lib/twitter-text';
-import { cn } from '@/lib/utils';
+import { getCharacterCount } from '../../lib/twitter-text';
+import { cn } from '../../lib/utils';
 
 interface CharacterCountRingProps {
   text: string;
