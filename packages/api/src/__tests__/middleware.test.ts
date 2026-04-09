@@ -1,14 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
-
-function createMockRedis() {
-  return {
-    ping: vi.fn().mockResolvedValue('PONG'),
-    get: vi.fn().mockResolvedValue(Date.now().toString()),
-    on: vi.fn(),
-  } as any;
-}
+import { createMockRedis } from './helpers/mock-redis.js';
 
 function createMockSql() {
   return Object.assign(
@@ -19,7 +12,9 @@ function createMockSql() {
 
 function createTestApp() {
   return createApp({
-    redis: createMockRedis(),
+    redis: createMockRedis({
+      get: vi.fn().mockResolvedValue(Date.now().toString()),
+    }),
     sql: createMockSql(),
     db: {} as any,
     sessionSecret: 'test-secret-that-is-long-enough-for-session',
