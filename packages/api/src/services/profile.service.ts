@@ -8,6 +8,8 @@ import { TwitterApi } from 'twitter-api-v2';
 
 const logger = createLogger('profile-service');
 
+// Subclass exists so structured logs show 'ProfileServiceError' instead of 'AppError'.
+// All behavior comes from AppError; the subclass adds no fields or methods.
 export class ProfileServiceError extends AppError {
   constructor(message: string, statusCode: number) {
     super(message, statusCode);

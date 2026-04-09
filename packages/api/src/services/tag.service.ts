@@ -6,6 +6,8 @@ import { createLogger } from '@sms/shared/logger';
 
 const logger = createLogger('tag-service');
 
+// Subclass exists so structured logs show 'TagServiceError' instead of 'AppError'.
+// All behavior comes from AppError; the subclass adds no fields or methods.
 export class TagServiceError extends AppError {
   constructor(message: string, statusCode: number) {
     super(message, statusCode);

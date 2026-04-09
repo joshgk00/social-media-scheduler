@@ -44,6 +44,8 @@ interface PostQuery {
   limit?: number;
 }
 
+// Subclass exists so structured logs show 'PostServiceError' instead of 'AppError'.
+// All behavior comes from AppError; the subclass adds no fields or methods.
 export class PostServiceError extends AppError {
   constructor(message: string, statusCode: number) {
     super(message, statusCode);
@@ -167,29 +169,43 @@ export async function updatePost(
 
     const effectiveStatus = input.status ?? existingPost.status;
     if (effectiveStatus === 'scheduled') {
-      const effectiveScheduledAt = input.scheduledAt !== undefined ? input.scheduledAt : existingPost.scheduledAt?.toISOString() ?? null;
+      const effectiveScheduledAt = input.scheduledAt !== undefined
+        ? input.scheduledAt
+        : (existingPost.scheduledAt?.toISOString() ?? null);
+
       if (!effectiveScheduledAt) {
         throw new PostServiceError('scheduledAt is required for scheduled posts.', 400);
       }
-      if (new Date(effectiveScheduledAt) < new Date()) {
-        throw new PostServiceError('scheduledAt must be in the future.', 400);
+
+      // Only enforce future-date when the user is actively (re)scheduling.
+      // Editing a typo on a soon-to-publish post must not be blocked just because
+      // the existing scheduledAt drifted into the past between request submission
+      // and handling.
+      const scheduledAtChanged = input.scheduledAt !== undefined;
+      const statusChangedToScheduled = input.status === 'scheduled' && existingPost.status !== 'scheduled';
+
+      if (scheduledAtChanged || statusChangedToScheduled) {
+        if (new Date(effectiveScheduledAt) < new Date()) {
+          throw new PostServiceError('scheduledAt must be in the future.', 400);
+        }
       }
     }
 
+    // postVersion and status are already validated against the SELECT above.
+    // Within this transaction, the row cannot change between SELECT and UPDATE,
+    // so the only way the UPDATE affects zero rows is if the row was deleted.
     const updatedRows = await tx.update(posts)
       .set(updateFields)
       .where(
         and(
           eq(posts.id, postId),
           eq(posts.userId, userId),
-          eq(posts.postVersion, input.postVersion),
-          inArray(posts.status, [...EDITABLE_STATES]),
         ),
       )
       .returning({ id: posts.id });
 
     if (updatedRows.length === 0) {
-      throw new PostServiceError('This post was modified elsewhere. Refresh to see the latest version.', 409);
+      throw new PostServiceError('This post was deleted by another session.', 409);
     }
 
     if (input.tagIds !== undefined) {

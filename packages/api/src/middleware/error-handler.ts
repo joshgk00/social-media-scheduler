@@ -13,6 +13,8 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
 
   const rawStatus = (err as any).status || (err as any).statusCode || 500;
   const status = (rawStatus >= 400 && rawStatus < 600) ? rawStatus : 500;
+  // Dev mode shows the raw error message to aid local debugging.
+  // Production must never leak internal error details to clients.
   const isDev = process.env.NODE_ENV !== 'production';
   res.status(status).json({
     error: isDev ? err.message : 'Internal server error',

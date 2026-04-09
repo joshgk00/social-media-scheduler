@@ -42,7 +42,6 @@ vi.mock('@sms/shared', async (importOriginal) => {
 
   const EDITABLE: readonly string[] = ['draft', 'scheduled', 'failed'];
   const DELETABLE: readonly string[] = ['draft', 'scheduled', 'published', 'failed'];
-  const NON_INTERACTIVE: readonly string[] = ['publishing', 'auto_destructing', 'destroyed'];
 
   const POST_STATE_TRANSITIONS: Record<string, readonly string[]> = {
     draft: ['scheduled', 'publishing'],
@@ -59,7 +58,6 @@ vi.mock('@sms/shared', async (importOriginal) => {
     ...actual,
     EDITABLE_STATES: EDITABLE,
     DELETABLE_STATES: DELETABLE,
-    NON_INTERACTIVE_STATES: NON_INTERACTIVE,
     POST_STATE_TRANSITIONS,
     isValidTransition: (from: string, to: string) => POST_STATE_TRANSITIONS[from]?.includes(to) ?? false,
     transitionPost: (current: string, target: string) => {

@@ -6,7 +6,6 @@ import {
   transitionPost,
   EDITABLE_STATES,
   DELETABLE_STATES,
-  NON_INTERACTIVE_STATES,
   type PostStatus,
 } from '../constants/post-states.js';
 
@@ -105,26 +104,6 @@ describe('post state machine', () => {
 
     it('has exactly 4 states', () => {
       expect(DELETABLE_STATES).toHaveLength(4);
-    });
-  });
-
-  describe('NON_INTERACTIVE_STATES contains correct values', () => {
-    it('includes publishing, auto_destructing, destroyed', () => {
-      expect(NON_INTERACTIVE_STATES).toContain('publishing');
-      expect(NON_INTERACTIVE_STATES).toContain('auto_destructing');
-      expect(NON_INTERACTIVE_STATES).toContain('destroyed');
-    });
-
-    it('excludes draft, scheduled, queued, published, failed', () => {
-      expect(NON_INTERACTIVE_STATES).not.toContain('draft');
-      expect(NON_INTERACTIVE_STATES).not.toContain('scheduled');
-      expect(NON_INTERACTIVE_STATES).not.toContain('queued');
-      expect(NON_INTERACTIVE_STATES).not.toContain('published');
-      expect(NON_INTERACTIVE_STATES).not.toContain('failed');
-    });
-
-    it('has exactly 3 states', () => {
-      expect(NON_INTERACTIVE_STATES).toHaveLength(3);
     });
   });
 

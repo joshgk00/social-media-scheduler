@@ -19,6 +19,5 @@ export {
   transitionPost,
   EDITABLE_STATES,
   DELETABLE_STATES,
-  NON_INTERACTIVE_STATES,
   type PostStatus,
 } from './constants/post-states.js';
