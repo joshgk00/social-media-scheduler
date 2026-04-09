@@ -35,7 +35,8 @@ export function createSetupRouter({ db }: SetupDependencies) {
       res.status(201).json({ success: true });
     } catch (err: unknown) {
       // DB unique constraint violation (race condition guard)
-      if (err instanceof Error && 'code' in err && (err as any).code === '23505') {
+      const errCode = (err as any)?.code ?? (err as any)?.cause?.code;
+      if (errCode === '23505') {
         res.status(403).json({ error: 'Account already exists.' });
         return;
       }

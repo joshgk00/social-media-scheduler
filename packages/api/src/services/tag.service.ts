@@ -103,5 +103,8 @@ export async function getTags(db: Db, userId: string) {
 }
 
 function isUniqueViolation(err: unknown): boolean {
-  return (err as { code?: string })?.code === '23505';
+  const code = (err as { code?: string })?.code;
+  if (code === '23505') return true;
+  const causeCode = (err as { cause?: { code?: string } })?.cause?.code;
+  return causeCode === '23505';
 }
