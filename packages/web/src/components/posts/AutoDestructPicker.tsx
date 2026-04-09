@@ -82,7 +82,7 @@ export function AutoDestructPicker({ value, onChange }: AutoDestructPickerProps)
               aria-label="Auto-destruct duration amount"
             />
             <Select value={unit} onValueChange={handleUnitChange}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-32" aria-label="Auto-destruct duration unit">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

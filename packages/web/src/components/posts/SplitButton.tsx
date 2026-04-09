@@ -37,6 +37,7 @@ export function SplitButton({
           <Button
             disabled={disabled || isLoading}
             className="rounded-l-none border-l border-primary-foreground/20 px-2"
+            aria-label="More scheduling options"
           >
             <ChevronDown className="h-4 w-4" />
           </Button>

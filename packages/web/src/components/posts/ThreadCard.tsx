@@ -66,7 +66,7 @@ export function ThreadCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-8 w-8"
               disabled={isFirst}
               onClick={onMoveUp}
               aria-label="Move tweet up"
@@ -76,7 +76,7 @@ export function ThreadCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-8 w-8"
               disabled={isLast}
               onClick={onMoveDown}
               aria-label="Move tweet down"

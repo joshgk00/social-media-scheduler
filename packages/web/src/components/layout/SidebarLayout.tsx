@@ -15,6 +15,13 @@ export function SidebarLayout() {
 
   return (
     <div className="flex min-h-screen">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-3 focus:bg-background focus:text-foreground focus:border focus:border-ring focus:rounded-md"
+      >
+        Skip to main content
+      </a>
+
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <Sidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed((prev) => !prev)} />
@@ -43,7 +50,7 @@ export function SidebarLayout() {
           </Button>
         </header>
 
-        <div className="flex-1 overflow-auto p-6 lg:p-8">
+        <div id="main-content" className="flex-1 overflow-auto p-6 lg:p-8">
           <Outlet />
         </div>
       </div>

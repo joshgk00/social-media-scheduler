@@ -51,12 +51,12 @@ function ExpandedPostRow({ post }: { post: Post }) {
   return (
     <div className="px-4 py-3 space-y-3 bg-muted/30">
       <div>
-        <h4 className="text-sm font-medium mb-1">Full Text</h4>
+        <span className="text-sm font-semibold">Full Text</span>
         <p className="text-sm whitespace-pre-wrap text-muted-foreground">{post.text}</p>
       </div>
       {post.notes && (
         <div>
-          <h4 className="text-sm font-medium mb-1">Notes</h4>
+          <span className="text-sm font-semibold">Notes</span>
           <p className="text-sm whitespace-pre-wrap text-muted-foreground">{post.notes}</p>
         </div>
       )}
@@ -64,13 +64,13 @@ function ExpandedPostRow({ post }: { post: Post }) {
         <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 border border-destructive/20">
           <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
           <div>
-            <h4 className="text-sm font-medium text-destructive">Failure Reason</h4>
+            <span className="text-sm font-semibold text-destructive">Failure Reason</span>
             <p className="text-sm text-destructive/80">{post.failureReason}</p>
           </div>
         </div>
       )}
       <div>
-        <h4 className="text-sm font-medium mb-1">Publish History</h4>
+        <span className="text-sm font-semibold">Publish History</span>
         {post.publishedAt ? (
           <p className="text-sm text-muted-foreground">
             Published {format(new Date(post.publishedAt), 'PPp')}
@@ -112,10 +112,31 @@ export default function PostsPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const { data: postsResponse, isLoading } = usePosts(filters);
+  const { data: postsResponse, isLoading, isError, refetch } = usePosts(filters);
 
   const hasActiveFilters = !!(filters.status || filters.profileId || filters.tagId || filters.search);
   const totalPages = postsResponse ? Math.ceil(postsResponse.total / postsResponse.limit) : 0;
+
+  if (isError) {
+    return (
+      <main className="space-y-4 p-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Posts</h1>
+          <Button asChild>
+            <Link to="/posts/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Post
+            </Link>
+          </Button>
+        </div>
+        <div className="text-center py-12">
+          <h2 className="text-lg font-semibold mb-2">Failed to load posts</h2>
+          <p className="text-muted-foreground mb-4">An error occurred while loading your posts.</p>
+          <Button onClick={() => refetch()}>Try Again</Button>
+        </div>
+      </main>
+    );
+  }
 
   function handleDeleteConfirm() {
     if (!deleteTargetId) return;
@@ -339,14 +360,14 @@ export default function PostsPage() {
         <div className="flex flex-col items-center justify-center py-12 text-center">
           {hasActiveFilters ? (
             <>
-              <h3 className="text-lg font-medium mb-1">No matching posts</h3>
+              <h2 className="text-lg font-medium mb-1">No matching posts</h2>
               <p className="text-sm text-muted-foreground">
                 Try adjusting your filters or search query.
               </p>
             </>
           ) : (
             <>
-              <h3 className="text-lg font-medium mb-1">No posts yet</h3>
+              <h2 className="text-lg font-medium mb-1">No posts yet</h2>
               <p className="text-sm text-muted-foreground mb-4">
                 Create your first tweet to get started. Posts can be scheduled, saved as drafts, or published immediately.
               </p>
@@ -378,7 +399,6 @@ export default function PostsPage() {
                 {table.getRowModel().rows.map(row => (
                   <Fragment key={row.id}>
                     <TableRow
-                      className="cursor-pointer"
                       onClick={() => row.toggleExpanded()}
                     >
                       {row.getVisibleCells().map(cell => (

@@ -181,6 +181,7 @@ export function TagManagementDialog({ open, onOpenChange }: TagManagementDialogP
                     <div
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: tag.color }}
+                      aria-hidden="true"
                     />
                     <span className="flex-1 text-sm">{tag.name}</span>
                     <Button

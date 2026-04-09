@@ -59,6 +59,7 @@ export function TagSelector({ selected, onChange, onManage, tags }: TagSelectorP
                     <span
                       className="h-3 w-3 rounded-full shrink-0"
                       style={{ backgroundColor: tag.color }}
+                      aria-hidden="true"
                     />
                     {tag.name}
                   </CommandItem>
@@ -86,6 +87,7 @@ export function TagSelector({ selected, onChange, onManage, tags }: TagSelectorP
                 <span
                   className="h-2 w-2 rounded-full mr-1 shrink-0"
                   style={{ backgroundColor: tag.color }}
+                  aria-hidden="true"
                 />
                 {tag.name}
                 <button
