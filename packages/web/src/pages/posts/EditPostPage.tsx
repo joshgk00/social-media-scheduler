@@ -1,0 +1,484 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router';
+import { useForm } from 'react-hook-form';
+import { DateTime } from 'luxon';
+import { toast } from 'sonner';
+import { ImageIcon } from 'lucide-react';
+import { EDITABLE_STATES, type PostStatus } from '@sms/shared';
+import { useAuth } from '../../hooks/use-auth';
+import { useProfiles } from '../../hooks/use-profiles';
+import { useTags } from '../../hooks/use-tags';
+import { usePost, useUpdatePost, useCheckConflicts } from '../../hooks/use-posts';
+import { utcToLocalInput, localInputToUtc } from '../../lib/timezone';
+import { serializeThread, deserializeThread, type TweetSegment } from '../../lib/thread';
+import { ThreadEditor } from '../../components/posts/ThreadEditor';
+import { TweetPreview } from '../../components/posts/TweetPreview';
+import { CharacterCountRing } from '../../components/posts/CharacterCountRing';
+import { SplitButton } from '../../components/posts/SplitButton';
+import { TagSelector } from '../../components/posts/TagSelector';
+import { AutoDestructPicker } from '../../components/posts/AutoDestructPicker';
+import { ScheduleConflictBanner } from '../../components/posts/ScheduleConflictBanner';
+import { TagManagementDialog } from '../../components/posts/TagManagementDialog';
+import { Textarea } from '../../components/ui/textarea';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { Switch } from '../../components/ui/switch';
+import { Button } from '../../components/ui/button';
+import { Skeleton } from '../../components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
+
+interface EditFormValues {
+  profileId: string;
+  text: string;
+  scheduledAt: string | null;
+  hasSpinnableText: boolean;
+  autoDestructAfter: string | null;
+  notes: string;
+  tagIds: string[];
+}
+
+export default function EditPostPage() {
+  const { id: postId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { data: post, isLoading: isPostLoading, error: postError, refetch } = usePost(postId!);
+  const updatePostMutation = useUpdatePost();
+  const { data: profiles } = useProfiles();
+  const { data: tagList } = useTags();
+  const { data: authUser } = useAuth();
+  const userTimezone = authUser?.timezone ?? 'UTC';
+
+  const [isThread, setIsThread] = useState(false);
+  const [tweets, setTweets] = useState<TweetSegment[]>([
+    { id: crypto.randomUUID(), text: '' },
+  ]);
+  const [isTagManageOpen, setIsTagManageOpen] = useState(false);
+  const [isFormInitialized, setIsFormInitialized] = useState(false);
+
+  const form = useForm<EditFormValues>({
+    defaultValues: {
+      profileId: '',
+      text: '',
+      scheduledAt: null,
+      hasSpinnableText: false,
+      autoDestructAfter: null,
+      notes: '',
+      tagIds: [],
+    },
+  });
+
+  useEffect(() => {
+    if (post && !isFormInitialized) {
+      form.reset({
+        profileId: post.profileId ?? '',
+        text: post.isThread ? '' : post.text,
+        scheduledAt: post.scheduledAt,
+        hasSpinnableText: post.hasSpinnableText,
+        autoDestructAfter: post.autoDestructAfter,
+        notes: post.notes ?? '',
+        tagIds: post.tags.map((t) => t.id),
+      });
+      setIsThread(post.isThread);
+      if (post.isThread) {
+        setTweets(deserializeThread(post.text));
+      } else {
+        setTweets([{ id: crypto.randomUUID(), text: '' }]);
+      }
+      setIsFormInitialized(true);
+    }
+  }, [post, isFormInitialized, form]);
+
+  const watchedProfileId = form.watch('profileId');
+  const watchedScheduledAt = form.watch('scheduledAt');
+  const watchedText = form.watch('text');
+  const watchedTagIds = form.watch('tagIds');
+  const watchedNotes = form.watch('notes');
+  const watchedHasSpinnableText = form.watch('hasSpinnableText');
+  const watchedAutoDestructAfter = form.watch('autoDestructAfter');
+
+  const excludePostId = postId;
+  const { data: conflicts } = useCheckConflicts(
+    watchedProfileId,
+    watchedScheduledAt ?? '',
+    excludePostId,
+  );
+
+  const hasLinkedProfile = !!post?.profileId;
+  const isEditable = post ? hasLinkedProfile && EDITABLE_STATES.includes(post.status as PostStatus) : false;
+
+  const selectedProfile = profiles?.find((p) => p.id === watchedProfileId);
+  const previewProfile = selectedProfile
+    ? { displayName: selectedProfile.displayName, handle: `@${selectedProfile.handle}`, avatarUrl: selectedProfile.avatarUrl ?? '' }
+    : null;
+
+  if (isPostLoading) {
+    return (
+      <main>
+        <Skeleton className="h-8 w-48 mb-6" />
+        <div className="flex flex-col lg:flex-row gap-8">
+          <div className="flex-1 lg:max-w-[60%] space-y-6">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="lg:w-[40%]">
+            <Skeleton className="h-48 w-full" />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (postError || !post) {
+    const isNotFound = postError && 'status' in postError && (postError as { status: number }).status === 404;
+    return (
+      <main>
+        <h1 className="text-2xl font-semibold mb-4">
+          {isNotFound ? 'Post not found' : 'Error loading post'}
+        </h1>
+        <p className="text-muted-foreground mb-4">
+          {isNotFound
+            ? 'The post you are looking for does not exist or has been deleted.'
+            : 'Something went wrong while loading this post.'}
+        </p>
+        <Button asChild variant="outline">
+          <Link to="/posts">Back to Posts</Link>
+        </Button>
+      </main>
+    );
+  }
+
+  if (!isEditable) {
+    const readOnlySegments = post.isThread
+      ? deserializeThread(post.text).map((s) => s.text)
+      : [post.text];
+    const readOnlyProfile = profiles?.find((p) => p.id === post.profileId);
+
+    return (
+      <main>
+        <h1 className="text-2xl font-semibold mb-4">View Post</h1>
+        <div className="bg-amber-400/10 border border-amber-400/30 rounded-md p-4 mb-6">
+          <p className="text-sm text-amber-400">
+            This post cannot be edited
+            {hasLinkedProfile ? ` because it is in "${post.status}" state.` : ' because its connected profile has been disconnected.'}
+            {post.status === 'publishing' && ' It is currently being published.'}
+            {post.status === 'published' && ' It has already been published.'}
+            {post.status === 'destroyed' && ' It has been destroyed.'}
+          </p>
+        </div>
+        <div className="flex flex-col lg:flex-row gap-8">
+          <div className="flex-1 lg:max-w-[60%] space-y-4">
+            {readOnlyProfile && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Profile</p>
+                <p className="text-sm">{readOnlyProfile.displayName} (@{readOnlyProfile.handle})</p>
+              </div>
+            )}
+            {post.isThread && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Thread ({readOnlySegments.length} tweets)</p>
+                {readOnlySegments.map((segment, segmentIndex) => (
+                  <div key={segmentIndex} className="border border-border rounded-md p-3 mt-2">
+                    <p className="text-xs text-muted-foreground mb-1">Tweet {segmentIndex + 1}</p>
+                    <p className="text-sm whitespace-pre-wrap">{segment}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!post.isThread && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Text</p>
+                <p className="text-sm whitespace-pre-wrap">{post.text}</p>
+              </div>
+            )}
+            {post.scheduledAt && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Scheduled at</p>
+                <p className="text-sm">
+                  {DateTime.fromISO(post.scheduledAt, { zone: 'utc' })
+                    .setZone(userTimezone)
+                    .toFormat('MMM d, yyyy h:mm a')}
+                  {' '}({userTimezone.replace(/_/g, ' ')})
+                </p>
+              </div>
+            )}
+            {post.notes && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Notes</p>
+                <p className="text-sm whitespace-pre-wrap">{post.notes}</p>
+              </div>
+            )}
+            {post.tags.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Tags</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {post.tags.map((tag) => (
+                    <span key={tag.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: tag.color }} />
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="lg:w-[40%]">
+            <TweetPreview
+              text={post.isThread ? '' : post.text}
+              profile={readOnlyProfile ? { displayName: readOnlyProfile.displayName, handle: `@${readOnlyProfile.handle}`, avatarUrl: readOnlyProfile.avatarUrl ?? '' } : null}
+              isThread={post.isThread}
+              tweets={post.isThread ? readOnlySegments.map((segment, segmentIndex) => ({ id: String(segmentIndex), text: segment })) : undefined}
+            />
+          </div>
+        </div>
+        <div className="mt-6">
+          <Button asChild variant="outline">
+            <Link to="/posts">Back to Posts</Link>
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  function handleThreadToggle(checked: boolean) {
+    if (checked) {
+      const currentText = form.getValues('text');
+      if (currentText.includes('[[tweet]]')) {
+        setTweets(deserializeThread(currentText));
+      } else {
+        setTweets([{ id: crypto.randomUUID(), text: currentText }]);
+      }
+    } else {
+      form.setValue('text', serializeThread(tweets));
+    }
+    setIsThread(checked);
+  }
+
+  function handleScheduledAtChange(localValue: string) {
+    if (localValue) {
+      const { utcIso, wasAdjusted } = localInputToUtc(localValue, userTimezone);
+      form.setValue('scheduledAt', utcIso);
+      if (wasAdjusted) {
+        const adjustedLocal = DateTime.fromISO(utcIso).setZone(userTimezone).toFormat('h:mm a');
+        toast.info(`Adjusted to ${adjustedLocal} due to daylight saving time change.`);
+      }
+    } else {
+      form.setValue('scheduledAt', null);
+    }
+  }
+
+  function handleSubmit(action: 'schedule' | 'draft') {
+    const text = isThread ? serializeThread(tweets) : form.getValues('text');
+
+    if (!text.trim()) {
+      toast.error('Tweet text is required.');
+      return;
+    }
+
+    if (action === 'schedule') {
+      const scheduledAt = form.getValues('scheduledAt');
+      if (!scheduledAt) {
+        toast.error('Please select a scheduled time.');
+        return;
+      }
+      if (DateTime.fromISO(scheduledAt) <= DateTime.utc()) {
+        toast.error('Scheduled time must be in the future.');
+        return;
+      }
+    }
+
+    updatePostMutation.mutate(
+      {
+        postId: postId!,
+        postInput: {
+          text,
+          isThread,
+          status: action === 'draft' ? 'draft' : 'scheduled',
+          scheduledAt: action === 'schedule' ? form.getValues('scheduledAt') : null,
+          hasSpinnableText: form.getValues('hasSpinnableText'),
+          autoDestructAfter: form.getValues('autoDestructAfter'),
+          notes: form.getValues('notes') || null,
+          tagIds: form.getValues('tagIds'),
+        },
+        postVersion: post!.postVersion,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Post updated.');
+          navigate('/posts');
+        },
+        onError: (error: Error & { status?: number; body?: Record<string, unknown> }) => {
+          if (error.status === 409) {
+            const errorMsg = String(error.body?.error ?? '');
+            if (errorMsg.includes('modified elsewhere')) {
+              toast.error('This post was modified elsewhere. Refreshing to show latest version.');
+            } else {
+              toast.error('This post is currently being published and cannot be edited.');
+            }
+            refetch();
+            setIsFormInitialized(false);
+          } else {
+            toast.error(error.message || 'Failed to update post.');
+          }
+        },
+      },
+    );
+  }
+
+  const previewText = isThread ? '' : watchedText;
+
+  return (
+    <main>
+      <h1 className="text-2xl font-semibold mb-6">Edit Post</h1>
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Left column: form */}
+        <div className="flex-1 lg:max-w-[60%] space-y-6">
+          {/* Profile selector */}
+          <div className="space-y-2">
+            <Label htmlFor="profile-select">Profile</Label>
+            <Select
+              value={watchedProfileId}
+              onValueChange={(value) => form.setValue('profileId', value)}
+            >
+              <SelectTrigger id="profile-select">
+                <SelectValue placeholder="Select a profile..." />
+              </SelectTrigger>
+              <SelectContent>
+                {profiles?.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    {profile.displayName} (@{profile.handle})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Single/Thread toggle */}
+          <div className="flex items-center gap-3">
+            <Switch
+              id="thread-toggle"
+              checked={isThread}
+              onCheckedChange={handleThreadToggle}
+            />
+            <Label htmlFor="thread-toggle">Thread mode</Label>
+          </div>
+
+          {/* Text area or ThreadEditor */}
+          {isThread ? (
+            <ThreadEditor tweets={tweets} onChange={setTweets} />
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="tweet-text">Tweet text</Label>
+              <div className="relative">
+                <Textarea
+                  id="tweet-text"
+                  placeholder="What's happening?"
+                  value={watchedText}
+                  onChange={(e) => form.setValue('text', e.target.value)}
+                  rows={5}
+                />
+                <div className="absolute bottom-2 right-2">
+                  <CharacterCountRing text={watchedText} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Media upload placeholder -- Phase 6 */}
+          {/* TODO: Phase 6 implements actual media upload */}
+          <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center text-muted-foreground">
+            <ImageIcon className="h-8 w-8 mb-2" />
+            <p className="text-sm">Drop files or click to upload</p>
+            <p className="text-xs mt-1">Images, GIFs, or video</p>
+          </div>
+
+          {/* Schedule datetime picker */}
+          <div className="space-y-2">
+            <Label htmlFor="schedule-datetime">Schedule</Label>
+            <Input
+              id="schedule-datetime"
+              type="datetime-local"
+              value={watchedScheduledAt ? utcToLocalInput(watchedScheduledAt, userTimezone) : ''}
+              onChange={(e) => handleScheduledAtChange(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Times shown in {userTimezone.replace(/_/g, ' ')}
+            </p>
+            {conflicts && conflicts.length > 0 && (
+              <ScheduleConflictBanner conflicts={conflicts} />
+            )}
+          </div>
+
+          {/* Tags selector */}
+          <div className="space-y-2">
+            <Label>Tags</Label>
+            <TagSelector
+              selected={watchedTagIds}
+              onChange={(ids) => form.setValue('tagIds', ids)}
+              onManage={() => setIsTagManageOpen(true)}
+              tags={tagList ?? []}
+            />
+          </div>
+
+          {/* Notes textarea */}
+          <div className="space-y-2">
+            <Label htmlFor="post-notes">Notes</Label>
+            <Textarea
+              id="post-notes"
+              placeholder="Internal notes (not published)..."
+              value={watchedNotes}
+              onChange={(e) => form.setValue('notes', e.target.value)}
+              rows={3}
+            />
+          </div>
+
+          {/* Spinnable text toggle */}
+          <div className="flex items-center gap-3">
+            <Switch
+              id="spinnable-toggle"
+              checked={watchedHasSpinnableText}
+              onCheckedChange={(checked) => form.setValue('hasSpinnableText', checked)}
+            />
+            <div>
+              <Label htmlFor="spinnable-toggle">Spinnable text</Label>
+              <p className="text-xs text-muted-foreground">
+                Use {'{'}option1|option2{'}'} syntax. One variant is randomly chosen at publish time.
+              </p>
+            </div>
+          </div>
+
+          {/* Auto-destruct picker */}
+          <AutoDestructPicker
+            value={watchedAutoDestructAfter}
+            onChange={(value) => form.setValue('autoDestructAfter', value)}
+          />
+
+          {/* SplitButton -- Update as primary, Save as Draft in dropdown, no Publish Now */}
+          <SplitButton
+            onSchedule={() => handleSubmit('schedule')}
+            onDraft={() => handleSubmit('draft')}
+            isLoading={updatePostMutation.isPending}
+            disabled={updatePostMutation.isPending}
+          />
+        </div>
+
+        {/* Right column: live preview */}
+        <div className="lg:w-[40%]">
+          <TweetPreview
+            text={previewText}
+            profile={previewProfile}
+            isThread={isThread}
+            tweets={isThread ? tweets : undefined}
+          />
+        </div>
+      </div>
+
+      <TagManagementDialog open={isTagManageOpen} onOpenChange={setIsTagManageOpen} />
+    </main>
+  );
+}

@@ -1,20 +1,28 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { type Options } from 'express-rate-limit';
 
 // Per-IP rate limiting. For this single-user app, per-IP and per-account are equivalent.
-export const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+function createLimiter(overrides: Partial<Options>) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    standardHeaders: true,
+    legacyHeaders: false,
+    ...overrides,
+  });
+}
+
+export const loginLimiter = createLimiter({
   max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many failed attempts. Try again in 15 minutes.' },
   skipSuccessfulRequests: true,
 });
 
-export const recoveryLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+export const recoveryLimiter = createLimiter({
   max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: 'Too many failed attempts. Try again in 15 minutes.' },
   skipSuccessfulRequests: true,
+});
+
+export const profileLimiter = createLimiter({
+  max: 10,
+  message: { error: 'Too many profile creation attempts. Try again in 15 minutes.' },
 });

@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis';
-import { createLogger, requireEnv } from '@sms/shared';
+import { createLogger } from '@sms/shared/logger';
+import { requireEnv } from '@sms/shared/env';
 import { startHeartbeat, stopHeartbeat } from './heartbeat.js';
 
 const logger = createLogger('worker');

@@ -2,20 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import type { RequestHandler } from 'express';
+import { createMockRedis } from './helpers/mock-redis.js';
 
 vi.mock('../middleware/csrf.js', () => ({
   doubleCsrfProtection: ((_req: any, _res: any, next: any) => next()) as RequestHandler,
   generateCsrfToken: (_req: any, _res: any) => 'test-csrf-token',
 }));
-
-function createMockRedis(overrides: Record<string, any> = {}) {
-  return {
-    ping: vi.fn().mockResolvedValue('PONG'),
-    get: vi.fn().mockResolvedValue(Date.now().toString()),
-    on: vi.fn(),
-    ...overrides,
-  } as any;
-}
 
 function createMockSql(healthy = true) {
   if (healthy) {
@@ -31,8 +23,13 @@ function createMockSql(healthy = true) {
 }
 
 function createTestApp(redisOverrides: Record<string, any> = {}, healthySql = true) {
+  // Default get returns a fresh worker heartbeat so baseline-healthy tests pass
+  // without each test having to spell it out. Individual tests override as needed.
   return createApp({
-    redis: createMockRedis(redisOverrides),
+    redis: createMockRedis({
+      get: vi.fn().mockResolvedValue(Date.now().toString()),
+      ...redisOverrides,
+    }),
     sql: createMockSql(healthySql),
     db: {} as any,
     sessionSecret: 'test-secret-that-is-long-enough-for-session',

@@ -11,8 +11,8 @@ import {
   totpVerifySchema,
   totpDisableSchema,
   securityQuestionsSchema,
-  createLogger,
 } from '@sms/shared';
+import { createLogger } from '@sms/shared/logger';
 import type { Redis } from 'ioredis';
 import type { Db } from '@sms/db';
 import { users, securityQuestions } from '@sms/db';

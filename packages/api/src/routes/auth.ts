@@ -7,7 +7,7 @@ import { verifyTotpCode } from '../services/totp.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { loginLimiter } from '../middleware/rate-limiter.js';
 import { generateCsrfToken } from '../middleware/csrf.js';
-import { createLogger } from '@sms/shared';
+import { createLogger } from '@sms/shared/logger';
 
 const logger = createLogger('auth-routes');
 

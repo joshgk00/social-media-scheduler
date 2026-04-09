@@ -12,7 +12,11 @@
     "db:migrate": "pnpm --filter @sms/db exec drizzle-kit migrate"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["argon2", "sharp", "esbuild"]
+    "onlyBuiltDependencies": [
+      "argon2",
+      "sharp",
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "eslint": "~10.2.0",

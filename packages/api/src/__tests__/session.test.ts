@@ -123,10 +123,9 @@ describe('createSessionMiddleware', () => {
 
     // Check that Redis set was called with the correct prefix
     const setCalls = mockRedis.set.mock.calls;
-    if (setCalls.length > 0) {
-      const key = setCalls[0][0] as string;
-      expect(key).toMatch(/^sms:sess:/);
-    }
+    expect(setCalls.length).toBeGreaterThan(0);
+    const key = setCalls[0][0] as string;
+    expect(key).toMatch(/^sms:sess:/);
   });
 
   it('session destroy function is available and callable', async () => {

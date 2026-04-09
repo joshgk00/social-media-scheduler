@@ -37,7 +37,7 @@ A self-hosted social media scheduling tool for personal business use, running as
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
 | Drizzle ORM | 0.45.x | Database ORM | Use Drizzle over Prisma. Rationale: zero binary dependencies (Prisma ships a ~1.6MB query engine binary), SQL-like API gives direct control over complex queries (tsvector, GIN indexes, advisory locks), instant type updates without a generate step, tiny runtime (~7KB). Single-developer project -- Drizzle's SQL-proximity is a strength, not a team-friction risk. |
-| drizzle-kit | 0.30.x | Schema migrations | Supports `generate` (SQL migration files) and `push` (direct schema sync). Use `generate` + `migrate` for production (versioned, idempotent migrations per PRD requirement). Use `push` only during rapid prototyping. |
+| drizzle-kit | 0.31.x | Schema migrations | Supports `generate` (SQL migration files) and `push` (direct schema sync). Use `generate` + `migrate` for production (versioned, idempotent migrations per PRD requirement). Use `push` only during rapid prototyping. |
 | postgres (pg driver) | 3.4.x | PostgreSQL client | `drizzle-orm/postgres-js` adapter. The `postgres` package (not `pg`) is the modern PostgreSQL driver -- zero dependencies, TypeScript native, pipeline support. |
 ### Social Platform SDKs
 | Library | Version | Purpose | Why Recommended |
@@ -52,7 +52,7 @@ A self-hosted social media scheduling tool for personal business use, running as
 | express-session | 1.18.x | Session management | HTTP-only Secure cookies per PRD. Sliding window expiry. |
 | connect-redis | 9.0.x | Session store | Stores sessions in Redis. Types included. Respects cookie `expires` for TTL. |
 | helmet | 8.x | Security headers | CSP, HSTS, X-Content-Type-Options per PRD. Does NOT handle CSRF -- need separate library. |
-| csrf-csrf | 3.x | CSRF protection | Double Submit Cookie pattern. Replacement for deprecated `csurf`. Actively maintained. |
+| csrf-csrf | 4.x | CSRF protection | Double Submit Cookie pattern. Replacement for deprecated `csurf`. Actively maintained. |
 | otpauth | 9.5.x | TOTP 2FA | Modern, maintained TOTP library. Supports Google Authenticator otpauth:// URIs. Speakeasy is unmaintained -- do not use. |
 ### Supporting Libraries
 | Library | Version | Purpose | When to Use |
@@ -62,10 +62,10 @@ A self-hosted social media scheduling tool for personal business use, running as
 | nodemailer | 8.0.x | SMTP email | Zero runtime dependencies. Supports SMTP transport, DKIM signing. Ethereal.email for dev testing. Handles all notification emails per PRD. |
 | sharp | 0.34.x | Image processing | Thumbnail generation (300px wide per PRD), format validation, resize before upload. Uses libvips -- fastest Node.js image processor. |
 | multer | 2.x | File upload handling | Express middleware for multipart/form-data. Disk and memory storage. Built on busboy (streaming, memory-efficient for large video files up to 100MB per PRD). |
-| zod | 3.24.x | Request validation | Runtime schema validation for API endpoints. Define schemas once, infer TypeScript types. Use as Express middleware with a thin custom wrapper (no need for express-zod-api -- it's opinionated and heavyweight for an Express 5 project). |
-| luxon | 3.5.x | Date/timezone handling | Built-in IANA timezone support -- critical for PRD requirement of DST-safe scheduling. `DateTime.fromISO(iso, { zone: 'America/New_York' })` handles DST transitions correctly. date-fns requires a separate `date-fns-tz` package and is weaker for timezone manipulation. |
-| pino | 9.x | Structured logging | 5x faster than Winston. JSON output by default. Supports correlation IDs via child loggers (`logger.child({ correlationId })`). Pair with `pino-http` for Express request logging. |
-| pino-http | 10.x | HTTP request logging | Express middleware that auto-logs requests with status, duration, correlation ID. Integrates with pino. |
+| zod | 3.25.x | Request validation | Runtime schema validation for API endpoints. Define schemas once, infer TypeScript types. Use as Express middleware with a thin custom wrapper (no need for express-zod-api -- it's opinionated and heavyweight for an Express 5 project). |
+| luxon | 3.7.x | Date/timezone handling | Built-in IANA timezone support -- critical for PRD requirement of DST-safe scheduling. `DateTime.fromISO(iso, { zone: 'America/New_York' })` handles DST transitions correctly. date-fns requires a separate `date-fns-tz` package and is weaker for timezone manipulation. |
+| pino | 10.x | Structured logging | 5x faster than Winston. JSON output by default. Supports correlation IDs via child loggers (`logger.child({ correlationId })`). Pair with `pino-http` for Express request logging. |
+| pino-http | 11.x | HTTP request logging | Express middleware that auto-logs requests with status, duration, correlation ID. Integrates with pino. |
 | uuid | 11.x | Correlation IDs | Generate UUIDs for request correlation IDs per PRD structured logging requirement. |
 | csv-parse / csv-stringify | 5.x | CSV import/export | Part of the `csv` package family. Streaming parser handles large CSV files without memory pressure. PRD requires CSV bulk upload/download. |
 | @bull-board/express | 6.20.x | Queue dashboard | Visual admin panel for BullMQ queues. Mount at `/admin/queues` behind auth. See job states, retry failed jobs, inspect dead letter queue. Essential for debugging the scheduling engine. |
@@ -81,8 +81,8 @@ A self-hosted social media scheduling tool for personal business use, running as
 ### Development Tools
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| TypeScript | 5.7.x | Type safety across frontend and backend | Use strict mode. Shared types between API and client via a `packages/shared` directory in a monorepo structure. |
-| Vitest | 3.x | Unit/integration testing | 10-20x faster than Jest. Native Vite integration. Jest-compatible API for easy adoption. Use for both frontend component tests and backend unit tests. |
+| TypeScript | 5.9.x | Type safety across frontend and backend | Use strict mode. Shared types between API and client via a `packages/shared` directory in a monorepo structure. |
+| Vitest | 4.x | Unit/integration testing | 10-20x faster than Jest. Native Vite integration. Jest-compatible API for easy adoption. Use for both frontend component tests and backend unit tests. |
 | @testing-library/react | 16.x | Component testing | User-centric testing (find by role/label, not implementation). Pair with Vitest. |
 | supertest | 7.x | API endpoint testing | Test Express routes without starting a server. Assert status codes, response bodies, headers. |
 | MSW (Mock Service Worker) | 2.x | API mocking in tests | Mock social platform APIs in tests without hitting real endpoints. Works with both Vitest and browser tests. |
@@ -144,7 +144,7 @@ A self-hosted social media scheduling tool for personal business use, running as
 | BullMQ 5.x | Redis >= 6.2 | Tested with Redis 7.x. Redis 8 should work but is less battle-tested. |
 | BullMQ 5.x | ioredis 5.x | BullMQ uses ioredis internally. Must match major version. |
 | Drizzle ORM 0.45.x | postgres 3.x | Use `drizzle-orm/postgres-js` adapter. |
-| drizzle-kit 0.30.x | drizzle-orm 0.45.x | Kit and ORM versions are released in sync. Keep both updated together. |
+| drizzle-kit 0.31.x | drizzle-orm 0.45.x | Kit and ORM versions are released in sync. Keep both updated together. |
 | Express 5.2.x | Node.js >= 18 | Express 5 dropped Node < 18. Use Node 22 LTS. |
 | Vite 8.x | Node.js >= 20.19 or >= 22.12 | Vite 8 bumped minimum Node version. Node 22 LTS satisfies this. |
 | @vitejs/plugin-react 6.x | Vite 8.x | Plugin v6 requires Vite 8. Uses Oxc instead of Babel. |
@@ -187,7 +187,66 @@ A self-hosted social media scheduling tool for personal business use, running as
 <!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
+### Module Structure
+
+- Services expose factory functions (`createApp`, `createWorker`) — no top-level side effects
+- Dependencies injected via factory params, not imported globals
+- Env vars read inside functions at runtime, never at module scope
+- Paths resolve relative to module via `import.meta.url` + `dirname()`, never `process.cwd()`
+
+### Error Handling
+
+- Every async op needs explicit error handling — no fire-and-forget promises
+- Unawaited promises: `.catch()` with logging
+- Shutdown: individual try-catch per resource; one failure must not skip the rest
+- Resource cleanup in `finally` blocks, not sequential `await`
+- No empty catch blocks — at minimum log the error
+- Wrap low-level errors (crypto, drivers) with application context before rethrowing
+
+### Naming
+
+- Booleans: `is`/`are`/`has`/`should` prefix — `isPasswordValid` not `valid`
+- No generic names (`data`, `result`, `count`) — use domain terms: `userInput`, `sessionCount`
+- No ad-hoc abbreviations (`qc`, `sq`) — spell out. Standard abbrevs (`id`, `url`, `db`) OK
+- Single-letter vars only in trivial arrows (`x => x.id`) — never for time, counts, domain values
+- Translate library jargon to domain terms: `validationOffset` not `delta`
+- Names reflect domain semantics, not implementation: `resetToEmailStep` not `resetToStep1`
+- Collapse single-use intermediates when inline expression is clear
+- Descriptive loop indices when multiple are in scope
+
+### Validation
+
+- Enum-like Zod strings (dateFormat, timezone) → `z.enum()` or validate against allowlist
+- Remove schema fields no handler reads — schemas document actual contract
+- Multi-step DB mutations (delete + re-insert) → `db.transaction()`
+
+### Type Safety
+
+- Import actual types from libraries — never `any` for external deps
+- All function params and returns explicitly typed
+- No `any`/`unknown` in interfaces without narrowing
+
+### Testing
+
+- Security-critical code (middleware, auth, encryption): 100% branch coverage
+- Test both success AND failure paths for middleware and async ops
+- No conditional assertions (`if (x) expect(...)`) — assert precondition first
+- Shared test setup → `__tests__/helpers/`
+- `vi.useFakeTimers()` for interval/timeout code
+
+### Dependencies
+
+- Production deps: tilde `~` (patch-only). Dev deps: tilde preferred, caret OK
+- CLAUDE.md version specs must match installed versions
+- Shared patterns across packages → extract to `@sms/shared`
+
+### Docker & Infrastructure
+
+- Containers: non-root user via `USER` directive
+- Dev ports: `127.0.0.1` only, never `0.0.0.0`
+- All services (Redis, PostgreSQL) require authentication
+- Separate prod/dev config files, not conditionals
+- Production nginx: gzip + static asset cache headers
 <!-- GSD:conventions-end -->
 
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->

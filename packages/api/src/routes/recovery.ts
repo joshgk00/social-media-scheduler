@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import argon2 from 'argon2';
-import { recoveryVerifyEmailSchema, recoveryVerifyAnswersSchema, recoveryResetPasswordSchema, createLogger } from '@sms/shared';
+import { recoveryVerifyEmailSchema, recoveryVerifyAnswersSchema, recoveryResetPasswordSchema } from '@sms/shared';
+import { createLogger } from '@sms/shared/logger';
 import type { Redis } from 'ioredis';
 import type { Db } from '@sms/db';
 

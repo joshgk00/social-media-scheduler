@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router';
 import { SetupGuard } from './components/SetupGuard';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { SidebarLayout } from './components/layout/SidebarLayout';
 import { PageSkeleton } from './components/PageSkeleton';
 import { lazy, Suspense } from 'react';
 
@@ -8,11 +10,15 @@ const LoginPage = lazy(() => import('./pages/login/LoginPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const RecoverPage = lazy(() => import('./pages/recover/RecoverPage'));
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
+const ProfilesPage = lazy(() => import('./pages/profiles/ProfilesPage'));
+const PostsPage = lazy(() => import('./pages/posts/PostsPage'));
+const NewPostPage = lazy(() => import('./pages/posts/NewPostPage'));
+const EditPostPage = lazy(() => import('./pages/posts/EditPostPage'));
 
 function DashboardPlaceholder() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
-      <h1 className="text-2xl font-semibold">Social Media Scheduler</h1>
+    <main className="flex items-center justify-center min-h-[60vh]">
+      <h1 className="text-2xl font-semibold">Dashboard</h1>
     </main>
   );
 }
@@ -23,25 +29,20 @@ export function App() {
       <SetupGuard>
         <Suspense fallback={<PageSkeleton />}>
           <Routes>
+            {/* Public routes -- no sidebar */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/setup" element={<SetupPage />} />
             <Route path="/recover" element={<RecoverPage />} />
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <SettingsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <DashboardPlaceholder />
-                </ProtectedRoute>
-              }
-            />
+
+            {/* Protected routes -- with sidebar layout */}
+            <Route element={<ProtectedRoute><ErrorBoundary><SidebarLayout /></ErrorBoundary></ProtectedRoute>}>
+              <Route index element={<DashboardPlaceholder />} />
+              <Route path="/posts" element={<PostsPage />} />
+              <Route path="/posts/new" element={<NewPostPage />} />
+              <Route path="/posts/:id/edit" element={<EditPostPage />} />
+              <Route path="/profiles" element={<ProfilesPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
           </Routes>
         </Suspense>
       </SetupGuard>
