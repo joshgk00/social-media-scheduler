@@ -31,7 +31,7 @@ export function useUpdateTag() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ tagId, tagInput }: { tagId: string; tagInput: { name?: string; color?: string } }) =>
-      apiClient.put<Tag>(`/api/tags/${tagId}`, tagInput),
+      apiClient.patch<Tag>(`/api/tags/${tagId}`, tagInput),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });
     },

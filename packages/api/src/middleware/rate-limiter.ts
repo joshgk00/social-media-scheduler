@@ -18,3 +18,11 @@ export const recoveryLimiter = rateLimit({
   message: { error: 'Too many failed attempts. Try again in 15 minutes.' },
   skipSuccessfulRequests: true,
 });
+
+export const profileLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many profile creation attempts. Try again in 15 minutes.' },
+});

@@ -10,6 +10,8 @@ import {
   ProfileServiceError,
 } from '../services/profile.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
+import { profileLimiter } from '../middleware/rate-limiter.js';
+import { validateUuidParam } from '../middleware/validation.js';
 
 interface ProfilesDependencies {
   db: Db;
@@ -18,7 +20,7 @@ interface ProfilesDependencies {
 export function createProfilesRouter({ db }: ProfilesDependencies) {
   const router = Router();
 
-  router.post('/api/profiles', requireAuth, async (req, res) => {
+  router.post('/api/profiles', requireAuth, profileLimiter, async (req, res) => {
     const parsed = createProfileSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -43,7 +45,7 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
   });
 
   router.get('/api/profiles/:id', requireAuth, async (req, res) => {
-    const profileId = req.params.id as string;
+    const profileId = validateUuidParam(req.params.id as string);
     const profile = await getProfileById(db, req.session.userId!, profileId);
     if (!profile) {
       res.status(404).json({ error: 'Profile not found' });
@@ -53,13 +55,21 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
   });
 
   router.delete('/api/profiles/:id', requireAuth, async (req, res) => {
-    const profileId = req.params.id as string;
-    const isDeleted = await deleteProfile(db, req.session.userId!, profileId);
-    if (!isDeleted) {
-      res.status(404).json({ error: 'Profile not found' });
-      return;
+    const profileId = validateUuidParam(req.params.id as string);
+    try {
+      const isDeleted = await deleteProfile(db, req.session.userId!, profileId);
+      if (!isDeleted) {
+        res.status(404).json({ error: 'Profile not found' });
+        return;
+      }
+      res.json({ success: true });
+    } catch (err: unknown) {
+      if (err instanceof ProfileServiceError) {
+        res.status(err.statusCode).json({ error: err.message });
+        return;
+      }
+      throw err;
     }
-    res.json({ success: true });
   });
 
   return router;

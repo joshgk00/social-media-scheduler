@@ -10,6 +10,7 @@ import {
   TagServiceError,
 } from '../services/tag.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
+import { validateUuidParam } from '../middleware/validation.js';
 
 interface TagsDependencies {
   db: Db;
@@ -42,8 +43,8 @@ export function createTagsRouter({ db }: TagsDependencies) {
     res.json(tagList);
   });
 
-  router.put('/api/tags/:id', requireAuth, async (req, res) => {
-    const tagId = req.params.id as string;
+  router.patch('/api/tags/:id', requireAuth, async (req, res) => {
+    const tagId = validateUuidParam(req.params.id as string);
     const parsed = updateTagSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -63,7 +64,7 @@ export function createTagsRouter({ db }: TagsDependencies) {
   });
 
   router.delete('/api/tags/:id', requireAuth, async (req, res) => {
-    const tagId = req.params.id as string;
+    const tagId = validateUuidParam(req.params.id as string);
     const isDeleted = await deleteTag(db, req.session.userId!, tagId);
     if (!isDeleted) {
       res.status(404).json({ error: 'Tag not found' });

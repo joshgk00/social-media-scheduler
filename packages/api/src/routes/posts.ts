@@ -17,6 +17,7 @@ import {
   PostServiceError,
 } from '../services/post.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
+import { validateUuidParam } from '../middleware/validation.js';
 
 interface PostsDependencies {
   db: Db;
@@ -73,7 +74,7 @@ export function createPostsRouter({ db }: PostsDependencies) {
   });
 
   router.get('/api/posts/:id', requireAuth, async (req, res) => {
-    const postId = req.params.id as string;
+    const postId = validateUuidParam(req.params.id as string);
     const post = await getPostById(db, req.session.userId!, postId);
     if (!post) {
       res.status(404).json({ error: 'Post not found' });
@@ -82,8 +83,8 @@ export function createPostsRouter({ db }: PostsDependencies) {
     res.json(post);
   });
 
-  router.put('/api/posts/:id', requireAuth, async (req, res) => {
-    const postId = req.params.id as string;
+  router.patch('/api/posts/:id', requireAuth, async (req, res) => {
+    const postId = validateUuidParam(req.params.id as string);
     const parsed = updatePostSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -103,7 +104,7 @@ export function createPostsRouter({ db }: PostsDependencies) {
   });
 
   router.delete('/api/posts/:id', requireAuth, async (req, res) => {
-    const postId = req.params.id as string;
+    const postId = validateUuidParam(req.params.id as string);
     try {
       await deletePost(db, req.session.userId!, postId);
       res.json({ success: true });

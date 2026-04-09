@@ -87,6 +87,10 @@ export const apiClient = {
     return mutationRequest<T>('PUT', path, data);
   },
 
+  async patch<T = unknown>(path: string, data?: unknown): Promise<T> {
+    return mutationRequest<T>('PATCH', path, data);
+  },
+
   async delete<T = unknown>(path: string): Promise<T> {
     return mutationRequest<T>('DELETE', path);
   },

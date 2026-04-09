@@ -100,7 +100,7 @@ export function useUpdatePost() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ postId, postInput, postVersion }: { postId: string; postInput: Omit<UpdatePostInput, 'postVersion'>; postVersion: number }) =>
-      apiClient.put<Post>(`/api/posts/${postId}`, { ...postInput, postVersion }),
+      apiClient.patch<Post>(`/api/posts/${postId}`, { ...postInput, postVersion }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
     },

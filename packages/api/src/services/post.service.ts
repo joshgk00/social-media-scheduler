@@ -1,5 +1,5 @@
 import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount } from 'drizzle-orm';
-import { EDITABLE_STATES, DELETABLE_STATES } from '@sms/shared';
+import { EDITABLE_STATES, DELETABLE_STATES, transitionPost } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
@@ -61,7 +61,7 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
     if (!input.scheduledAt) {
       throw new PostServiceError('scheduledAt is required when status is scheduled', 400);
     }
-    if (new Date(input.scheduledAt) <= new Date()) {
+    if (new Date(input.scheduledAt) < new Date()) {
       throw new PostServiceError('scheduledAt must be in the future', 400);
     }
   }
@@ -117,6 +117,15 @@ export async function updatePost(
   postId: string,
   input: UpdatePostInput,
 ) {
+  if (input.status === 'scheduled') {
+    if (!input.scheduledAt) {
+      throw new PostServiceError('scheduledAt is required when scheduling a post.', 400);
+    }
+    if (new Date(input.scheduledAt) < new Date()) {
+      throw new PostServiceError('scheduledAt must be in the future.', 400);
+    }
+  }
+
   const updateFields: Record<string, unknown> = {
     postVersion: sql`${posts.postVersion} + 1`,
     updatedAt: new Date(),
@@ -133,7 +142,43 @@ export async function updatePost(
   if (input.notes !== undefined) updateFields.notes = input.notes;
 
   await db.transaction(async (tx) => {
-    const updatedRows = await tx.update(posts)
+    const existingRows = await tx
+      .select({ id: posts.id, status: posts.status, postVersion: posts.postVersion })
+      .from(posts)
+      .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
+
+    if (existingRows.length === 0) {
+      throw new PostServiceError('Post not found', 404);
+    }
+
+    const existingPost = existingRows[0];
+
+    if (!EDITABLE_STATES.includes(existingPost.status as PostStatus)) {
+      throw new PostServiceError(
+        'This post is currently being published and cannot be edited.',
+        409,
+      );
+    }
+
+    if (existingPost.postVersion !== input.postVersion) {
+      throw new PostServiceError(
+        'This post was modified elsewhere. Refresh to see the latest version.',
+        409,
+      );
+    }
+
+    if (input.status && input.status !== existingPost.status) {
+      try {
+        transitionPost(existingPost.status as PostStatus, input.status);
+      } catch {
+        throw new PostServiceError(
+          `Invalid state transition from '${existingPost.status}' to '${input.status}'.`,
+          409,
+        );
+      }
+    }
+
+    await tx.update(posts)
       .set(updateFields)
       .where(
         and(
@@ -142,32 +187,7 @@ export async function updatePost(
           eq(posts.postVersion, input.postVersion),
           inArray(posts.status, [...EDITABLE_STATES]),
         ),
-      )
-      .returning();
-
-    if (updatedRows.length === 0) {
-      const existingPost = await tx
-        .select({ id: posts.id, status: posts.status, postVersion: posts.postVersion })
-        .from(posts)
-        .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
-
-      if (existingPost.length === 0) {
-        throw new PostServiceError('Post not found', 404);
-      }
-
-      const currentPost = existingPost[0];
-      if (!EDITABLE_STATES.includes(currentPost.status as PostStatus)) {
-        throw new PostServiceError(
-          'This post is currently being published and cannot be edited.',
-          409,
-        );
-      }
-
-      throw new PostServiceError(
-        'This post was modified elsewhere. Refresh to see the latest version.',
-        409,
       );
-    }
 
     if (input.tagIds !== undefined) {
       await tx.delete(postTags).where(eq(postTags.postId, postId));
@@ -226,6 +246,9 @@ export async function deletePost(
   return true;
 }
 
+// All columns returned intentionally -- the edit page needs every field.
+// failureReason may contain internal error details; consider filtering
+// it from list responses if posts are ever exposed beyond the single owner.
 export async function getPostById(db: Db, userId: string, postId: string) {
   const postRows = await db
     .select()
