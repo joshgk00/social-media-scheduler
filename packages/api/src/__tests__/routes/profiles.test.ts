@@ -9,12 +9,21 @@ const mockGetProfiles = vi.fn();
 const mockGetProfileById = vi.fn();
 const mockDeleteProfile = vi.fn();
 
-vi.mock('../../services/profile.service.js', () => ({
-  createProfile: (...args: unknown[]) => mockCreateProfile(...args),
-  getProfiles: (...args: unknown[]) => mockGetProfiles(...args),
-  getProfileById: (...args: unknown[]) => mockGetProfileById(...args),
-  deleteProfile: (...args: unknown[]) => mockDeleteProfile(...args),
-}));
+vi.mock('../../services/profile.service.js', () => {
+  class ProfileServiceError extends Error {
+    constructor(message: string, public readonly statusCode: number) {
+      super(message);
+      this.name = 'ProfileServiceError';
+    }
+  }
+  return {
+    createProfile: (...args: unknown[]) => mockCreateProfile(...args),
+    getProfiles: (...args: unknown[]) => mockGetProfiles(...args),
+    getProfileById: (...args: unknown[]) => mockGetProfileById(...args),
+    deleteProfile: (...args: unknown[]) => mockDeleteProfile(...args),
+    ProfileServiceError,
+  };
+});
 
 const mockFindUserByEmail = vi.fn();
 const mockVerifyPassword = vi.fn();
@@ -166,7 +175,8 @@ describe('profiles routes', () => {
     });
 
     it('returns 422 when Twitter credential validation fails', async () => {
-      mockCreateProfile.mockRejectedValueOnce(new Error('Could not verify these credentials.'));
+      const { ProfileServiceError } = await import('../../services/profile.service.js');
+      mockCreateProfile.mockRejectedValueOnce(new ProfileServiceError('Could not verify these credentials.', 422));
       const agent = await authenticatedAgent();
 
       const res = await agent
@@ -222,11 +232,8 @@ describe('profiles routes', () => {
     });
 
     it('returns 409 when profile already connected for same Twitter account', async () => {
-      const duplicateError = Object.assign(
-        new Error('This Twitter account is already connected.'),
-        { statusCode: 409 },
-      );
-      mockCreateProfile.mockRejectedValueOnce(duplicateError);
+      const { ProfileServiceError } = await import('../../services/profile.service.js');
+      mockCreateProfile.mockRejectedValueOnce(new ProfileServiceError('This Twitter account is already connected.', 409));
       const agent = await authenticatedAgent();
 
       const res = await agent

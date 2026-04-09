@@ -12,10 +12,12 @@ function chainable(terminal: unknown = []) {
 }
 
 export function createMockDb() {
-  return {
+  const db: any = {
     select: vi.fn().mockReturnValue(chainable([])),
     insert: vi.fn().mockReturnValue(chainable([])),
     update: vi.fn().mockReturnValue(chainable()),
     delete: vi.fn().mockReturnValue(chainable()),
-  } as any;
+    transaction: vi.fn().mockImplementation(async (fn: (tx: any) => Promise<any>) => fn(db)),
+  };
+  return db;
 }

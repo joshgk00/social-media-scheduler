@@ -29,12 +29,21 @@ const mockGetProfiles = vi.fn();
 const mockGetProfileById = vi.fn();
 const mockDeleteProfile = vi.fn();
 
-vi.mock('../../services/profile.service.js', () => ({
-  createProfile: (...args: unknown[]) => mockCreateProfile(...args),
-  getProfiles: (...args: unknown[]) => mockGetProfiles(...args),
-  getProfileById: (...args: unknown[]) => mockGetProfileById(...args),
-  deleteProfile: (...args: unknown[]) => mockDeleteProfile(...args),
-}));
+vi.mock('../../services/profile.service.js', () => {
+  class ProfileServiceError extends Error {
+    constructor(message: string, public readonly statusCode: number) {
+      super(message);
+      this.name = 'ProfileServiceError';
+    }
+  }
+  return {
+    createProfile: (...args: unknown[]) => mockCreateProfile(...args),
+    getProfiles: (...args: unknown[]) => mockGetProfiles(...args),
+    getProfileById: (...args: unknown[]) => mockGetProfileById(...args),
+    deleteProfile: (...args: unknown[]) => mockDeleteProfile(...args),
+    ProfileServiceError,
+  };
+});
 
 const mockFindUserByEmail = vi.fn();
 const mockVerifyPassword = vi.fn();
@@ -458,11 +467,8 @@ describe('posts API integration', () => {
     });
 
     it('credential values never appear in error messages or logs', async () => {
-      const duplicateError = Object.assign(
-        new Error('This Twitter account is already connected.'),
-        { statusCode: 409 },
-      );
-      mockCreateProfile.mockRejectedValueOnce(duplicateError);
+      const { ProfileServiceError } = await import('../../services/profile.service.js');
+      mockCreateProfile.mockRejectedValueOnce(new ProfileServiceError('This Twitter account is already connected.', 409));
       const agent = await authenticatedAgent();
 
       const res = await agent
@@ -496,6 +502,7 @@ describe('posts API integration', () => {
       expect(res.status).toBe(200);
       expect(mockCheckConflicts).toHaveBeenCalledWith(
         expect.anything(),
+        'user-1',
         PROFILE_ID,
         scheduledAt,
         undefined,
@@ -505,11 +512,8 @@ describe('posts API integration', () => {
 
   describe('duplicate profile prevention', () => {
     it('rejects duplicate profile for same Twitter account', async () => {
-      const duplicateError = Object.assign(
-        new Error('This Twitter account is already connected.'),
-        { statusCode: 409 },
-      );
-      mockCreateProfile.mockRejectedValueOnce(duplicateError);
+      const { ProfileServiceError } = await import('../../services/profile.service.js');
+      mockCreateProfile.mockRejectedValueOnce(new ProfileServiceError('This Twitter account is already connected.', 409));
       const agent = await authenticatedAgent();
 
       const res = await agent

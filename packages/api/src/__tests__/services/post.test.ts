@@ -115,13 +115,16 @@ function createPostUpdateMockDb(options: {
   insertChain.returning = vi.fn().mockReturnValue(insertChain);
   insertChain.then = (resolve: (v: unknown) => void) => resolve([]);
 
-  return {
+  const db: any = {
     update: vi.fn().mockReturnValue(updateChain),
     select: selectFn,
     insert: vi.fn().mockReturnValue(insertChain),
     delete: vi.fn().mockReturnValue(deleteChain),
+    transaction: vi.fn(),
     _updateChain: updateChain,
-  } as any;
+  };
+  db.transaction = vi.fn().mockImplementation(async (fn: (tx: any) => Promise<any>) => fn(db));
+  return db;
 }
 
 describe('post.service', () => {
