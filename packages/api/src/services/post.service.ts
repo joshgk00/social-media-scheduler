@@ -338,8 +338,16 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
   }
 
   const postRows = await db
-    .select()
+    .select({
+      post: posts,
+      profile: {
+        displayName: socialProfiles.displayName,
+        handle: socialProfiles.handle,
+        avatarUrl: socialProfiles.avatarUrl,
+      },
+    })
     .from(posts)
+    .leftJoin(socialProfiles, eq(posts.profileId, socialProfiles.id))
     .where(and(...conditions))
     .orderBy(sql`${posts.scheduledAt} DESC NULLS LAST`, sql`${posts.createdAt} DESC`)
     .limit(limit)
@@ -350,7 +358,7 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
     .from(posts)
     .where(and(...conditions));
 
-  const postIdsForTags = postRows.map((p) => p.id);
+  const postIdsForTags = postRows.map(({ post }) => post.id);
   let tagsByPostId: Record<string, Array<{ id: string; name: string; color: string }>> = {};
 
   if (postIdsForTags.length > 0) {
@@ -373,9 +381,16 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
     }
   }
 
-  const postsWithTags = postRows.map((post) => ({
+  const postsWithTags = postRows.map(({ post, profile }) => ({
     ...post,
     tags: tagsByPostId[post.id] ?? [],
+    profile: profile?.handle
+      ? {
+          displayName: profile.displayName ?? profile.handle,
+          handle: profile.handle,
+          avatarUrl: profile.avatarUrl ?? '',
+        }
+      : undefined,
   }));
 
   return { posts: postsWithTags, total, page, limit };

@@ -250,6 +250,7 @@ function createGetPostsMockDb(options: {
   function makeSelectChain(result: unknown[]) {
     const chain: Record<string, any> = {};
     chain.from = vi.fn().mockReturnValue(chain);
+    chain.leftJoin = vi.fn().mockReturnValue(chain);
     chain.where = vi.fn().mockReturnValue(chain);
     chain.innerJoin = vi.fn().mockReturnValue(chain);
     chain.orderBy = vi.fn().mockReturnValue(chain);
@@ -623,8 +624,14 @@ describe('post.service', () => {
   describe('getPosts', () => {
     it('returns paginated posts with total count', async () => {
       const postRows = [
-        { id: 'post-1', userId: 'user-1', text: 'first', status: 'draft', scheduledAt: null, createdAt: new Date() },
-        { id: 'post-2', userId: 'user-1', text: 'second', status: 'draft', scheduledAt: null, createdAt: new Date() },
+        {
+          post: { id: 'post-1', userId: 'user-1', text: 'first', status: 'draft', scheduledAt: null, createdAt: new Date() },
+          profile: { displayName: 'Profile One', handle: 'profile1', avatarUrl: null },
+        },
+        {
+          post: { id: 'post-2', userId: 'user-1', text: 'second', status: 'draft', scheduledAt: null, createdAt: new Date() },
+          profile: { displayName: 'Profile Two', handle: 'profile2', avatarUrl: 'https://example.com/avatar.png' },
+        },
       ];
       const db = createGetPostsMockDb({ postRows, total: 5 });
 
@@ -634,6 +641,24 @@ describe('post.service', () => {
       expect(result.total).toBe(5);
       expect(result.page).toBe(1);
       expect(result.limit).toBe(2);
+      expect(result.posts[0].profile).toEqual({
+        displayName: 'Profile One',
+        handle: 'profile1',
+        avatarUrl: '',
+      });
+    });
+
+    it('leaves profile undefined when a post no longer has a connected profile', async () => {
+      const db = createGetPostsMockDb({
+        postRows: [{
+          post: { id: 'post-1', userId: 'user-1', text: 'orphaned', status: 'draft', scheduledAt: null, createdAt: new Date() },
+          profile: { displayName: null, handle: null, avatarUrl: null },
+        }],
+      });
+
+      const result = await getPosts(db, 'user-1', { page: 1, limit: 25 });
+
+      expect(result.posts[0].profile).toBeUndefined();
     });
 
     it('filters by status server-side', async () => {

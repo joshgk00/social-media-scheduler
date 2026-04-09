@@ -75,7 +75,7 @@ export default function EditPostPage() {
   useEffect(() => {
     if (post && !isFormInitialized) {
       form.reset({
-        profileId: post.profileId,
+        profileId: post.profileId ?? '',
         text: post.isThread ? '' : post.text,
         scheduledAt: post.scheduledAt,
         hasSpinnableText: post.hasSpinnableText,
@@ -108,7 +108,8 @@ export default function EditPostPage() {
     excludePostId,
   );
 
-  const isEditable = post ? EDITABLE_STATES.includes(post.status as PostStatus) : false;
+  const hasLinkedProfile = !!post?.profileId;
+  const isEditable = post ? hasLinkedProfile && EDITABLE_STATES.includes(post.status as PostStatus) : false;
 
   const selectedProfile = profiles?.find((p) => p.id === watchedProfileId);
   const previewProfile = selectedProfile
@@ -163,7 +164,8 @@ export default function EditPostPage() {
         <h1 className="text-2xl font-semibold mb-4">View Post</h1>
         <div className="bg-amber-400/10 border border-amber-400/30 rounded-md p-4 mb-6">
           <p className="text-sm text-amber-400">
-            This post cannot be edited because it is in &quot;{post.status}&quot; state.
+            This post cannot be edited
+            {hasLinkedProfile ? ` because it is in "${post.status}" state.` : ' because its connected profile has been disconnected.'}
             {post.status === 'publishing' && ' It is currently being published.'}
             {post.status === 'published' && ' It has already been published.'}
             {post.status === 'destroyed' && ' It has been destroyed.'}

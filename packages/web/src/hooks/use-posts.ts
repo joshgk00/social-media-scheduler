@@ -16,7 +16,7 @@ interface PostProfile {
 
 interface Post {
   id: string;
-  profileId: string;
+  profileId: string | null;
   text: string;
   isThread: boolean;
   status: string;

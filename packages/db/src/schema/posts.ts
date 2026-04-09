@@ -17,7 +17,8 @@ export const postStatusEnum = pgEnum('post_status', [
 export const posts = pgTable('posts', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  profileId: uuid('profile_id').notNull().references(() => socialProfiles.id, { onDelete: 'cascade' }),
+  // Preserve posts if a connected account is later disconnected.
+  profileId: uuid('profile_id').references(() => socialProfiles.id, { onDelete: 'set null' }),
   text: text('text').notNull(),
   isThread: boolean('is_thread').notNull().default(false),
   status: postStatusEnum('status').notNull().default('draft'),
