@@ -7,6 +7,7 @@ import {
   getProfiles,
   getProfileById,
   deleteProfile,
+  ProfileServiceError,
 } from '../services/profile.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 
@@ -28,12 +29,11 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
       const profile = await createProfile(db, req.session.userId!, parsed.data);
       res.status(201).json(profile);
     } catch (err: unknown) {
-      const statusCode = (err as Error & { statusCode?: number }).statusCode;
-      if (statusCode === 409) {
-        res.status(409).json({ error: (err as Error).message });
+      if (err instanceof ProfileServiceError) {
+        res.status(err.statusCode).json({ error: err.message });
         return;
       }
-      res.status(422).json({ error: (err as Error).message });
+      throw err;
     }
   });
 

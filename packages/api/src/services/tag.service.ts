@@ -33,11 +33,14 @@ export async function createTag(db: Db, userId: string, input: CreateTagInput) {
       color: input.color ?? '#6b7280',
     }).returning();
 
+    logger.info({ tagId: tag.id, userId }, 'Tag created');
+
     return tag;
   } catch (err: unknown) {
     if (isUniqueViolation(err)) {
       throw new TagServiceError('A tag with this name already exists.', 409);
     }
+    logger.error({ err, userId }, 'Failed to create tag');
     throw err;
   }
 }
@@ -62,12 +65,15 @@ export async function updateTag(
       throw new TagServiceError('Tag not found', 404);
     }
 
+    logger.info({ tagId, userId }, 'Tag updated');
+
     return updatedRows[0];
   } catch (err: unknown) {
     if (err instanceof TagServiceError) throw err;
     if (isUniqueViolation(err)) {
       throw new TagServiceError('A tag with this name already exists.', 409);
     }
+    logger.error({ err, tagId, userId }, 'Failed to update tag');
     throw err;
   }
 }
@@ -80,6 +86,10 @@ export async function deleteTag(
   const deletedRows = await db.delete(tags)
     .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
     .returning({ id: tags.id });
+
+  if (deletedRows.length > 0) {
+    logger.info({ tagId, userId }, 'Tag deleted');
+  }
 
   return deletedRows.length > 0;
 }

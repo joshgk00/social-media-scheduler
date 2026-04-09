@@ -6,6 +6,13 @@ import { TwitterApi } from 'twitter-api-v2';
 
 const logger = createLogger('profile-service');
 
+export class ProfileServiceError extends Error {
+  constructor(message: string, public readonly statusCode: number) {
+    super(message);
+    this.name = 'ProfileServiceError';
+  }
+}
+
 interface TwitterUserData {
   id: string;
   name: string;
@@ -59,13 +66,14 @@ export async function validateTwitterCredentials(
     );
 
     if (statusCode === 401) {
-      throw new Error(
+      throw new ProfileServiceError(
         'Could not verify these credentials. Check that your Consumer Key, Consumer Secret, Access Token, and Access Token Secret are correct and that your Developer App has Read and Write permissions.',
+        401,
       );
     }
 
     if (statusCode === 429) {
-      throw new Error('Twitter API rate limit reached. Please wait a few minutes and try again.');
+      throw new ProfileServiceError('Twitter API rate limit reached. Please wait a few minutes and try again.', 429);
     }
 
     const isNetworkError = (err as { code?: string })?.code === 'ENOTFOUND'
@@ -74,12 +82,13 @@ export async function validateTwitterCredentials(
       || (err as { type?: string })?.type === 'request-timeout';
 
     if (isNetworkError) {
-      throw new Error(
+      throw new ProfileServiceError(
         'Could not reach Twitter API. Please check your network connection and try again.',
+        422,
       );
     }
 
-    throw new Error('Twitter API returned an unexpected error. Please try again later.');
+    throw new ProfileServiceError('Twitter API returned an unexpected error. Please try again later.', 422);
   }
 }
 
@@ -114,9 +123,7 @@ export async function createProfile(
     );
 
   if (existingProfile.length > 0) {
-    const duplicateError = new Error('This Twitter account is already connected.');
-    (duplicateError as Error & { statusCode: number }).statusCode = 409;
-    throw duplicateError;
+    throw new ProfileServiceError('This Twitter account is already connected.', 409);
   }
 
   const encryptionKey = validateEncryptionKey(process.env.ENCRYPTION_KEY!);

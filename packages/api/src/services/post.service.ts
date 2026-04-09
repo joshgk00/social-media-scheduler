@@ -2,9 +2,13 @@ import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount } fro
 import { EDITABLE_STATES, DELETABLE_STATES, createLogger } from '@sms/shared';
 import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
-import { posts, postTags, tags } from '@sms/db';
+import { posts, postTags, tags, socialProfiles } from '@sms/db';
 
 const logger = createLogger('post-service');
+
+function escapeLikePattern(input: string): string {
+  return input.replace(/[%_\\]/g, '\\$&');
+}
 
 interface CreatePostInput {
   profileId: string;
@@ -61,24 +65,46 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
     }
   }
 
-  const [post] = await db.insert(posts).values({
-    userId,
-    profileId: input.profileId,
-    text: input.text,
-    isThread: input.isThread ?? false,
-    status,
-    scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
-    hasSpinnableText: input.hasSpinnableText ?? false,
-    autoDestructAfter: input.autoDestructAfter ?? null,
-    notes: input.notes ?? null,
-  }).returning();
+  const [ownedProfile] = await db
+    .select({ id: socialProfiles.id })
+    .from(socialProfiles)
+    .where(and(eq(socialProfiles.id, input.profileId), eq(socialProfiles.userId, userId)));
+
+  if (!ownedProfile) {
+    throw new PostServiceError('Profile not found', 404);
+  }
 
   const tagIds = input.tagIds ?? [];
-  if (tagIds.length > 0) {
-    await db.insert(postTags).values(
-      tagIds.map((tagId) => ({ postId: post.id, tagId })),
-    );
-  }
+
+  const post = await db.transaction(async (tx) => {
+    const [insertedPost] = await tx.insert(posts).values({
+      userId,
+      profileId: input.profileId,
+      text: input.text,
+      isThread: input.isThread ?? false,
+      status,
+      scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
+      hasSpinnableText: input.hasSpinnableText ?? false,
+      autoDestructAfter: input.autoDestructAfter ?? null,
+      notes: input.notes ?? null,
+    }).returning();
+
+    if (tagIds.length > 0) {
+      const ownedTags = await tx.select({ id: tags.id }).from(tags)
+        .where(and(eq(tags.userId, userId), inArray(tags.id, tagIds)));
+      if (ownedTags.length !== tagIds.length) {
+        throw new PostServiceError('One or more tags not found', 400);
+      }
+
+      await tx.insert(postTags).values(
+        tagIds.map((tagId) => ({ postId: insertedPost.id, tagId })),
+      );
+    }
+
+    return insertedPost;
+  });
+
+  logger.info({ postId: post.id, userId }, 'Post created');
 
   const postWithTags = await getPostById(db, userId, post.id);
   return postWithTags;
@@ -105,50 +131,60 @@ export async function updatePost(
   if (input.autoDestructAfter !== undefined) updateFields.autoDestructAfter = input.autoDestructAfter;
   if (input.notes !== undefined) updateFields.notes = input.notes;
 
-  const updatedRows = await db.update(posts)
-    .set(updateFields)
-    .where(
-      and(
-        eq(posts.id, postId),
-        eq(posts.userId, userId),
-        eq(posts.postVersion, input.postVersion),
-        inArray(posts.status, [...EDITABLE_STATES]),
-      ),
-    )
-    .returning();
+  await db.transaction(async (tx) => {
+    const updatedRows = await tx.update(posts)
+      .set(updateFields)
+      .where(
+        and(
+          eq(posts.id, postId),
+          eq(posts.userId, userId),
+          eq(posts.postVersion, input.postVersion),
+          inArray(posts.status, [...EDITABLE_STATES]),
+        ),
+      )
+      .returning();
 
-  if (updatedRows.length === 0) {
-    const existingPost = await db
-      .select({ id: posts.id, status: posts.status, postVersion: posts.postVersion })
-      .from(posts)
-      .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
+    if (updatedRows.length === 0) {
+      const existingPost = await tx
+        .select({ id: posts.id, status: posts.status, postVersion: posts.postVersion })
+        .from(posts)
+        .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
-    if (existingPost.length === 0) {
-      throw new PostServiceError('Post not found', 404);
-    }
+      if (existingPost.length === 0) {
+        throw new PostServiceError('Post not found', 404);
+      }
 
-    const currentPost = existingPost[0];
-    if (!EDITABLE_STATES.includes(currentPost.status as PostStatus)) {
+      const currentPost = existingPost[0];
+      if (!EDITABLE_STATES.includes(currentPost.status as PostStatus)) {
+        throw new PostServiceError(
+          'This post is currently being published and cannot be edited.',
+          409,
+        );
+      }
+
       throw new PostServiceError(
-        'This post is currently being published and cannot be edited.',
+        'This post was modified elsewhere. Refresh to see the latest version.',
         409,
       );
     }
 
-    throw new PostServiceError(
-      'This post was modified elsewhere. Refresh to see the latest version.',
-      409,
-    );
-  }
+    if (input.tagIds !== undefined) {
+      await tx.delete(postTags).where(eq(postTags.postId, postId));
+      if (input.tagIds.length > 0) {
+        const ownedTags = await tx.select({ id: tags.id }).from(tags)
+          .where(and(eq(tags.userId, userId), inArray(tags.id, input.tagIds)));
+        if (ownedTags.length !== input.tagIds.length) {
+          throw new PostServiceError('One or more tags not found', 400);
+        }
 
-  if (input.tagIds !== undefined) {
-    await db.delete(postTags).where(eq(postTags.postId, postId));
-    if (input.tagIds.length > 0) {
-      await db.insert(postTags).values(
-        input.tagIds.map((tagId) => ({ postId, tagId })),
-      );
+        await tx.insert(postTags).values(
+          input.tagIds.map((tagId) => ({ postId, tagId })),
+        );
+      }
     }
-  }
+  });
+
+  logger.info({ postId, userId }, 'Post updated');
 
   return getPostById(db, userId, postId);
 }
@@ -183,6 +219,8 @@ export async function deletePost(
       409,
     );
   }
+
+  logger.info({ postId, userId }, 'Post deleted');
 
   return true;
 }
@@ -226,10 +264,8 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
     conditions.push(eq(posts.profileId, query.profileId));
   }
   if (query.search) {
-    conditions.push(ilike(posts.text, `%${query.search}%`));
+    conditions.push(ilike(posts.text, `%${escapeLikePattern(query.search)}%`));
   }
-
-  let postRows;
 
   if (query.tagId) {
     const postIdsWithTag = db
@@ -237,44 +273,21 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
       .from(postTags)
       .where(eq(postTags.tagId, query.tagId));
 
-    postRows = await db
-      .select()
-      .from(posts)
-      .where(and(...conditions, inArray(posts.id, postIdsWithTag)))
-      .orderBy(sql`${posts.scheduledAt} DESC NULLS LAST`, sql`${posts.createdAt} DESC`)
-      .limit(limit)
-      .offset(offset);
-  } else {
-    postRows = await db
-      .select()
-      .from(posts)
-      .where(and(...conditions))
-      .orderBy(sql`${posts.scheduledAt} DESC NULLS LAST`, sql`${posts.createdAt} DESC`)
-      .limit(limit)
-      .offset(offset);
+    conditions.push(inArray(posts.id, postIdsWithTag));
   }
 
-  const totalConditions = [...conditions];
-  let totalQuery;
+  const postRows = await db
+    .select()
+    .from(posts)
+    .where(and(...conditions))
+    .orderBy(sql`${posts.scheduledAt} DESC NULLS LAST`, sql`${posts.createdAt} DESC`)
+    .limit(limit)
+    .offset(offset);
 
-  if (query.tagId) {
-    const postIdsWithTag = db
-      .select({ postId: postTags.postId })
-      .from(postTags)
-      .where(eq(postTags.tagId, query.tagId));
-
-    totalQuery = await db
-      .select({ total: drizzleCount() })
-      .from(posts)
-      .where(and(...totalConditions, inArray(posts.id, postIdsWithTag)));
-  } else {
-    totalQuery = await db
-      .select({ total: drizzleCount() })
-      .from(posts)
-      .where(and(...totalConditions));
-  }
-
-  const total = totalQuery[0].total;
+  const [{ total }] = await db
+    .select({ total: drizzleCount() })
+    .from(posts)
+    .where(and(...conditions));
 
   const postIdsForTags = postRows.map((p) => p.id);
   let tagsByPostId: Record<string, Array<{ id: string; name: string; color: string }>> = {};
@@ -309,6 +322,7 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
 
 export async function checkConflicts(
   db: Db,
+  userId: string,
   profileId: string,
   scheduledAt: string,
   excludePostId?: string,
@@ -318,6 +332,7 @@ export async function checkConflicts(
   const windowEnd = new Date(targetTime.getTime() + 5 * 60 * 1000);
 
   const conditions = [
+    eq(posts.userId, userId),
     eq(posts.profileId, profileId),
     inArray(posts.status, ['scheduled', 'queued', 'publishing']),
     gte(posts.scheduledAt, windowStart),

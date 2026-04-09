@@ -64,6 +64,7 @@ export function createPostsRouter({ db }: PostsDependencies) {
 
     const conflicts = await checkConflicts(
       db,
+      req.session.userId!,
       parsed.data.profileId,
       parsed.data.scheduledAt,
       parsed.data.excludePostId,

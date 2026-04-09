@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const createPostSchema = z.object({
   profileId: z.string().uuid('Invalid profile ID'),
-  text: z.string().min(1, 'Tweet text is required'),
+  text: z.string().min(1, 'Tweet text is required').max(25000),
   isThread: z.boolean().default(false),
   status: z.enum(['draft', 'scheduled']).default('draft'),
   scheduledAt: z.string().datetime().nullable().optional(),
@@ -21,7 +21,7 @@ export const createPostSchema = z.object({
 );
 
 export const updatePostSchema = z.object({
-  text: z.string().min(1, 'Tweet text is required').optional(),
+  text: z.string().min(1, 'Tweet text is required').max(25000).optional(),
   isThread: z.boolean().optional(),
   status: z.enum(['draft', 'scheduled']).optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
