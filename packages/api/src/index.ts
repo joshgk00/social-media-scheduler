@@ -1,3 +1,11 @@
+import { config } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+config({ path: resolve(__dirname, '../../../.env') });
+
 import { Redis } from 'ioredis';
 import { runMigrations, createDbClient } from '@sms/db';
 import { requireEnv } from '@sms/shared';
