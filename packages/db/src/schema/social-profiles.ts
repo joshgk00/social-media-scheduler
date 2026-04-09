@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, varchar, timestamp, integer, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, varchar, timestamp, integer, unique } from 'drizzle-orm/pg-core';
 import { users } from './users.js';
 
 export const socialProfiles = pgTable('social_profiles', {
@@ -32,5 +32,5 @@ export const socialProfiles = pgTable('social_profiles', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  uniqueIndex('social_profiles_user_platform_account').on(table.userId, table.platform, table.platformUserId),
+  unique('social_profiles_user_platform_account').on(table.userId, table.platform, table.platformUserId).nullsNotDistinct(),
 ]);

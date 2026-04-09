@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, varchar, timestamp, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, varchar, timestamp, integer, index } from 'drizzle-orm/pg-core';
 import { posts } from './posts.js';
 
 export const postMedia = pgTable('post_media', {
@@ -13,4 +13,6 @@ export const postMedia = pgTable('post_media', {
   thumbnailPath: text('thumbnail_path'),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('post_media_post_id').on(table.postId),
+]);

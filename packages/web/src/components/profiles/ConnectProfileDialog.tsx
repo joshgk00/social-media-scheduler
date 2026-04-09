@@ -30,7 +30,7 @@ interface ConnectProfileDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type CredentialField = keyof CreateProfileInput;
+type CredentialField = 'consumerKey' | 'consumerSecret' | 'accessToken' | 'accessTokenSecret';
 
 const credentialFields: Array<{
   name: CredentialField;
@@ -56,6 +56,7 @@ export function ConnectProfileDialog({ open, onOpenChange }: ConnectProfileDialo
   const form = useForm<CreateProfileInput>({
     resolver: zodResolver(createProfileSchema),
     defaultValues: {
+      platform: 'twitter',
       consumerKey: '',
       consumerSecret: '',
       accessToken: '',

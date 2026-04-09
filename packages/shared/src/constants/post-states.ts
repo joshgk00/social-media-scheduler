@@ -1,3 +1,4 @@
+// Keep in sync with postStatusEnum in packages/db/src/schema/posts.ts
 export const POST_STATUSES = [
   'draft',
   'scheduled',
@@ -14,6 +15,8 @@ export type PostStatus = (typeof POST_STATUSES)[number];
 export const POST_STATE_TRANSITIONS: Record<PostStatus, readonly PostStatus[]> = {
   draft: ['scheduled', 'publishing'],
   scheduled: ['draft', 'queued', 'publishing'],
+  // queued -> publishing only. Cancellation is not supported once a post enters the queue.
+  // To stop a queued post, the user must wait for it to fail or be published, then delete.
   queued: ['publishing'],
   publishing: ['published', 'failed'],
   published: ['auto_destructing'],

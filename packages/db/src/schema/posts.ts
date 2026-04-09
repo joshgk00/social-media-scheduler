@@ -2,6 +2,7 @@ import { pgTable, pgEnum, uuid, text, varchar, timestamp, boolean, integer, inde
 import { users } from './users.js';
 import { socialProfiles } from './social-profiles.js';
 
+// Keep in sync with POST_STATUSES in packages/shared/src/constants/post-states.ts
 export const postStatusEnum = pgEnum('post_status', [
   'draft',
   'scheduled',
