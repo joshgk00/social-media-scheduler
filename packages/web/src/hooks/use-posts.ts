@@ -42,8 +42,10 @@ interface PostsResponse {
 }
 
 interface ConflictingPost {
-  text: string;
+  id: string;
+  textPreview: string;
   scheduledAt: string;
+  status: string;
 }
 
 export interface PostFilters {
@@ -122,7 +124,10 @@ export function useCheckConflicts(profileId: string, scheduledAt: string, exclud
   const params = new URLSearchParams({ profileId, scheduledAt });
   if (excludePostId) params.set('excludePostId', excludePostId);
   return useQuery({
-    queryKey: ['posts', 'conflicts', profileId, scheduledAt],
+    // excludePostId must be in the queryKey — otherwise edit-page results
+    // for a given (profileId, scheduledAt) would bleed into the new-post
+    // page cache and vice versa.
+    queryKey: ['posts', 'conflicts', profileId, scheduledAt, excludePostId ?? null],
     queryFn: () => apiClient.get<ConflictingPost[]>(`/api/posts/conflicts?${params}`),
     enabled: !!profileId && !!scheduledAt,
     staleTime: 10_000,
