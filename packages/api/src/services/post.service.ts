@@ -1,5 +1,5 @@
 import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount } from 'drizzle-orm';
-import { EDITABLE_STATES, DELETABLE_STATES, transitionPost } from '@sms/shared';
+import { AppError, EDITABLE_STATES, DELETABLE_STATES, transitionPost } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
@@ -44,13 +44,9 @@ interface PostQuery {
   limit?: number;
 }
 
-export class PostServiceError extends Error {
-  constructor(
-    message: string,
-    public readonly statusCode: number,
-  ) {
-    super(message);
-    this.name = 'PostServiceError';
+export class PostServiceError extends AppError {
+  constructor(message: string, statusCode: number) {
+    super(message, statusCode);
   }
 }
 
@@ -117,15 +113,6 @@ export async function updatePost(
   postId: string,
   input: UpdatePostInput,
 ) {
-  if (input.status === 'scheduled') {
-    if (!input.scheduledAt) {
-      throw new PostServiceError('scheduledAt is required when scheduling a post.', 400);
-    }
-    if (new Date(input.scheduledAt) < new Date()) {
-      throw new PostServiceError('scheduledAt must be in the future.', 400);
-    }
-  }
-
   const updateFields: Record<string, unknown> = {
     postVersion: sql`${posts.postVersion} + 1`,
     updatedAt: new Date(),
@@ -143,7 +130,7 @@ export async function updatePost(
 
   await db.transaction(async (tx) => {
     const existingRows = await tx
-      .select({ id: posts.id, status: posts.status, postVersion: posts.postVersion })
+      .select({ id: posts.id, status: posts.status, postVersion: posts.postVersion, scheduledAt: posts.scheduledAt })
       .from(posts)
       .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
@@ -178,7 +165,18 @@ export async function updatePost(
       }
     }
 
-    await tx.update(posts)
+    const effectiveStatus = input.status ?? existingPost.status;
+    if (effectiveStatus === 'scheduled') {
+      const effectiveScheduledAt = input.scheduledAt !== undefined ? input.scheduledAt : existingPost.scheduledAt?.toISOString() ?? null;
+      if (!effectiveScheduledAt) {
+        throw new PostServiceError('scheduledAt is required for scheduled posts.', 400);
+      }
+      if (new Date(effectiveScheduledAt) < new Date()) {
+        throw new PostServiceError('scheduledAt must be in the future.', 400);
+      }
+    }
+
+    const updatedRows = await tx.update(posts)
       .set(updateFields)
       .where(
         and(
@@ -187,7 +185,12 @@ export async function updatePost(
           eq(posts.postVersion, input.postVersion),
           inArray(posts.status, [...EDITABLE_STATES]),
         ),
-      );
+      )
+      .returning({ id: posts.id });
+
+    if (updatedRows.length === 0) {
+      throw new PostServiceError('This post was modified elsewhere. Refresh to see the latest version.', 409);
+    }
 
     if (input.tagIds !== undefined) {
       await tx.delete(postTags).where(eq(postTags.postId, postId));

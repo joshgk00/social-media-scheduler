@@ -1,6 +1,6 @@
 import { eq, and, inArray } from 'drizzle-orm';
 import { encrypt, validateEncryptionKey } from '@sms/shared/encryption';
-import { NON_INTERACTIVE_STATES } from '@sms/shared';
+import { AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
 import { socialProfiles, posts } from '@sms/db';
@@ -8,10 +8,9 @@ import { TwitterApi } from 'twitter-api-v2';
 
 const logger = createLogger('profile-service');
 
-export class ProfileServiceError extends Error {
-  constructor(message: string, public readonly statusCode: number) {
-    super(message);
-    this.name = 'ProfileServiceError';
+export class ProfileServiceError extends AppError {
+  constructor(message: string, statusCode: number) {
+    super(message, statusCode);
   }
 }
 
@@ -187,34 +186,38 @@ export async function getProfileById(db: Db, userId: string, profileId: string) 
 }
 
 export async function deleteProfile(db: Db, userId: string, profileId: string): Promise<boolean> {
-  const inFlightPosts = await db
-    .select({ id: posts.id })
-    .from(posts)
-    .where(
-      and(
-        eq(posts.profileId, profileId),
-        eq(posts.userId, userId),
-        inArray(posts.status, [...NON_INTERACTIVE_STATES]),
-      ),
-    )
-    .limit(1);
+  const IN_FLIGHT_STATES = ['queued', 'publishing', 'auto_destructing'] as const;
 
-  if (inFlightPosts.length > 0) {
-    throw new ProfileServiceError(
-      'Cannot delete profile with in-flight posts. Wait for publishing to complete or cancel queued posts first.',
-      409,
-    );
-  }
+  return db.transaction(async (tx) => {
+    const inFlightPosts = await tx
+      .select({ id: posts.id })
+      .from(posts)
+      .where(
+        and(
+          eq(posts.profileId, profileId),
+          eq(posts.userId, userId),
+          inArray(posts.status, [...IN_FLIGHT_STATES]),
+        ),
+      )
+      .limit(1);
 
-  const deleted = await db
-    .delete(socialProfiles)
-    .where(
-      and(
-        eq(socialProfiles.id, profileId),
-        eq(socialProfiles.userId, userId),
-      ),
-    )
-    .returning({ id: socialProfiles.id });
+    if (inFlightPosts.length > 0) {
+      throw new ProfileServiceError(
+        'Cannot delete profile with in-flight posts. Wait for publishing to complete or cancel queued posts first.',
+        409,
+      );
+    }
 
-  return deleted.length > 0;
+    const deleted = await tx
+      .delete(socialProfiles)
+      .where(
+        and(
+          eq(socialProfiles.id, profileId),
+          eq(socialProfiles.userId, userId),
+        ),
+      )
+      .returning({ id: socialProfiles.id });
+
+    return deleted.length > 0;
+  });
 }

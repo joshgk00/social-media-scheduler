@@ -36,4 +36,5 @@ export const posts = pgTable('posts', {
   index('posts_profile_scheduled_status').on(table.profileId, table.scheduledAt, table.status),
   uniqueIndex('posts_platform_post_id').on(table.platformPostId),
   index('posts_user_status').on(table.userId, table.status),
+  index('posts_profile_status').on(table.profileId, table.status),
 ]);

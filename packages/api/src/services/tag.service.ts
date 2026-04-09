@@ -1,17 +1,14 @@
 import { eq, and, asc } from 'drizzle-orm';
 import type { Db } from '@sms/db';
 import { tags } from '@sms/db';
+import { AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 
 const logger = createLogger('tag-service');
 
-export class TagServiceError extends Error {
-  constructor(
-    message: string,
-    public readonly statusCode: number,
-  ) {
-    super(message);
-    this.name = 'TagServiceError';
+export class TagServiceError extends AppError {
+  constructor(message: string, statusCode: number) {
+    super(message, statusCode);
   }
 }
 

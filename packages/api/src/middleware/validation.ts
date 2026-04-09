@@ -1,12 +1,10 @@
+import { AppError } from '@sms/shared';
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export class ValidationError extends Error {
-  constructor(
-    message: string,
-    public readonly statusCode: number,
-  ) {
-    super(message);
-    this.name = 'ValidationError';
+export class ValidationError extends AppError {
+  constructor(message: string, statusCode: number) {
+    super(message, statusCode);
   }
 }
 

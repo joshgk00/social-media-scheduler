@@ -46,7 +46,7 @@ export function AutoDestructPicker({ value, onChange }: AutoDestructPickerProps)
   }
 
   function handleAmountChange(newAmount: number) {
-    const clamped = Math.max(1, newAmount);
+    const clamped = Math.max(1, Math.min(365, newAmount));
     setAmount(clamped);
     onChange(`${clamped} ${unit}`);
   }
