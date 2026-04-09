@@ -136,8 +136,10 @@ async function authenticatedAgent() {
   return agent;
 }
 
+const PROFILE_UUID = '550e8400-e29b-41d4-a716-446655440001';
+
 const SAFE_PROFILE = {
-  id: 'profile-uuid-1',
+  id: PROFILE_UUID,
   platform: 'twitter',
   platformUserId: '12345',
   displayName: 'Test User',
@@ -163,6 +165,7 @@ describe('profiles routes', () => {
       const res = await agent
         .post('/api/profiles')
         .send({
+          platform: 'twitter',
           consumerKey: 'ck-value',
           consumerSecret: 'cs-value',
           accessToken: 'at-value',
@@ -182,6 +185,7 @@ describe('profiles routes', () => {
       const res = await agent
         .post('/api/profiles')
         .send({
+          platform: 'twitter',
           consumerKey: 'bad-key',
           consumerSecret: 'bad-secret',
           accessToken: 'bad-token',
@@ -198,6 +202,7 @@ describe('profiles routes', () => {
       const res = await request(app)
         .post('/api/profiles')
         .send({
+          platform: 'twitter',
           consumerKey: 'ck-value',
           consumerSecret: 'cs-value',
           accessToken: 'at-value',
@@ -214,6 +219,7 @@ describe('profiles routes', () => {
       const res = await agent
         .post('/api/profiles')
         .send({
+          platform: 'twitter',
           consumerKey: 'ck-value',
           consumerSecret: 'cs-value',
           accessToken: 'at-value',
@@ -239,6 +245,7 @@ describe('profiles routes', () => {
       const res = await agent
         .post('/api/profiles')
         .send({
+          platform: 'twitter',
           consumerKey: 'ck-value',
           consumerSecret: 'cs-value',
           accessToken: 'at-value',
@@ -283,7 +290,7 @@ describe('profiles routes', () => {
       mockDeleteProfile.mockResolvedValueOnce(true);
       const agent = await authenticatedAgent();
 
-      const res = await agent.delete('/api/profiles/profile-uuid-1');
+      const res = await agent.delete(`/api/profiles/${PROFILE_UUID}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('success', true);
@@ -293,10 +300,23 @@ describe('profiles routes', () => {
       mockDeleteProfile.mockResolvedValueOnce(false);
       const agent = await authenticatedAgent();
 
-      const res = await agent.delete('/api/profiles/nonexistent-id');
+      const res = await agent.delete('/api/profiles/550e8400-e29b-41d4-a716-446655440099');
 
       expect(res.status).toBe(404);
       expect(res.body).toHaveProperty('error', 'Profile not found');
+    });
+
+    it('returns 409 when profile has in-flight posts', async () => {
+      const { ProfileServiceError } = await import('../../services/profile.service.js');
+      mockDeleteProfile.mockRejectedValueOnce(
+        new ProfileServiceError('Cannot delete profile with in-flight posts', 409),
+      );
+      const agent = await authenticatedAgent();
+
+      const res = await agent.delete(`/api/profiles/${PROFILE_UUID}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toContain('in-flight posts');
     });
   });
 });

@@ -239,7 +239,7 @@ describe('posts API integration', () => {
     });
 
     it('stores auto-destruct configuration', async () => {
-      const postWithAutoDestruct = { ...SAMPLE_POST, autoDestructAfter: '24h' };
+      const postWithAutoDestruct = { ...SAMPLE_POST, autoDestructAfter: '24 hours' };
       mockCreatePost.mockResolvedValueOnce(postWithAutoDestruct);
       const agent = await authenticatedAgent();
 
@@ -248,11 +248,11 @@ describe('posts API integration', () => {
         .send({
           profileId: PROFILE_ID,
           text: 'Temporary post',
-          autoDestructAfter: '24h',
+          autoDestructAfter: '24 hours',
         });
 
       expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('autoDestructAfter', '24h');
+      expect(res.body).toHaveProperty('autoDestructAfter', '24 hours');
     });
 
     it('stores notes', async () => {
@@ -351,14 +351,14 @@ describe('posts API integration', () => {
     });
   });
 
-  describe('PUT /api/posts/:id', () => {
+  describe('PATCH /api/posts/:id', () => {
     it('enforces optimistic locking via atomic post_version update', async () => {
       const updatedPost = { ...SAMPLE_POST, text: 'Updated text', postVersion: 2 };
       mockUpdatePost.mockResolvedValueOnce(updatedPost);
       const agent = await authenticatedAgent();
 
       const res = await agent
-        .put(`/api/posts/${POST_ID}`)
+        .patch(`/api/posts/${POST_ID}`)
         .send({ text: 'Updated text', postVersion: 1 });
 
       expect(res.status).toBe(200);
@@ -378,7 +378,7 @@ describe('posts API integration', () => {
       const agent = await authenticatedAgent();
 
       const res = await agent
-        .put(`/api/posts/${POST_ID}`)
+        .patch(`/api/posts/${POST_ID}`)
         .send({ text: 'Stale update', postVersion: 1 });
 
       expect(res.status).toBe(409);
@@ -393,7 +393,7 @@ describe('posts API integration', () => {
       const agent = await authenticatedAgent();
 
       const res = await agent
-        .put(`/api/posts/${POST_ID}`)
+        .patch(`/api/posts/${POST_ID}`)
         .send({ text: 'Blocked update', postVersion: 1 });
 
       expect(res.status).toBe(409);
@@ -428,7 +428,7 @@ describe('posts API integration', () => {
       const agent = await authenticatedAgent();
 
       const res = await agent
-        .put(`/api/posts/${POST_ID}`)
+        .patch(`/api/posts/${POST_ID}`)
         .send({ text: 'Blocked edit', postVersion: 1 });
 
       expect(res.status).toBe(409);
@@ -474,6 +474,7 @@ describe('posts API integration', () => {
       const res = await agent
         .post('/api/profiles')
         .send({
+          platform: 'twitter',
           consumerKey: 'ck-secret-value-abc123',
           consumerSecret: 'cs-secret-value-def456',
           accessToken: 'at-secret-value-ghi789',
@@ -519,6 +520,7 @@ describe('posts API integration', () => {
       const res = await agent
         .post('/api/profiles')
         .send({
+          platform: 'twitter',
           consumerKey: 'ck-value',
           consumerSecret: 'cs-value',
           accessToken: 'at-value',

@@ -62,21 +62,23 @@ describe('TweetComposer', () => {
   });
 
   describe('thread mode', () => {
-    it('toggle switches between single and thread mode', () => {
-      const singleText = 'Hello world';
-      const segments = [{ id: '1', text: singleText }];
+    it('single segment serializes without separator', () => {
+      const segments = [{ id: '1', text: 'Hello world' }];
       const serialized = serializeThread(segments);
-      expect(serialized).toBe(singleText);
+      expect(serialized).toBe('Hello world');
+      expect(serialized).not.toContain(THREAD_SEPARATOR);
+    });
 
-      const threadSegments = [
+    it('multiple segments serialize with [[tweet]] separator', () => {
+      const segments = [
         { id: '1', text: 'First' },
         { id: '2', text: 'Second' },
       ];
-      const threadSerialized = serializeThread(threadSegments);
-      expect(threadSerialized).toContain(THREAD_SEPARATOR);
+      const serialized = serializeThread(segments);
+      expect(serialized).toBe(`First${THREAD_SEPARATOR}Second`);
     });
 
-    it('each thread card has its own character counter', () => {
+    it('each thread segment has independent character count', () => {
       const tweets = [
         { id: '1', text: 'Short tweet' },
         { id: '2', text: 'a'.repeat(275) },
@@ -87,70 +89,38 @@ describe('TweetComposer', () => {
       expect(counts[1].remaining).toBeLessThan(10);
     });
 
-    it('cards can be reordered via drag-and-drop', () => {
-      const tweets = [
-        { id: '1', text: 'First' },
-        { id: '2', text: 'Second' },
-        { id: '3', text: 'Third' },
-      ];
-
-      // Simulate reorder: move index 2 to index 0
-      const reordered = [tweets[2], tweets[0], tweets[1]];
-      expect(reordered[0].text).toBe('Third');
-      expect(reordered[1].text).toBe('First');
-      expect(reordered[2].text).toBe('Second');
-    });
-
-    it('add tweet button creates new card', () => {
-      const tweets = [{ id: '1', text: 'First' }];
-      const added = [...tweets, { id: '2', text: '' }];
-      expect(added).toHaveLength(2);
-      expect(added[1].text).toBe('');
-    });
-
-    it('remove button deletes card (when more than 1)', () => {
-      const tweets = [
-        { id: '1', text: 'First' },
-        { id: '2', text: 'Second' },
-      ];
-
-      const afterRemove = tweets.filter(t => t.id !== '2');
-      expect(afterRemove).toHaveLength(1);
-      expect(afterRemove[0].text).toBe('First');
-
-      // Cannot remove last card
-      const singleTweet = [{ id: '1', text: 'Only' }];
-      expect(singleTweet.length).toBe(1);
-    });
-
-    it('thread text joins with [[tweet]] separator for storage', () => {
-      const tweets = [
+    it('serialize -> deserialize round-trips preserve text content', () => {
+      const original = [
         { id: '1', text: 'Hello' },
         { id: '2', text: 'World' },
         { id: '3', text: 'Thread' },
       ];
 
-      const serialized = serializeThread(tweets);
-      expect(serialized).toBe('Hello[[tweet]]World[[tweet]]Thread');
+      const serialized = serializeThread(original);
+      const deserialized = deserializeThread(serialized);
+
+      expect(deserialized).toHaveLength(3);
+      expect(deserialized[0].text).toBe('Hello');
+      expect(deserialized[1].text).toBe('World');
+      expect(deserialized[2].text).toBe('Thread');
     });
 
-    it('only parses [[tweet]] separator when isThread flag is true', () => {
-      const textWithSeparator = 'I wrote [[tweet]] in my text literally';
-
-      // When isThread is false, treat as raw text
-      const isThread = false;
-      if (!isThread) {
-        expect(textWithSeparator).toBe('I wrote [[tweet]] in my text literally');
-      }
-
-      // When isThread is true, parse the separator
-      const isThread2 = true;
-      if (isThread2) {
-        const segments = deserializeThread('First[[tweet]]Second');
-        expect(segments).toHaveLength(2);
-        expect(segments[0].text).toBe('First');
-        expect(segments[1].text).toBe('Second');
-      }
+    it('deserializeThread splits on [[tweet]] separator', () => {
+      const segments = deserializeThread('First[[tweet]]Second');
+      expect(segments).toHaveLength(2);
+      expect(segments[0].text).toBe('First');
+      expect(segments[1].text).toBe('Second');
     });
+
+    it('deserializeThread assigns unique IDs to each segment', () => {
+      const segments = deserializeThread('A[[tweet]]B[[tweet]]C');
+      const ids = segments.map(s => s.id);
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(3);
+    });
+
+    it.todo('cards can be reordered via drag-and-drop — needs component rendering');
+    it.todo('add tweet button creates new card — needs component rendering');
+    it.todo('remove button deletes card (when more than 1) — needs component rendering');
   });
 });

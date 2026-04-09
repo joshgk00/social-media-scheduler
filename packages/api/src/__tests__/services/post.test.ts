@@ -37,7 +37,9 @@ const mockCreateLogger = vi.fn().mockReturnValue({
   debug: vi.fn(),
 });
 
-vi.mock('@sms/shared', () => {
+vi.mock('@sms/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sms/shared')>();
+
   const EDITABLE: readonly string[] = ['draft', 'scheduled', 'failed'];
   const DELETABLE: readonly string[] = ['draft', 'scheduled', 'published', 'failed'];
   const NON_INTERACTIVE: readonly string[] = ['publishing', 'auto_destructing', 'destroyed'];
@@ -54,6 +56,7 @@ vi.mock('@sms/shared', () => {
   };
 
   return {
+    ...actual,
     EDITABLE_STATES: EDITABLE,
     DELETABLE_STATES: DELETABLE,
     NON_INTERACTIVE_STATES: NON_INTERACTIVE,
@@ -500,6 +503,21 @@ describe('post.service', () => {
       expect(setCall).toHaveProperty('updatedAt');
 
       expect(db._updateChain.where).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects invalid state transitions with 409', async () => {
+      const db = createPostUpdateMockDb({
+        updateResult: [],
+        existingPost: { id: 'post-1', status: 'draft', postVersion: 1 },
+      });
+
+      try {
+        await updatePost(db, 'user-1', 'post-1', { status: 'failed' as any, postVersion: 1 });
+        expect.unreachable('should have thrown');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(PostServiceError);
+        expect(err.statusCode).toBe(409);
+      }
     });
 
     it('rejects updates to posts in auto_destructing state', async () => {

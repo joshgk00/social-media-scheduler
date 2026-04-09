@@ -29,9 +29,13 @@ vi.mock('@sms/db', () => ({
   posts: mockPosts,
 }));
 
-vi.mock('@sms/shared', () => ({
-  NON_INTERACTIVE_STATES: ['publishing', 'auto_destructing', 'destroyed'],
-}));
+vi.mock('@sms/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sms/shared')>();
+  return {
+    ...actual,
+    NON_INTERACTIVE_STATES: ['publishing', 'auto_destructing', 'destroyed'],
+  };
+});
 
 const mockCreateLogger = vi.fn().mockReturnValue({
   info: vi.fn(),
@@ -172,74 +176,16 @@ describe('twitter integration', () => {
   });
 
   describe('tweet text handling', () => {
-    it('stores single tweet text directly', () => {
-      const text = 'Hello world, this is a single tweet.';
-      expect(text).not.toContain('[[tweet]]');
-    });
-
-    it('stores thread text with [[tweet]] separators', () => {
-      const segments = ['First tweet', 'Second tweet', 'Third tweet'];
-      const serialized = segments.join('[[tweet]]');
-      expect(serialized).toBe('First tweet[[tweet]]Second tweet[[tweet]]Third tweet');
-    });
-
-    it('only parses [[tweet]] separators when isThread is true', () => {
-      const textWithSeparator = 'This mentions [[tweet]] literally';
-      const isThread = false;
-
-      if (isThread) {
-        const segments = textWithSeparator.split('[[tweet]]');
-        expect(segments.length).toBeGreaterThan(1);
-      } else {
-        expect(textWithSeparator).toBe('This mentions [[tweet]] literally');
-      }
-    });
-
-    it('validates tweet text is non-empty', () => {
-      const emptyText = '';
-      expect(emptyText.trim().length).toBe(0);
-
-      const whitespaceText = '   ';
-      expect(whitespaceText.trim().length).toBe(0);
-
-      const validText = 'Hello';
-      expect(validText.trim().length).toBeGreaterThan(0);
-    });
+    it.todo('stores single tweet text directly — needs tweet text parsing service function');
+    it.todo('stores thread text with [[tweet]] separators — needs tweet text parsing service function');
+    it.todo('only parses [[tweet]] separators when isThread is true — needs tweet text parsing service function');
+    it.todo('validates tweet text is non-empty — needs tweet text validation service function');
   });
 
   describe('media attachment', () => {
-    it('accepts up to 4 images per tweet', () => {
-      const maxImages = 4;
-      const images = Array.from({ length: 4 }, (_, i) => `image-${i}.jpg`);
-      expect(images.length).toBeLessThanOrEqual(maxImages);
-
-      const tooMany = [...images, 'image-5.jpg'];
-      expect(tooMany.length).toBeGreaterThan(maxImages);
-    });
-
-    it('accepts 1 animated GIF per tweet', () => {
-      const maxGifs = 1;
-      const gifs = ['animation.gif'];
-      expect(gifs.length).toBeLessThanOrEqual(maxGifs);
-    });
-
-    it('accepts 1 video per tweet', () => {
-      const maxVideos = 1;
-      const videos = ['clip.mp4'];
-      expect(videos.length).toBeLessThanOrEqual(maxVideos);
-    });
-
-    it('attaches media to first tweet only in threads', () => {
-      const threadTweets = [
-        { text: 'First tweet', mediaIds: ['media-1'] },
-        { text: 'Second tweet', mediaIds: [] },
-        { text: 'Third tweet', mediaIds: [] },
-      ];
-
-      expect(threadTweets[0].mediaIds.length).toBeGreaterThan(0);
-      for (let i = 1; i < threadTweets.length; i++) {
-        expect(threadTweets[i].mediaIds.length).toBe(0);
-      }
-    });
+    it.todo('accepts up to 4 images per tweet — needs media validation service function');
+    it.todo('accepts 1 animated GIF per tweet — needs media validation service function');
+    it.todo('accepts 1 video per tweet — needs media validation service function');
+    it.todo('attaches media to first tweet only in threads — needs media validation service function');
   });
 });
