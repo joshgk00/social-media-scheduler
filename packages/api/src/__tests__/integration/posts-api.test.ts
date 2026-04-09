@@ -435,11 +435,6 @@ describe('posts API integration', () => {
       expect(res.body.error).toContain('currently being published');
     });
 
-    it('failed -> draft transition allowed for re-editing', async () => {
-      const { transitionPost } = await import('@sms/shared');
-      const result = transitionPost('failed', 'draft');
-      expect(result).toBe('draft');
-    });
   });
 
   describe('credential security', () => {

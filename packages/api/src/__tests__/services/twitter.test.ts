@@ -175,6 +175,8 @@ describe('twitter integration', () => {
     });
   });
 
+  // Tweet-text parsing and media attachment validation are deferred to Phase 6.
+  // The .todo stubs below are placeholders — implement when the service functions land.
   describe('tweet text handling', () => {
     it.todo('stores single tweet text directly — needs tweet text parsing service function');
     it.todo('stores thread text with [[tweet]] separators — needs tweet text parsing service function');

@@ -38,14 +38,32 @@ describe('PostForm', () => {
       expect(roundTripDt.toMillis()).toBe(originalDt.toMillis());
     });
 
-    it('flags ambiguous DST local times via wasAdjusted', () => {
-      // US fall-back: 2026-11-01 at 1:30 AM ET is ambiguous
+    it('flags non-existent local times during DST spring-forward via wasAdjusted', () => {
+      // US spring-forward: 2026-03-08 at 2:00 AM ET jumps to 3:00 AM, so 2:30 AM does not exist.
+      // Luxon shifts the instant forward to 3:30 AM, and round-tripping the formatted string
+      // no longer matches the original input — wasAdjusted must surface that correction.
+      const nonExistentLocal = '2026-03-08T02:30';
+      const timezone = 'America/New_York';
+
+      const { utcIso, wasAdjusted } = localInputToUtc(nonExistentLocal, timezone);
+
+      expect(wasAdjusted).toBe(true);
+      const shiftedLocal = DateTime.fromISO(utcIso, { zone: 'utc' }).setZone(timezone);
+      expect(shiftedLocal.hour).toBe(3);
+      expect(shiftedLocal.minute).toBe(30);
+    });
+
+    it('does not flag ambiguous local times during DST fall-back (Luxon resolves deterministically)', () => {
+      // US fall-back: 2026-11-01 the 1:00-2:00 AM ET hour occurs twice. Luxon picks one of the
+      // two valid instants, and the round-tripped local string still matches the input, so
+      // wasAdjusted stays false. This test documents that the function only surfaces spring-forward
+      // gaps, not fall-back ambiguity.
       const ambiguousLocal = '2026-11-01T01:30';
       const timezone = 'America/New_York';
 
       const { utcIso, wasAdjusted } = localInputToUtc(ambiguousLocal, timezone);
 
-      expect(utcIso).toBeTruthy();
+      expect(wasAdjusted).toBe(false);
       const parsed = DateTime.fromISO(utcIso, { zone: 'utc' });
       expect(parsed.isValid).toBe(true);
     });
