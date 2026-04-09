@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Plus, ChevronDown, ChevronRight, Search, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { POST_STATUSES, DELETABLE_STATES, type PostStatus } from '@sms/shared';
 
 import { usePosts, useDeletePost, type Post, type PostFilters } from '../../hooks/use-posts';
@@ -122,6 +123,9 @@ export default function PostsPage() {
       onSuccess: () => {
         setIsDeleteDialogOpen(false);
         setDeleteTargetId(null);
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : 'Failed to delete post');
       },
     });
   }

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router';
 import { SetupGuard } from './components/SetupGuard';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { SidebarLayout } from './components/layout/SidebarLayout';
 import { PageSkeleton } from './components/PageSkeleton';
 import { lazy, Suspense } from 'react';
@@ -34,7 +35,7 @@ export function App() {
             <Route path="/recover" element={<RecoverPage />} />
 
             {/* Protected routes -- with sidebar layout */}
-            <Route element={<ProtectedRoute><SidebarLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute><ErrorBoundary><SidebarLayout /></ErrorBoundary></ProtectedRoute>}>
               <Route index element={<DashboardPlaceholder />} />
               <Route path="/posts" element={<PostsPage />} />
               <Route path="/posts/new" element={<NewPostPage />} />

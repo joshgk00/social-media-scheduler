@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, type Tag } from '../../hooks/use-tags';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -62,13 +63,20 @@ export function TagManagementDialog({ open, onOpenChange }: TagManagementDialogP
       { tagId, tagInput: { name: trimmedName, color: editingTagColor } },
       {
         onSuccess: () => cancelEditing(),
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : 'Failed to update tag');
+        },
       },
     );
   }
 
   function handleDeleteTag(tagId: string, tagName: string) {
     if (!window.confirm(`Delete tag '${tagName}'? It will be removed from all posts.`)) return;
-    deleteTagMutation.mutate(tagId);
+    deleteTagMutation.mutate(tagId, {
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : 'Failed to delete tag');
+      },
+    });
   }
 
   return (

@@ -10,7 +10,7 @@ import {
 interface SplitButtonProps {
   onSchedule: () => void;
   onDraft: () => void;
-  onPublishNow: () => void;
+  onPublishNow?: () => void;
   isLoading: boolean;
   disabled: boolean;
 }
@@ -43,7 +43,9 @@ export function SplitButton({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={onDraft}>Save as Draft</DropdownMenuItem>
-          <DropdownMenuItem onClick={onPublishNow}>Publish Now</DropdownMenuItem>
+          {onPublishNow && (
+            <DropdownMenuItem onClick={onPublishNow}>Publish Now</DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

@@ -9,7 +9,9 @@ import { useAuth } from '../../hooks/use-auth';
 import { useProfiles } from '../../hooks/use-profiles';
 import { useTags } from '../../hooks/use-tags';
 import { usePost, useUpdatePost, useCheckConflicts } from '../../hooks/use-posts';
-import { ThreadEditor, type TweetSegment } from '../../components/posts/ThreadEditor';
+import { utcToLocalInput, localInputToUtc } from '../../lib/timezone';
+import { serializeThread, deserializeThread, type TweetSegment } from '../../lib/thread';
+import { ThreadEditor } from '../../components/posts/ThreadEditor';
 import { TweetPreview } from '../../components/posts/TweetPreview';
 import { CharacterCountRing } from '../../components/posts/CharacterCountRing';
 import { SplitButton } from '../../components/posts/SplitButton';
@@ -39,22 +41,6 @@ interface EditFormValues {
   autoDestructAfter: string | null;
   notes: string;
   tagIds: string[];
-}
-
-function utcToLocalInput(utcIso: string, timezone: string): string {
-  return DateTime.fromISO(utcIso, { zone: 'utc' })
-    .setZone(timezone)
-    .toFormat("yyyy-MM-dd'T'HH:mm");
-}
-
-function localInputToUtc(localValue: string, timezone: string): { utcIso: string; wasAdjusted: boolean } {
-  const dt = DateTime.fromFormat(localValue, "yyyy-MM-dd'T'HH:mm", { zone: timezone });
-  const roundTrip = dt.toFormat("yyyy-MM-dd'T'HH:mm");
-  const wasAdjusted = roundTrip !== localValue;
-  return {
-    utcIso: dt.toUTC().toISO()!,
-    wasAdjusted,
-  };
 }
 
 export default function EditPostPage() {
@@ -99,10 +85,7 @@ export default function EditPostPage() {
       });
       setIsThread(post.isThread);
       if (post.isThread) {
-        setTweets(post.text.split('[[tweet]]').map((segment) => ({
-          id: crypto.randomUUID(),
-          text: segment.trim(),
-        })));
+        setTweets(deserializeThread(post.text));
       } else {
         setTweets([{ id: crypto.randomUUID(), text: '' }]);
       }
@@ -166,8 +149,8 @@ export default function EditPostPage() {
   }
 
   if (!isEditable) {
-    const readOnlyText = post.isThread
-      ? post.text.split('[[tweet]]').map((s) => s.trim())
+    const readOnlySegments = post.isThread
+      ? deserializeThread(post.text).map((s) => s.text)
       : [post.text];
     const readOnlyProfile = profiles?.find((p) => p.id === post.profileId);
 
@@ -192,8 +175,8 @@ export default function EditPostPage() {
             )}
             {post.isThread && (
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Thread ({readOnlyText.length} tweets)</p>
-                {readOnlyText.map((segment, segmentIndex) => (
+                <p className="text-sm font-medium text-muted-foreground">Thread ({readOnlySegments.length} tweets)</p>
+                {readOnlySegments.map((segment, segmentIndex) => (
                   <div key={segmentIndex} className="border border-border rounded-md p-3 mt-2">
                     <p className="text-xs text-muted-foreground mb-1">Tweet {segmentIndex + 1}</p>
                     <p className="text-sm whitespace-pre-wrap">{segment}</p>
@@ -243,7 +226,7 @@ export default function EditPostPage() {
               text={post.isThread ? '' : post.text}
               profile={readOnlyProfile ? { displayName: readOnlyProfile.displayName, handle: `@${readOnlyProfile.handle}`, avatarUrl: readOnlyProfile.avatarUrl ?? '' } : null}
               isThread={post.isThread}
-              tweets={post.isThread ? readOnlyText.map((segment, segmentIndex) => ({ id: String(segmentIndex), text: segment })) : undefined}
+              tweets={post.isThread ? readOnlySegments.map((segment, segmentIndex) => ({ id: String(segmentIndex), text: segment })) : undefined}
             />
           </div>
         </div>
@@ -260,15 +243,12 @@ export default function EditPostPage() {
     if (checked) {
       const currentText = form.getValues('text');
       if (currentText.includes('[[tweet]]')) {
-        setTweets(currentText.split('[[tweet]]').map((segment) => ({
-          id: crypto.randomUUID(),
-          text: segment.trim(),
-        })));
+        setTweets(deserializeThread(currentText));
       } else {
         setTweets([{ id: crypto.randomUUID(), text: currentText }]);
       }
     } else {
-      form.setValue('text', tweets.map((t) => t.text).join('[[tweet]]'));
+      form.setValue('text', serializeThread(tweets));
     }
     setIsThread(checked);
   }
@@ -287,7 +267,7 @@ export default function EditPostPage() {
   }
 
   function handleSubmit(action: 'schedule' | 'draft') {
-    const text = isThread ? tweets.map((t) => t.text).join('[[tweet]]') : form.getValues('text');
+    const text = isThread ? serializeThread(tweets) : form.getValues('text');
 
     if (!text.trim()) {
       toast.error('Tweet text is required.');
@@ -476,9 +456,6 @@ export default function EditPostPage() {
           <SplitButton
             onSchedule={() => handleSubmit('schedule')}
             onDraft={() => handleSubmit('draft')}
-            onPublishNow={() => {
-              // Not available in edit mode
-            }}
             isLoading={updatePostMutation.isPending}
             disabled={updatePostMutation.isPending}
           />

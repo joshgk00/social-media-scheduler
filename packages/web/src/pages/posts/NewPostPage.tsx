@@ -8,7 +8,9 @@ import { useAuth } from '../../hooks/use-auth';
 import { useProfiles } from '../../hooks/use-profiles';
 import { useTags } from '../../hooks/use-tags';
 import { useCreatePost, useCheckConflicts } from '../../hooks/use-posts';
-import { ThreadEditor, type TweetSegment } from '../../components/posts/ThreadEditor';
+import { utcToLocalInput, localInputToUtc } from '../../lib/timezone';
+import { serializeThread, deserializeThread, type TweetSegment } from '../../lib/thread';
+import { ThreadEditor } from '../../components/posts/ThreadEditor';
 import { TweetPreview } from '../../components/posts/TweetPreview';
 import { CharacterCountRing } from '../../components/posts/CharacterCountRing';
 import { SplitButton } from '../../components/posts/SplitButton';
@@ -45,22 +47,6 @@ interface PostFormValues {
   autoDestructAfter: string | null;
   notes: string;
   tagIds: string[];
-}
-
-function utcToLocalInput(utcIso: string, timezone: string): string {
-  return DateTime.fromISO(utcIso, { zone: 'utc' })
-    .setZone(timezone)
-    .toFormat("yyyy-MM-dd'T'HH:mm");
-}
-
-function localInputToUtc(localValue: string, timezone: string): { utcIso: string; wasAdjusted: boolean } {
-  const dt = DateTime.fromFormat(localValue, "yyyy-MM-dd'T'HH:mm", { zone: timezone });
-  const roundTrip = dt.toFormat("yyyy-MM-dd'T'HH:mm");
-  const wasAdjusted = roundTrip !== localValue;
-  return {
-    utcIso: dt.toUTC().toISO()!,
-    wasAdjusted,
-  };
 }
 
 export default function NewPostPage() {
@@ -108,21 +94,18 @@ export default function NewPostPage() {
     if (checked) {
       const currentText = form.getValues('text');
       if (currentText.includes('[[tweet]]')) {
-        setTweets(currentText.split('[[tweet]]').map((segment) => ({
-          id: crypto.randomUUID(),
-          text: segment.trim(),
-        })));
+        setTweets(deserializeThread(currentText));
       } else {
         setTweets([{ id: crypto.randomUUID(), text: currentText }]);
       }
     } else {
-      form.setValue('text', tweets.map((t) => t.text).join('[[tweet]]'));
+      form.setValue('text', serializeThread(tweets));
     }
     setIsThread(checked);
   }
 
   function getSubmitText(): string {
-    return isThread ? tweets.map((t) => t.text).join('[[tweet]]') : form.getValues('text');
+    return isThread ? serializeThread(tweets) : form.getValues('text');
   }
 
   function validateAndSubmit(action: 'schedule' | 'draft' | 'publishNow') {
