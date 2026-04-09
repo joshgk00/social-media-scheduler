@@ -369,7 +369,7 @@ export default function PostsPage() {
             <>
               <h2 className="text-lg font-medium mb-1">No posts yet</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Create your first tweet to get started. Posts can be scheduled, saved as drafts, or published immediately.
+                Create your first tweet to get started. Posts can be scheduled or saved as drafts.
               </p>
               <Button asChild>
                 <Link to="/posts/new">

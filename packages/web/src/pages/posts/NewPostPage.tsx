@@ -22,7 +22,6 @@ import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Switch } from '../../components/ui/switch';
-import { Button } from '../../components/ui/button';
 import {
   Select,
   SelectContent,
@@ -30,14 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../../components/ui/dialog';
 
 interface PostFormValues {
   profileId: string;
@@ -62,7 +53,6 @@ export default function NewPostPage() {
     { id: crypto.randomUUID(), text: '' },
   ]);
   const [isTagManageOpen, setIsTagManageOpen] = useState(false);
-  const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
 
   const form = useForm<PostFormValues>({
     defaultValues: {
@@ -112,7 +102,7 @@ export default function NewPostPage() {
     return isThread ? serializeThread(tweets) : form.getValues('text');
   }
 
-  function validateAndSubmit(action: 'schedule' | 'draft' | 'publishNow') {
+  function validateAndSubmit(action: 'schedule' | 'draft') {
     const text = getSubmitText();
     if (!text.trim()) {
       toast.error('Tweet text is required.');
@@ -136,23 +126,13 @@ export default function NewPostPage() {
       }
     }
 
-    if (action === 'publishNow') {
-      setIsPublishConfirmOpen(true);
-      return;
-    }
-
     submitPost(action, text);
   }
 
-  function submitPost(action: 'schedule' | 'draft' | 'publishNow', text: string) {
+  function submitPost(action: 'schedule' | 'draft', text: string) {
     const scheduledAt = action === 'schedule'
       ? form.getValues('scheduledAt')
-      : action === 'publishNow'
-        // Add a small buffer so the request doesn't fail the server-side
-        // "scheduledAt must be in the future" guard due to clock skew or
-        // request latency between client submit and server handling.
-        ? DateTime.utc().plus({ seconds: 10 }).toISO()
-        : null;
+      : null;
 
     createPostMutation.mutate(
       {
@@ -176,12 +156,6 @@ export default function NewPostPage() {
         },
       },
     );
-  }
-
-  function handlePublishConfirm() {
-    setIsPublishConfirmOpen(false);
-    const text = getSubmitText();
-    submitPost('publishNow', text);
   }
 
   function handleScheduledAtChange(localValue: string) {
@@ -329,7 +303,6 @@ export default function NewPostPage() {
           <SplitButton
             onSchedule={() => validateAndSubmit('schedule')}
             onDraft={() => validateAndSubmit('draft')}
-            onPublishNow={() => validateAndSubmit('publishNow')}
             isLoading={createPostMutation.isPending}
             disabled={createPostMutation.isPending}
           />
@@ -347,26 +320,6 @@ export default function NewPostPage() {
       </div>
 
       <TagManagementDialog open={isTagManageOpen} onOpenChange={setIsTagManageOpen} />
-
-      {/* Publish Now confirmation dialog */}
-      <Dialog open={isPublishConfirmOpen} onOpenChange={setIsPublishConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Publish now?</DialogTitle>
-            <DialogDescription>
-              This tweet will be sent to Twitter/X immediately. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPublishConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handlePublishConfirm}>
-              Publish
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </main>
   );
 }
