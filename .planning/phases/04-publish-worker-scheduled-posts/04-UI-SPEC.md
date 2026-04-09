@@ -63,13 +63,13 @@ Phase 4 uses the Tailwind default spacing scale (already in use by Phase 2/3). N
 |-------|----------------|-------|------------------|
 | 1 | `p-1` / `gap-1` | 4px | Icon-to-text inline gaps (lucide icon + label) |
 | 2 | `p-2` / `gap-2` | 8px | Compact stacks inside dialog rows, badge internal padding |
-| 3 | `p-3` / `gap-3` | 12px | Tight section separation inside history cycles |
+| 3 | `p-3` / `gap-3` | 12px | **Exception** — within-cycle attempt separation inside History modal; tighter than default 16px; multiple of 4 |
 | 4 | `p-4` / `gap-4` | 16px | Default element spacing, dialog body padding, card padding |
 | 6 | `p-6` / `gap-6` | 24px | Section padding inside PageLayout, dialog header padding |
 | 8 | `p-8` / `gap-8` | 32px | Major page-level section breaks |
 | 12 | `py-12` | 48px | Vertical padding on empty-state blocks (matches Phase 3 `text-center py-12`) |
 
-Exceptions: **none** for Phase 4. Phase 3 already uses Tailwind defaults (multiples of 4). Phase 4 must not introduce custom spacing values.
+Standard set: {4, 8, 16, 24, 32, 48, 64}. **Declared exception:** 12px (`p-3`/`gap-3`) — used only for within-cycle attempt separation inside the History modal where the default 16px reads as too loose between sibling attempts in the same retry cycle. Still a multiple of 4. No other custom spacing values are permitted in Phase 4.
 
 ---
 
@@ -80,12 +80,12 @@ Phase 4 reuses the existing Phase 3 typography scale. Inter loaded via `--font-s
 | Role | Tailwind class | Size | Weight | Line height | Usage in Phase 4 |
 |------|----------------|------|--------|-------------|------------------|
 | Page title | `text-2xl font-semibold` | 24px | 600 | 1.2 (Tailwind `leading-8`) | "Posts" header (unchanged from Phase 3) |
-| Section heading | `text-lg font-medium` | 18px | 500 | 1.4 | History modal title, Full Text dialog title, "Rate limit" modal title |
+| Section heading | `text-lg font-semibold` | 18px | 600 | 1.4 | History modal title, Full Text dialog title, "Rate limit" modal title |
 | Subsection label | `text-sm font-semibold` | 14px | 600 | 1.5 | "Retry cycle 1", "Attempt 2 of 4", "Failure Reason", "Publish History" labels |
 | Body | `text-sm` | 14px | 400 | 1.5 | All default copy, table rows, modal body text |
 | Helper / meta | `text-xs text-muted-foreground` | 12px | 400 | 1.5 | Timestamps, "Updated 3s ago", HTTP status codes, attempt metadata |
 
-**Weights used: 2** (400 regular, 500/600 medium-semibold). No other weights permitted in this phase.
+**Weights used: 2** (400 regular, 600 semibold). No other weights permitted in this phase.
 **Sizes used: 4** (`text-xs` 12, `text-sm` 14, `text-lg` 18, `text-2xl` 24). Phase 4 must not introduce new sizes.
 
 ---
@@ -174,6 +174,8 @@ Voice: **direct, technical, single-user owner**. No marketing fluff, no exclamat
 
 ### History modal
 
+**Primary visual anchor:** the retry cycle timeline — a vertical stack of grouped cycles is the first thing the eye lands on when the dialog opens (DialogTitle is the keyboard entry point, but the timeline owns visual weight).
+
 | Element | Copy |
 |---------|------|
 | Dialog title | `Publish History` |
@@ -222,6 +224,8 @@ Variant: **destructive** (red). Icon: lucide `Ban`.
 | Note | `resetDateLocal` is the 1st of next month at 00:00 UTC rendered in the user's local timezone (e.g., "Thu, May 1 at 8:00 PM EDT") |
 
 ### Rate limit settings modal
+
+**Primary visual anchor:** the monthly budget input field — it is the largest interactive control and the reason the dialog exists; the current-usage readout sits directly above it as supporting context.
 
 | Element | Copy |
 |---------|------|
