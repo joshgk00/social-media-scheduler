@@ -36,11 +36,9 @@ export function createApp({ redis, sql, db, sessionSecret }: AppDependencies) {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.use(createSessionMiddleware(redis, sessionSecret));
-
-  // Setup routes before CSRF — one-time endpoint guarded by userExists check
-  app.use(createSetupRouter({ db }));
-
   app.use(doubleCsrfProtection);
+
+  app.use(createSetupRouter({ db }));
   app.use(createAuthRouter({ db }));
   app.use(createRecoveryRouter({ db, redis }));
   app.use(createSettingsRouter({ db, redis }));
