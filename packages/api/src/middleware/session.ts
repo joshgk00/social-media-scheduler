@@ -14,16 +14,27 @@ function createNodeRedisAdapter(ioredis: Redis) {
       }
       return ioredis.set(key, val);
     },
-    del: (keys: string[]) => ioredis.del(...keys),
+    // node-redis v4 del accepts either a single key or an array. Spreading a
+    // bare string into ioredis.del would split it into characters, so
+    // normalize to an array before forwarding.
+    del: (keys: string | string[]) => {
+      const keyList = Array.isArray(keys) ? keys : [keys];
+      return ioredis.del(...keyList);
+    },
     expire: (key: string, ttl: number) => ioredis.expire(key, ttl),
     scanIterator: (opts: { MATCH: string; COUNT: number }) => {
       let cursor = '0';
       return {
+        // node-redis v4 scanIterator yields keys one-by-one (AsyncIterable<string>),
+        // not batches. connect-redis and any node-redis consumer expect to iterate
+        // per-key, so unwrap the ioredis scan batches here.
         async *[Symbol.asyncIterator]() {
           do {
             const [next, keys] = await ioredis.scan(cursor, 'MATCH', opts.MATCH, 'COUNT', opts.COUNT);
             cursor = next;
-            yield keys;
+            for (const key of keys) {
+              yield key;
+            }
           } while (cursor !== '0');
         },
       };
