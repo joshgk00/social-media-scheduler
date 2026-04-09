@@ -29,14 +29,6 @@ vi.mock('@sms/db', () => ({
   posts: mockPosts,
 }));
 
-vi.mock('@sms/shared', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@sms/shared')>();
-  return {
-    ...actual,
-    NON_INTERACTIVE_STATES: ['publishing', 'auto_destructing', 'destroyed'],
-  };
-});
-
 const mockCreateLogger = vi.fn().mockReturnValue({
   info: vi.fn(),
   error: vi.fn(),
