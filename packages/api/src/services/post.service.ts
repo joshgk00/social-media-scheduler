@@ -1,5 +1,6 @@
 import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount } from 'drizzle-orm';
-import { EDITABLE_STATES, DELETABLE_STATES, createLogger } from '@sms/shared';
+import { EDITABLE_STATES, DELETABLE_STATES } from '@sms/shared';
+import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
 import { posts, postTags, tags, socialProfiles } from '@sms/db';

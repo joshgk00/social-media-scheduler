@@ -42,15 +42,14 @@ const mockCreateLogger = vi.fn().mockReturnValue({
   debug: vi.fn(),
 });
 
-vi.mock('@sms/shared', async () => {
-  const actual = await vi.importActual('@sms/shared');
-  return {
-    ...actual,
-    encrypt: (...args: unknown[]) => mockEncrypt(...args),
-    validateEncryptionKey: (...args: unknown[]) => mockValidateEncryptionKey(...args),
-    createLogger: (...args: unknown[]) => mockCreateLogger(...args),
-  };
-});
+vi.mock('@sms/shared/encryption', () => ({
+  encrypt: (...args: unknown[]) => mockEncrypt(...args),
+  validateEncryptionKey: (...args: unknown[]) => mockValidateEncryptionKey(...args),
+}));
+
+vi.mock('@sms/shared/logger', () => ({
+  createLogger: (...args: unknown[]) => mockCreateLogger(...args),
+}));
 
 const mockTwitterMe = vi.fn().mockResolvedValue({
   data: {

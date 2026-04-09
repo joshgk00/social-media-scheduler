@@ -2,7 +2,7 @@ import argon2 from 'argon2';
 import { eq } from 'drizzle-orm';
 import { users, securityQuestions } from '@sms/db';
 import type { Db } from '@sms/db';
-import { createLogger } from '@sms/shared';
+import { createLogger } from '@sms/shared/logger';
 
 const logger = createLogger('auth-service');
 

@@ -1,6 +1,8 @@
-export { encrypt, decrypt, validateEncryptionKey, type EncryptedPayload } from './encryption.js';
-export { createLogger } from './logger.js';
-export { requireEnv } from './env.js';
+// Server-only exports (node:crypto, pino) — import directly:
+//   import { encrypt, decrypt, validateEncryptionKey } from '@sms/shared/encryption'
+//   import { createLogger } from '@sms/shared/logger'
+//   import { requireEnv } from '@sms/shared/env'
+// These are NOT re-exported from the barrel to avoid breaking browser bundles.
 export * from './schemas/auth.js';
 export * from './schemas/settings.js';
 export * from './schemas/recovery.js';

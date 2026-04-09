@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { createLogger } from '@sms/shared';
+import { createLogger } from '@sms/shared/logger';
 import { pinoHttp } from 'pino-http';
 import type { IncomingMessage } from 'node:http';
 

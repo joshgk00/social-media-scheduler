@@ -1,5 +1,6 @@
 import { eq, and } from 'drizzle-orm';
-import { encrypt, validateEncryptionKey, createLogger } from '@sms/shared';
+import { encrypt, validateEncryptionKey } from '@sms/shared/encryption';
+import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
 import { socialProfiles } from '@sms/db';
 import { TwitterApi } from 'twitter-api-v2';

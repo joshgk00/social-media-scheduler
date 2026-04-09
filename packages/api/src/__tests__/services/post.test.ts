@@ -63,9 +63,12 @@ vi.mock('@sms/shared', () => {
       }
       return target;
     },
-    createLogger: (...args: unknown[]) => mockCreateLogger(...args),
   };
 });
+
+vi.mock('@sms/shared/logger', () => ({
+  createLogger: (...args: unknown[]) => mockCreateLogger(...args),
+}));
 
 function createPostUpdateMockDb(options: {
   updateResult?: unknown[];

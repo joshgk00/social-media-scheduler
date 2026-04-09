@@ -8,7 +8,7 @@ config({ path: resolve(__dirname, '../../../.env') });
 
 import { Redis } from 'ioredis';
 import { runMigrations, createDbClient } from '@sms/db';
-import { requireEnv } from '@sms/shared';
+import { requireEnv } from '@sms/shared/env';
 import { logger } from './middleware/logger.js';
 import { createApp } from './app.js';
 

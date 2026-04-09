@@ -1,7 +1,7 @@
 import { eq, and, asc } from 'drizzle-orm';
 import type { Db } from '@sms/db';
 import { tags } from '@sms/db';
-import { createLogger } from '@sms/shared';
+import { createLogger } from '@sms/shared/logger';
 
 const logger = createLogger('tag-service');
 
