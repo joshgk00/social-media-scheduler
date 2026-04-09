@@ -86,12 +86,13 @@ export function AutoDestructPicker({ value, onChange }: AutoDestructPickerProps)
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {/* Keep these in sync with the autoDestructAfter regex in
+                    packages/shared/src/schemas/posts.ts — selecting a unit
+                    not listed there will fail schema validation on submit. */}
                 <SelectItem value="minutes">minutes</SelectItem>
                 <SelectItem value="hours">hours</SelectItem>
                 <SelectItem value="days">days</SelectItem>
                 <SelectItem value="weeks">weeks</SelectItem>
-                <SelectItem value="months">months</SelectItem>
-                <SelectItem value="years">years</SelectItem>
               </SelectContent>
             </Select>
           </>

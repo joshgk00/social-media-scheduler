@@ -204,8 +204,10 @@ export async function deleteProfile(db: Db, userId: string, profileId: string): 
       .limit(1);
 
     if (inFlightPosts.length > 0) {
+      // Queued, publishing, and auto_destructing posts have no cancellation
+      // path in the state machine, so users can only wait for them to finish.
       throw new ProfileServiceError(
-        'Cannot delete profile with in-flight posts. Wait for publishing to complete or cancel queued posts first.',
+        'Cannot delete profile with in-flight posts. Wait for queued, publishing, and auto-destructing posts to complete.',
         409,
       );
     }

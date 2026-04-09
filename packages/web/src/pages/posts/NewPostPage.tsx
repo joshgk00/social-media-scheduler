@@ -148,7 +148,10 @@ export default function NewPostPage() {
     const scheduledAt = action === 'schedule'
       ? form.getValues('scheduledAt')
       : action === 'publishNow'
-        ? DateTime.utc().toISO()
+        // Add a small buffer so the request doesn't fail the server-side
+        // "scheduledAt must be in the future" guard due to clock skew or
+        // request latency between client submit and server handling.
+        ? DateTime.utc().plus({ seconds: 10 }).toISO()
         : null;
 
     createPostMutation.mutate(
