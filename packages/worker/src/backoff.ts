@@ -12,21 +12,30 @@
 // Registered inside the Worker constructor's `settings.backoffStrategy` —
 // per RESEARCH.md Pitfall 4, registering this on the Queue has no effect.
 
-import type { Job } from 'bullmq';
+import type { BackoffStrategy, MinimalJob } from 'bullmq';
 import { ApiResponseError } from 'twitter-api-v2';
 
 const BACKOFF_SCHEDULE_MS = [30_000, 5 * 60_000, 30 * 60_000] as const;
 const MAX_BACKOFF_MS = 30 * 60_000;
 
-export type BackoffStrategy = (
+// Concrete signature the tests import. BullMQ's official BackoffStrategy
+// type uses optional parameters because the strategy can be invoked
+// without an error object (initial delay calc), but the publish backoff
+// only cares about attemptsMade + err.
+export type PublishBackoffStrategy = (
   attemptsMade: number,
   type: string,
   err: Error,
-  job: Job,
+  job: MinimalJob,
 ) => number;
 
 export function buildBackoffStrategy(): BackoffStrategy {
-  return (attemptsMade: number, _type: string, err: Error, _job: Job): number => {
+  return (
+    attemptsMade: number,
+    _type?: string,
+    err?: Error,
+    _job?: MinimalJob,
+  ): number => {
     // BullMQ passes `attemptsMade` already incremented for the just-failed
     // attempt, so the first failure arrives with attemptsMade=1 — we want
     // to return the delay BEFORE attempt 2, which lives at schedule[0].
