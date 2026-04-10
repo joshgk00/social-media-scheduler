@@ -35,7 +35,9 @@ export function ProfileRateLimitIndicator({ profileId }: ProfileRateLimitIndicat
     return <p className="text-xs text-muted-foreground">Usage unavailable</p>;
   }
 
-  const percent = Math.round((data.currentCount / data.budget) * 100);
+  const percent = data.budget > 0
+    ? Math.round((data.currentCount / data.budget) * 100)
+    : 0;
   const state = resolveState(percent, data.warnThresholdPercent);
 
   return (

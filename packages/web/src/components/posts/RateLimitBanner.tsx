@@ -14,7 +14,9 @@ export function RateLimitBanner({ profileId, onEditBudget }: RateLimitBannerProp
     return null;
   }
 
-  const percent = Math.round((data.currentCount / data.budget) * 100);
+  const percent = data.budget > 0
+    ? Math.round((data.currentCount / data.budget) * 100)
+    : 0;
 
   return (
     <Alert className="bg-yellow-400/10 text-yellow-200 border-yellow-400/30 [&>svg]:text-yellow-400">
