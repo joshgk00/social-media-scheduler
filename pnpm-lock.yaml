@@ -160,6 +160,9 @@ importers:
       pino:
         specifier: ~10.3.1
         version: 10.3.1
+      twitter-api-v2:
+        specifier: ~1.29.0
+        version: 1.29.0
       zod:
         specifier: ~3.25.76
         version: 3.25.76

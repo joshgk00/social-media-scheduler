@@ -10,6 +10,8 @@ export * from './schemas/recovery.js';
 export * from './schemas/profiles.js';
 export * from './schemas/posts.js';
 export * from './schemas/tags.js';
+export * from './schemas/rate-limit.js';
+export * from './schemas/post-history.js';
 export { SECURITY_QUESTIONS, type SecurityQuestionIndex } from './constants/security-questions.js';
 export { DATE_FORMATS, ENTRIES_PER_PAGE_OPTIONS } from './constants/date-formats.js';
 export {
@@ -21,3 +23,6 @@ export {
   DELETABLE_STATES,
   type PostStatus,
 } from './constants/post-states.js';
+export * from './constants/queues.js';
+export * from './lib/error-classifier.js';
+export * from './rate-limit/check-budget.js';
