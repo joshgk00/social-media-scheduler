@@ -26,6 +26,7 @@
   --color-input: oklch(0.269 0 0);
   --color-ring: oklch(0.439 0 0);
   --color-success: oklch(0.696 0.17 142.495);
+  --color-warning: oklch(0.852 0.199 91.936); /* yellow-400 from UI-SPEC */
 
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;

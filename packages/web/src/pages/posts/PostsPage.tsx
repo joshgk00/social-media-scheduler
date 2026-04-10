@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useReactTable,
   getCoreRowModel,
@@ -17,8 +18,13 @@ import { usePosts, useDeletePost, type Post, type PostFilters } from '../../hook
 import { useTags } from '../../hooks/use-tags';
 import { useProfiles } from '../../hooks/use-profiles';
 import { useAuth } from '../../hooks/use-auth';
+import { apiClient } from '../../lib/api-client';
 import { PostStatusBadge } from '../../components/posts/PostStatusBadge';
 import { PostActionsMenu } from '../../components/posts/PostActionsMenu';
+import { PostErrorCell } from '../../components/posts/PostErrorCell';
+import { PollingIndicator } from '../../components/posts/PollingIndicator';
+import { PostHistoryDialog } from '../../components/posts/PostHistoryDialog';
+import { PostFullTextDialog } from '../../components/posts/PostFullTextDialog';
 
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -86,6 +92,7 @@ function ExpandedPostRow({ post }: { post: Post }) {
 
 export default function PostsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: user } = useAuth();
   const { data: tags } = useTags();
   const { data: profiles } = useProfiles();
@@ -98,6 +105,20 @@ export default function PostsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [historyPostId, setHistoryPostId] = useState<string | null>(null);
+  const [fullTextPost, setFullTextPost] = useState<{ text: string; isThread: boolean } | null>(null);
+
+  function handleRetry(postId: string) {
+    apiClient
+      .retryPost(postId)
+      .then(() => {
+        toast.success('Retrying post. Watch the status column for updates.');
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
+      })
+      .catch((retryError: Error) => {
+        toast.error(`Couldn't retry post. ${retryError.message ?? ''}`.trim());
+      });
+  }
 
   useEffect(() => {
     if (user?.entriesPerPage && user.entriesPerPage !== filters.limit) {
@@ -112,7 +133,7 @@ export default function PostsPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const { data: postsResponse, isLoading, isError, refetch } = usePosts(filters);
+  const { data: postsResponse, isLoading, isError, refetch, dataUpdatedAt } = usePosts(filters);
 
   const hasActiveFilters = !!(filters.status || filters.profileId || filters.tagId || filters.search);
   const totalPages = postsResponse ? Math.ceil(postsResponse.total / postsResponse.limit) : 0;
@@ -237,6 +258,13 @@ export default function PostsPage() {
       },
     },
     {
+      id: 'error',
+      header: 'Error',
+      cell: ({ row }: { row: Row<Post> }) => (
+        <PostErrorCell failureReason={row.original.failureReason} />
+      ),
+    },
+    {
       id: 'actions',
       header: () => null,
       cell: ({ row }: { row: Row<Post> }) => (
@@ -249,14 +277,16 @@ export default function PostsPage() {
               setIsDeleteDialogOpen(true);
             }
           }}
-          onViewHistory={() => row.toggleExpanded()}
-          onViewFullText={() => row.toggleExpanded()}
-          onViewNotes={() => row.toggleExpanded()}
+          onRetry={() => handleRetry(row.original.id)}
+          onViewHistory={() => setHistoryPostId(row.original.id)}
+          onViewFullText={() =>
+            setFullTextPost({ text: row.original.text, isThread: row.original.isThread })
+          }
         />
       ),
       size: 50,
     },
-  ], [navigate]);
+  ], [navigate]); // eslint-disable-line react-hooks/exhaustive-deps -- state setters and handleRetry are stable via closure
 
   const table = useReactTable({
     data: postsResponse?.posts ?? [],
@@ -349,6 +379,10 @@ export default function PostsPage() {
             aria-label="Search posts"
           />
         </div>
+      </div>
+
+      <div className="flex items-center justify-end">
+        <PollingIndicator dataUpdatedAt={dataUpdatedAt} />
       </div>
 
       {/* Data table */}
@@ -447,6 +481,16 @@ export default function PostsPage() {
           )}
         </>
       )}
+
+      <PostHistoryDialog
+        postId={historyPostId}
+        onOpenChange={(isOpen) => !isOpen && setHistoryPostId(null)}
+      />
+
+      <PostFullTextDialog
+        post={fullTextPost}
+        onOpenChange={(isOpen) => !isOpen && setFullTextPost(null)}
+      />
 
       {/* Delete confirmation dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
