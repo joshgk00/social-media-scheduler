@@ -27,6 +27,8 @@ export const socialProfiles = pgTable('social_profiles', {
   accessTokenSecretAuthTag: varchar('access_token_secret_auth_tag', { length: 64 }),
 
   tokenEncryptionVersion: integer('token_encryption_version').notNull().default(1),
+  monthlyTweetBudget: integer('monthly_tweet_budget').notNull().default(500),
+  warnThresholdPercent: integer('warn_threshold_percent').notNull().default(80),
   connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),
   lastPublishedAt: timestamp('last_published_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

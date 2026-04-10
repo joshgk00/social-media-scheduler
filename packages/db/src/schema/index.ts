@@ -3,4 +3,6 @@ export { securityQuestions } from './security-questions.js';
 export { socialProfiles } from './social-profiles.js';
 export { postStatusEnum, posts } from './posts.js';
 export { postMedia } from './post-media.js';
+export { postAttempts, postAttemptOutcome } from './post-attempts.js';
+export type { PostAttempt, NewPostAttempt } from './post-attempts.js';
 export { tags, postTags } from './tags.js';
