@@ -317,6 +317,12 @@ export default function EditPostPage() {
         },
         onError: (error: Error & { status?: number; body?: Record<string, unknown> }) => {
           if (error.status === 409) {
+            if (error.body?.code === 'twitter_budget_exceeded') {
+              toast.error(
+                `Twitter monthly budget reached (${error.body.currentCount}/${error.body.budget}).`,
+              );
+              return;
+            }
             const errorMsg = String(error.body?.error ?? '');
             if (errorMsg.includes('modified elsewhere')) {
               toast.error('This post was modified elsewhere. Refreshing to show latest version.');
