@@ -181,12 +181,17 @@ export async function publishPost(
 
       // Transition scheduled → publishing, guarded by the optimistic
       // version check so a concurrent edit still loses the race cleanly.
-      await tx
+      const [updatedRow] = await tx
         .update(posts)
         .set({ status: 'publishing', updatedAt: new Date() })
         .where(
           and(eq(posts.id, ctx.postId), eq(posts.postVersion, ctx.expectedVersion)),
-        );
+        )
+        .returning({ id: posts.id });
+
+      if (!updatedRow) {
+        throw new PostLifecycleAbort('version_mismatch');
+      }
 
       return { post, profile };
     });
