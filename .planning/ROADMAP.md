@@ -92,13 +92,14 @@ Plans:
   3. Stalled job recovery does not cause duplicate posts -- worker checks `platform_post_id` before re-attempting publish
   4. User can view all scheduled posts in a filterable list with per-post actions (edit, delete, view history, view full text)
   5. Twitter rate limit tracking respects the user's configured monthly budget; publishing is blocked when budget is reached; new posts show pre-flight warning at 90%
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 04-01-PLAN.md — post_attempts table + social_profiles rate-limit columns + Drizzle migration ([BLOCKING] schema push)
+- [ ] 04-02-PLAN.md — Shared queue constants, error classifier, Zod schemas, rate-limit + publish-queue services, dependency installs
+- [ ] 04-03-PLAN.md — Publish worker, scanner, lifecycle service, twitter publish service, graceful shutdown
+- [ ] 04-04-PLAN.md — Retry/history/rate-limit/admin endpoints with security checks (Bull-Board mounted behind requireAuth)
+- [ ] 04-05-PLAN.md — Posts page extensions, history modal, rate limit banner/block/settings UI (human verification checkpoint)
+- [ ] 04-06-PLAN.md — Integration tests (testcontainers), graceful shutdown test, finalize VALIDATION.md, phase sign-off
 
 ### Phase 5: Queue Engine
 **Goal**: User can create persistent post queues that publish on a recurring schedule with timezone-aware timing, post recycling, and auto-destruct
