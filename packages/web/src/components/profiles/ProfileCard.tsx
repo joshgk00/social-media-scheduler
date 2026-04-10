@@ -17,9 +17,16 @@ import type { SocialProfile } from '../../hooks/use-profiles';
 interface ProfileCardProps {
   profile: SocialProfile;
   onDisconnect: (id: string) => void;
+  rateLimitIndicator?: React.ReactNode;
+  onEditRateLimit?: () => void;
 }
 
-export function ProfileCard({ profile, onDisconnect }: ProfileCardProps) {
+export function ProfileCard({
+  profile,
+  onDisconnect,
+  rateLimitIndicator,
+  onEditRateLimit,
+}: ProfileCardProps) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   const avatarInitial = profile.displayName
@@ -47,14 +54,21 @@ export function ProfileCard({ profile, onDisconnect }: ProfileCardProps) {
             <Badge variant="secondary">Twitter/X</Badge>
           </div>
 
-          <p className="text-xs text-muted-foreground mb-4">
+          <p className="text-xs text-muted-foreground mb-2">
             Connected {formatDistanceToNow(new Date(profile.connectedAt), { addSuffix: true })}
           </p>
 
-          <div className="flex items-center gap-2">
+          {rateLimitIndicator && <div className="mb-4">{rateLimitIndicator}</div>}
+
+          <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" disabled>
               Edit
             </Button>
+            {onEditRateLimit && (
+              <Button variant="outline" size="sm" onClick={onEditRateLimit}>
+                Edit Rate Limit
+              </Button>
+            )}
             <Button
               variant="destructive"
               size="sm"

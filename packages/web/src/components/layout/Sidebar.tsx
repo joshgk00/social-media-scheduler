@@ -7,6 +7,7 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ const navItems = [
   { to: '/posts/new', icon: PenSquare, label: 'New Post', isAction: true },
   { to: '/profiles', icon: Users, label: 'Profiles' },
   { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/admin/queues', icon: Activity, label: 'Admin queues', external: true },
 ] as const;
 
 export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
@@ -46,26 +48,43 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-2">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center rounded-md text-sm transition-colors',
-                isCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2',
-                item.isAction && !isActive && 'bg-primary text-primary-foreground hover:bg-primary/90',
-                item.isAction && isActive && 'bg-primary text-primary-foreground',
-                !item.isAction && isActive && 'border-l-2 border-primary bg-accent text-accent-foreground',
-                !item.isAction && !isActive && 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-              )
-            }
-          >
-            <item.icon className="h-4 w-4 shrink-0" />
-            {!isCollapsed && <span>{item.label}</span>}
-          </NavLink>
-        ))}
+        {navItems.map((item) => {
+          if ('external' in item && item.external) {
+            return (
+              <a
+                key={item.to}
+                href={item.to}
+                className={cn(
+                  'flex items-center rounded-md text-sm transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                  isCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2',
+                )}
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{item.label}</span>}
+              </a>
+            );
+          }
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={'end' in item ? item.end : undefined}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center rounded-md text-sm transition-colors',
+                  isCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2',
+                  'isAction' in item && item.isAction && !isActive && 'bg-primary text-primary-foreground hover:bg-primary/90',
+                  'isAction' in item && item.isAction && isActive && 'bg-primary text-primary-foreground',
+                  !('isAction' in item && item.isAction) && isActive && 'border-l-2 border-primary bg-accent text-accent-foreground',
+                  !('isAction' in item && item.isAction) && !isActive && 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                )
+              }
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              {!isCollapsed && <span>{item.label}</span>}
+            </NavLink>
+          );
+        })}
       </div>
     </nav>
   );

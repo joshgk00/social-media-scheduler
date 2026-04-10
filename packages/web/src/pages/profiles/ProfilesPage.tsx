@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { useProfiles, useDeleteProfile } from '../../hooks/use-profiles';
 import { ConnectProfileDialog } from '../../components/profiles/ConnectProfileDialog';
 import { ProfileCard } from '../../components/profiles/ProfileCard';
+import { ProfileRateLimitIndicator } from '../../components/profiles/ProfileRateLimitIndicator';
+import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
 import { Button } from '../../components/ui/button';
 import { Skeleton } from '../../components/ui/skeleton';
 
@@ -21,6 +23,7 @@ export default function ProfilesPage() {
   const { data: profiles, isLoading } = useProfiles();
   const deleteProfile = useDeleteProfile();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [rateLimitTarget, setRateLimitTarget] = useState<{ profileId: string; handle: string } | null>(null);
 
   function handleDisconnect(profileId: string) {
     deleteProfile.mutate(profileId, {
@@ -58,12 +61,25 @@ export default function ProfilesPage() {
               key={profile.id}
               profile={profile}
               onDisconnect={handleDisconnect}
+              rateLimitIndicator={<ProfileRateLimitIndicator profileId={profile.id} />}
+              onEditRateLimit={() =>
+                setRateLimitTarget({ profileId: profile.id, handle: profile.handle })
+              }
             />
           ))}
         </div>
       )}
 
       <ConnectProfileDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
+
+      <RateLimitSettingsDialog
+        profileId={rateLimitTarget?.profileId ?? null}
+        handle={rateLimitTarget?.handle ?? ''}
+        open={rateLimitTarget !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setRateLimitTarget(null);
+        }}
+      />
     </main>
   );
 }
