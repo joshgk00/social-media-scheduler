@@ -107,8 +107,11 @@ export default function PostsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [historyPostId, setHistoryPostId] = useState<string | null>(null);
   const [fullTextPost, setFullTextPost] = useState<{ text: string; isThread: boolean } | null>(null);
+  const [retryingPostIds, setRetryingPostIds] = useState<Set<string>>(new Set());
 
   function handleRetry(postId: string) {
+    if (retryingPostIds.has(postId)) return;
+    setRetryingPostIds(prev => new Set(prev).add(postId));
     apiClient
       .retryPost(postId)
       .then(() => {
@@ -117,6 +120,13 @@ export default function PostsPage() {
       })
       .catch((retryError: Error) => {
         toast.error(`Couldn't retry post. ${retryError.message ?? ''}`.trim());
+      })
+      .finally(() => {
+        setRetryingPostIds(prev => {
+          const next = new Set(prev);
+          next.delete(postId);
+          return next;
+        });
       });
   }
 
