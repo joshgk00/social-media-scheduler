@@ -112,11 +112,11 @@ Plans:
   4. Auto-destruct worker deletes published posts from the platform after the configured time period; post transitions through `auto_destructing` to `destroyed`
 **Plans**: 5 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 05-01-PLAN.md — Queue table schema, posts extension, shared constants/schemas, spinnable text parser, schedule evaluation functions, schema push
+- [ ] 05-02-PLAN.md — Queue CRUD API routes, queue service, queue post management (add, list, reorder, delete), auto-destruct queue service
+- [ ] 05-03-PLAN.md — Queue scanner worker, auto-destruct worker + lifecycle + Twitter delete service, worker bootstrap integration
+- [ ] 05-04-PLAN.md — Queue list page, queue create/edit page with schedule builder, sidebar nav, React Router routes
+- [ ] 05-05-PLAN.md — Queue posts page with reorder, spinnable variants dialog, adapted post form for queue mode, human verification
 **UI hint**: yes
 
 ### Phase 6: Media Handling
@@ -239,7 +239,7 @@ Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could the
 | 2. Authentication & User Account | 0/6 | Planning complete | - |
 | 3. Twitter Profile & Post Creation | 0/TBD | Not started | - |
 | 4. Publish Worker & Scheduled Posts | 6/6 | Complete    | 2026-04-10 |
-| 5. Queue Engine | 0/TBD | Not started | - |
+| 5. Queue Engine | 0/5 | Planning complete | - |
 | 6. Media Handling | 0/TBD | Not started | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
