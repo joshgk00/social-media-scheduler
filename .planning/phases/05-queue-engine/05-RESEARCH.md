@@ -519,7 +519,7 @@ function durationToMs(value: number, unit: string): number {
 | A3 | `autoDestructAfter` regex in posts schema supports months/years | Code Examples | Current regex allows `minutes|hours|days|weeks` only. Phase 5 needs to extend it for months/years per QUEUE-01 spec. LOW risk -- regex update is trivial. |
 | A4 | Luxon weekday mapping (1=Mon..7=Sun) is stable | Code Examples | If Luxon changes weekday mapping, day-of-week filter breaks. LOW risk -- this is ISO 8601 standard, Luxon documents it explicitly. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Fixed interval alignment behavior**
    - What we know: D-02 says fixed intervals are "clock-aligned" (e.g., every 4h = 8am, 12pm, 4pm, 8pm)
