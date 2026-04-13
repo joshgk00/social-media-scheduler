@@ -2,6 +2,8 @@
 //   1. The Phase 1 heartbeat loop (liveness signal for Bull-Board + monitoring)
 //   2. The Phase 4 publish worker (BullMQ Worker consuming the publish queue)
 //   3. The Phase 4 scanner (reconciliation loop that re-enqueues due posts)
+//   4. The Phase 5 queue scanner (evaluates active queues on 60s tick)
+//   5. The Phase 5 auto-destruct worker (delayed deletion of published posts)
 //
 // All construction happens inside `main()` so env vars are read at runtime
 // and no module-level side effects leak into tests (CLAUDE.md convention).
@@ -19,6 +21,8 @@ import { startHeartbeat, stopHeartbeat } from './heartbeat.js';
 import { createWorkerDb } from './db.js';
 import { createPublishWorker } from './publish-worker.js';
 import { startScanner } from './scanner.js';
+import { startQueueScanner } from './queue-scanner.js';
+import { createAutoDestructWorker } from './auto-destruct-worker.js';
 
 const logger = createLogger('worker');
 
@@ -52,8 +56,23 @@ async function main() {
     publishQueue,
   );
 
+  const autoDestructQueue = new Queue(QUEUE_NAMES.autoDestruct, {
+    connection: redis,
+  });
+  const { queueScannerQueue, queueScannerWorker } = await startQueueScanner(
+    redis,
+    db,
+    publishQueue,
+    notificationQueue,
+  );
+  const autoDestructWorker = createAutoDestructWorker({
+    redis,
+    db,
+    notificationQueue,
+  });
+
   logger.info(
-    'Worker fully started: heartbeat + publish worker + scanner active',
+    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker active',
   );
 
   const closeWithTimeout = async (
@@ -91,8 +110,12 @@ async function main() {
     // Close order: workers first (stop accepting jobs, drain in-flight),
     // then queues (stop new enqueues), then DB, then Redis. Each in its
     // own try/catch so one failure does not skip the rest.
+    await closeWithTimeout('autoDestructWorker', () => autoDestructWorker.close());
+    await closeWithTimeout('queueScannerWorker', () => queueScannerWorker.close());
     await closeWithTimeout('publishWorker', () => publishWorker.close());
     await closeWithTimeout('scannerWorker', () => scannerWorker.close());
+    await closeWithTimeout('autoDestructQueue', () => autoDestructQueue.close());
+    await closeWithTimeout('queueScannerQueue', () => queueScannerQueue.close());
     await closeWithTimeout('publishQueue', () => publishQueue.close());
     await closeWithTimeout('scannerQueue', () => scannerQueue.close());
     await closeWithTimeout('notificationQueue', () => notificationQueue.close());
