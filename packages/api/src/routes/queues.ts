@@ -16,13 +16,11 @@ import {
   movePostDown,
   QueueServiceError,
 } from '../services/queue.service.js';
-import type { AutoDestructQueueService } from '../services/auto-destruct-queue.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { validateUuidParam } from '../middleware/validation.js';
 
 interface QueuesDependencies {
   db: Db;
-  autoDestructQueueService?: AutoDestructQueueService;
 }
 
 export function createQueuesRouter({ db }: QueuesDependencies) {
