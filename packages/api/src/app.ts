@@ -20,8 +20,10 @@ import { createSettingsRouter } from './routes/settings.js';
 import { createProfilesRouter } from './routes/profiles.js';
 import { createPostsRouter } from './routes/posts.js';
 import { createTagsRouter } from './routes/tags.js';
+import { createQueuesRouter } from './routes/queues.js';
 import { createAdminRouter } from './routes/admin.js';
 import type { PublishQueueService } from './services/publish-queue.service.js';
+import type { AutoDestructQueueService } from './services/auto-destruct-queue.service.js';
 
 interface AppDependencies {
   redis: Redis;
@@ -32,6 +34,7 @@ interface AppDependencies {
   // keep constructing the app without stubbing BullMQ. Production wiring in
   // `index.ts` always supplies all three.
   publishQueueService?: PublishQueueService;
+  autoDestructQueueService?: AutoDestructQueueService;
   notificationQueue?: Queue;
 }
 
@@ -41,6 +44,7 @@ export function createApp({
   db,
   sessionSecret,
   publishQueueService,
+  autoDestructQueueService,
   notificationQueue,
 }: AppDependencies) {
   const app = express();
@@ -75,6 +79,7 @@ export function createApp({
   app.use(createProfilesRouter({ db }));
   app.use(createPostsRouter({ db, publishQueueService, notificationQueue }));
   app.use(createTagsRouter({ db }));
+  app.use('/api/queues', createQueuesRouter({ db, autoDestructQueueService }));
 
   const mediaDir = process.env.MEDIA_DIR || './data/media';
   app.use('/avatars', express.static(path.join(mediaDir, 'avatars')));
