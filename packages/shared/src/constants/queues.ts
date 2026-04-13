@@ -10,13 +10,19 @@
 export const QUEUE_NAMES = {
   publish: 'publish',
   notification: 'notification',
+  autoDestruct: 'auto-destruct',
 } as const;
 
 export const JOB_NAMES = {
   publishPost: 'publish-post',
   scanScheduled: 'scan-scheduled',
+  scanQueues: 'scan-queues',
+  autoDestructPost: 'auto-destruct-post',
+  scanAutoDestruct: 'scan-auto-destruct',
   publishFailedNotification: 'publish-failed',
   rateLimitWarnNotification: 'rate-limit-warn',
+  queueEmptyNotification: 'queue-empty',
+  autoDestructFailedNotification: 'auto-destruct-failed',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
@@ -35,4 +41,8 @@ export type JobName = typeof JOB_NAMES[keyof typeof JOB_NAMES];
  */
 export function buildPublishJobId(postId: string, postVersion: number): string {
   return `post-${postId}-v${postVersion}`;
+}
+
+export function buildAutoDestructJobId(postId: string, platformPostId: string): string {
+  return `auto-destruct-${postId}-${platformPostId}`;
 }
