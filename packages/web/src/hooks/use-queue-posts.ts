@@ -128,6 +128,9 @@ export function useRemoveFromQueue(queueId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queue-posts', queueId] });
     },
+    onError: () => {
+      toast.error("Couldn't remove post from queue. Try again.");
+    },
   });
 }
 
