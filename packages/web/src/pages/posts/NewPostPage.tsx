@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { DateTime } from 'luxon';
 import { toast } from 'sonner';
@@ -8,6 +8,8 @@ import { useAuth } from '../../hooks/use-auth';
 import { useProfiles } from '../../hooks/use-profiles';
 import { useTags } from '../../hooks/use-tags';
 import { useCreatePost, useCheckConflicts } from '../../hooks/use-posts';
+import { useQueue } from '../../hooks/use-queues';
+import { useAddToQueue } from '../../hooks/use-queue-posts';
 import { utcToLocalInput, localInputToUtc } from '../../lib/timezone';
 import { serializeThread, deserializeThread, type TweetSegment } from '../../lib/thread';
 import { ThreadEditor } from '../../components/posts/ThreadEditor';
@@ -21,6 +23,7 @@ import { TagManagementDialog } from '../../components/posts/TagManagementDialog'
 import { RateLimitBanner } from '../../components/posts/RateLimitBanner';
 import { RateLimitBlockError, type RateLimitBlockErrorDetail } from '../../components/posts/RateLimitBlockError';
 import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
+import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -45,11 +48,17 @@ interface PostFormValues {
 
 export default function NewPostPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queueId = searchParams.get('queueId');
+  const isQueueMode = !!queueId;
+
   const { data: authUser } = useAuth();
   const userTimezone = authUser?.timezone ?? 'UTC';
   const { data: profiles } = useProfiles();
   const { data: tagList } = useTags();
   const createPostMutation = useCreatePost();
+  const { data: queueData } = useQueue(queueId ?? '');
+  const addToQueueMutation = useAddToQueue(queueId ?? '');
 
   const [isThread, setIsThread] = useState(false);
   const [tweets, setTweets] = useState<TweetSegment[]>([
@@ -79,12 +88,14 @@ export default function NewPostPage() {
   const watchedHasSpinnableText = form.watch('hasSpinnableText');
   const watchedAutoDestructAfter = form.watch('autoDestructAfter');
 
+  const effectiveProfileId = isQueueMode ? (queueData?.profileId ?? '') : watchedProfileId;
+
   const { data: conflicts } = useCheckConflicts(
-    watchedProfileId,
+    effectiveProfileId,
     watchedScheduledAt ?? '',
   );
 
-  const selectedProfile = profiles?.find((p) => p.id === watchedProfileId);
+  const selectedProfile = profiles?.find((p) => p.id === effectiveProfileId);
   const previewProfile = selectedProfile
     ? { displayName: selectedProfile.displayName, handle: `@${selectedProfile.handle}`, avatarUrl: selectedProfile.avatarUrl ?? '' }
     : null;
@@ -107,14 +118,14 @@ export default function NewPostPage() {
     return isThread ? serializeThread(tweets) : form.getValues('text');
   }
 
-  function validateAndSubmit(action: 'schedule' | 'draft') {
+  function validateAndSubmit(action: 'schedule' | 'draft' | 'queue') {
     const text = getSubmitText();
     if (!text.trim()) {
       toast.error('Tweet text is required.');
       return;
     }
 
-    if (!form.getValues('profileId')) {
+    if (action !== 'queue' && !form.getValues('profileId')) {
       toast.error('Please select a profile.');
       return;
     }
@@ -131,7 +142,53 @@ export default function NewPostPage() {
       }
     }
 
-    submitPost(action, text);
+    if (action === 'queue') {
+      submitQueuePost(text);
+    } else {
+      submitPost(action, text);
+    }
+  }
+
+  function submitQueuePost(text: string) {
+    if (!queueId || !queueData) return;
+
+    setRateLimitBlockError(null);
+    createPostMutation.mutate(
+      {
+        profileId: queueData.profileId,
+        text,
+        isThread,
+        status: 'queued',
+        hasSpinnableText: form.getValues('hasSpinnableText'),
+        autoDestructAfter: form.getValues('autoDestructAfter'),
+        notes: form.getValues('notes') || null,
+        tagIds: form.getValues('tagIds'),
+      },
+      {
+        onSuccess: (createdPost) => {
+          addToQueueMutation.mutate(createdPost.id, {
+            onSuccess: () => {
+              toast.success('Post added to queue.');
+              navigate(`/queues/${queueId}/posts`);
+            },
+            onError: (addError: Error) => {
+              toast.error(addError.message || 'Post created but failed to add to queue.');
+            },
+          });
+        },
+        onError: (error: Error & { status?: number; body?: Record<string, unknown> }) => {
+          if (error.status === 409 && error.body?.code === 'twitter_budget_exceeded') {
+            setRateLimitBlockError({
+              code: 'twitter_budget_exceeded',
+              budget: Number(error.body.budget ?? 0),
+              currentCount: Number(error.body.currentCount ?? 0),
+            });
+            return;
+          }
+          toast.error(error.message || 'Failed to create post.');
+        },
+      },
+    );
   }
 
   function submitPost(action: 'schedule' | 'draft', text: string) {
@@ -189,34 +246,38 @@ export default function NewPostPage() {
 
   return (
     <main>
-      <h1 className="text-2xl font-semibold mb-6">New Post</h1>
+      <h1 className="text-2xl font-semibold mb-6">
+        {isQueueMode ? 'Add Post to Queue' : 'New Post'}
+      </h1>
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Left column: form */}
         <div className="flex-1 lg:max-w-[60%] space-y-6">
           <RateLimitBanner
-            profileId={watchedProfileId || null}
+            profileId={effectiveProfileId || null}
             onEditBudget={() => setIsRateLimitDialogOpen(true)}
           />
 
-          {/* Profile selector */}
-          <div className="space-y-2">
-            <Label htmlFor="profile-select">Profile</Label>
-            <Select
-              value={watchedProfileId}
-              onValueChange={(value) => form.setValue('profileId', value)}
-            >
-              <SelectTrigger id="profile-select">
-                <SelectValue placeholder="Select a profile..." />
-              </SelectTrigger>
-              <SelectContent>
-                {profiles?.map((profile) => (
-                  <SelectItem key={profile.id} value={profile.id}>
-                    {profile.displayName} (@{profile.handle})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Profile selector -- hidden in queue mode */}
+          {!isQueueMode && (
+            <div className="space-y-2">
+              <Label htmlFor="profile-select">Profile</Label>
+              <Select
+                value={watchedProfileId}
+                onValueChange={(value) => form.setValue('profileId', value)}
+              >
+                <SelectTrigger id="profile-select">
+                  <SelectValue placeholder="Select a profile..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles?.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.displayName} (@{profile.handle})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Single/Thread toggle */}
           <div className="flex items-center gap-3">
@@ -257,28 +318,30 @@ export default function NewPostPage() {
             <p className="text-xs mt-1">Images, GIFs, or video</p>
           </div>
 
-          {/* Schedule datetime picker */}
-          <div className="space-y-2">
-            <Label htmlFor="schedule-datetime">Schedule</Label>
-            <Input
-              id="schedule-datetime"
-              type="datetime-local"
-              value={watchedScheduledAt ? utcToLocalInput(watchedScheduledAt, userTimezone) : ''}
-              onChange={(e) => handleScheduledAtChange(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Times shown in {userTimezone.replace(/_/g, ' ')}
-            </p>
-            {conflicts && conflicts.length > 0 && (
-              <ScheduleConflictBanner conflicts={conflicts} />
-            )}
-            {rateLimitBlockError && (
-              <RateLimitBlockError
-                error={rateLimitBlockError}
-                onRaiseBudget={() => setIsRateLimitDialogOpen(true)}
+          {/* Schedule datetime picker -- hidden in queue mode */}
+          {!isQueueMode && (
+            <div className="space-y-2">
+              <Label htmlFor="schedule-datetime">Schedule</Label>
+              <Input
+                id="schedule-datetime"
+                type="datetime-local"
+                value={watchedScheduledAt ? utcToLocalInput(watchedScheduledAt, userTimezone) : ''}
+                onChange={(e) => handleScheduledAtChange(e.target.value)}
               />
-            )}
-          </div>
+              <p className="text-xs text-muted-foreground">
+                Times shown in {userTimezone.replace(/_/g, ' ')}
+              </p>
+              {conflicts && conflicts.length > 0 && (
+                <ScheduleConflictBanner conflicts={conflicts} />
+              )}
+              {rateLimitBlockError && (
+                <RateLimitBlockError
+                  error={rateLimitBlockError}
+                  onRaiseBudget={() => setIsRateLimitDialogOpen(true)}
+                />
+              )}
+            </div>
+          )}
 
           {/* Tags selector */}
           <div className="space-y-2">
@@ -324,13 +387,24 @@ export default function NewPostPage() {
             onChange={(value) => form.setValue('autoDestructAfter', value)}
           />
 
-          {/* SplitButton */}
-          <SplitButton
-            onSchedule={() => validateAndSubmit('schedule')}
-            onDraft={() => validateAndSubmit('draft')}
-            isLoading={createPostMutation.isPending}
-            disabled={createPostMutation.isPending}
-          />
+          {/* Submit controls */}
+          {isQueueMode ? (
+            <Button
+              onClick={() => validateAndSubmit('queue')}
+              disabled={createPostMutation.isPending || addToQueueMutation.isPending}
+            >
+              {createPostMutation.isPending || addToQueueMutation.isPending
+                ? 'Saving...'
+                : 'Save to Queue'}
+            </Button>
+          ) : (
+            <SplitButton
+              onSchedule={() => validateAndSubmit('schedule')}
+              onDraft={() => validateAndSubmit('draft')}
+              isLoading={createPostMutation.isPending}
+              disabled={createPostMutation.isPending}
+            />
+          )}
         </div>
 
         {/* Right column: live preview */}
@@ -347,7 +421,7 @@ export default function NewPostPage() {
       <TagManagementDialog open={isTagManageOpen} onOpenChange={setIsTagManageOpen} />
 
       <RateLimitSettingsDialog
-        profileId={watchedProfileId || null}
+        profileId={effectiveProfileId || null}
         handle={selectedProfile?.handle ?? ''}
         open={isRateLimitDialogOpen}
         onOpenChange={setIsRateLimitDialogOpen}
