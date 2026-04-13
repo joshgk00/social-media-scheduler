@@ -158,47 +158,36 @@ export async function evaluateQueues(
       continue;
     }
 
-    // Find next queued post: queue_position > cursor (Pitfall 6: gap-safe)
-    const nextPosts = await db
-      .select({
-        id: posts.id,
-        postVersion: posts.postVersion,
-        text: posts.text,
-        hasSpinnableText: posts.hasSpinnableText,
-        queuePosition: posts.queuePosition,
-        status: posts.status,
-      })
-      .from(posts)
-      .where(
-        and(
-          eq(posts.queueId, queue.id),
-          gt(posts.queuePosition, queue.cursorPosition),
-          eq(posts.status, 'queued'),
-        ),
-      )
-      .orderBy(asc(posts.queuePosition))
-      .limit(1);
-
-    let nextPost: QueuedPostRow | null = (nextPosts[0] as QueuedPostRow | undefined) ?? null;
-
-    // If no queued post found and recycling is ON: transition published->queued, wrap cursor
-    if (!nextPost && queue.isRecycling) {
-      // Find all published posts in this queue
-      const publishedPosts = await db
-        .select({ id: posts.id })
+    // Pitfall 2: All post selection, recycling, and cursor advance in one transaction
+    const nextPost = await db.transaction(async (tx): Promise<QueuedPostRow | null> => {
+      // Find next queued post: queue_position > cursor (Pitfall 6: gap-safe)
+      const nextPosts = await tx
+        .select({
+          id: posts.id,
+          postVersion: posts.postVersion,
+          text: posts.text,
+          hasSpinnableText: posts.hasSpinnableText,
+          queuePosition: posts.queuePosition,
+          status: posts.status,
+        })
         .from(posts)
         .where(
           and(
             eq(posts.queueId, queue.id),
-            eq(posts.status, 'published'),
+            gt(posts.queuePosition, queue.cursorPosition),
+            eq(posts.status, 'queued'),
           ),
-        );
+        )
+        .orderBy(asc(posts.queuePosition))
+        .limit(1);
 
-      if (publishedPosts.length > 0) {
-        // Transition published posts back to queued
-        await db
-          .update(posts)
-          .set({ status: 'queued', updatedAt: new Date() })
+      let result: QueuedPostRow | null = (nextPosts[0] as QueuedPostRow | undefined) ?? null;
+
+      // If no queued post found and recycling is ON: transition published->queued, wrap cursor
+      if (!result && queue.isRecycling) {
+        const publishedPosts = await tx
+          .select({ id: posts.id })
+          .from(posts)
           .where(
             and(
               eq(posts.queueId, queue.id),
@@ -206,31 +195,56 @@ export async function evaluateQueues(
             ),
           );
 
-        // Find the post with MIN(queue_position) that is now queued
-        const minPosts = await db
-          .select({
-            id: posts.id,
-            postVersion: posts.postVersion,
-            text: posts.text,
-            hasSpinnableText: posts.hasSpinnableText,
-            queuePosition: posts.queuePosition,
-            status: posts.status,
-          })
-          .from(posts)
-          .where(
-            and(
-              eq(posts.queueId, queue.id),
-              eq(posts.status, 'queued'),
-            ),
-          )
-          .orderBy(asc(posts.queuePosition))
-          .limit(1);
+        if (publishedPosts.length > 0) {
+          await tx
+            .update(posts)
+            .set({ status: 'queued', updatedAt: new Date() })
+            .where(
+              and(
+                eq(posts.queueId, queue.id),
+                eq(posts.status, 'published'),
+              ),
+            );
 
-        nextPost = (minPosts[0] as QueuedPostRow | undefined) ?? null;
+          const minPosts = await tx
+            .select({
+              id: posts.id,
+              postVersion: posts.postVersion,
+              text: posts.text,
+              hasSpinnableText: posts.hasSpinnableText,
+              queuePosition: posts.queuePosition,
+              status: posts.status,
+            })
+            .from(posts)
+            .where(
+              and(
+                eq(posts.queueId, queue.id),
+                eq(posts.status, 'queued'),
+              ),
+            )
+            .orderBy(asc(posts.queuePosition))
+            .limit(1);
+
+          result = (minPosts[0] as QueuedPostRow | undefined) ?? null;
+        }
       }
-    }
 
-    // If still no post found: emit queue-empty notification
+      if (result) {
+        // Advance cursor to the selected post's position
+        await tx
+          .update(queues)
+          .set({
+            cursorPosition: result.queuePosition,
+            nextRunAt: new Date(currentNow.plus({ minutes: 5 }).toMillis()),
+            updatedAt: new Date(),
+          })
+          .where(eq(queues.id, queue.id));
+      }
+
+      return result;
+    });
+
+    // If no post found: emit queue-empty notification (outside tx — BullMQ calls must not be inside a DB tx)
     if (!nextPost) {
       await notificationQueue.add(JOB_NAMES.queueEmptyNotification, {
         kind: 'queue_empty',
@@ -250,19 +264,6 @@ export async function evaluateQueues(
 
     const correlationId = randomUUID();
     const jobId = buildPublishJobId(nextPost.id, nextPost.postVersion);
-
-    // Pitfall 2: Atomic nextRunAt update + cursor advance within transaction
-    await db.transaction(async (tx) => {
-      // Advance cursor to the selected post's position
-      await tx
-        .update(queues)
-        .set({
-          cursorPosition: nextPost!.queuePosition,
-          nextRunAt: new Date(currentNow.plus({ minutes: 5 }).toMillis()),
-          updatedAt: new Date(),
-        })
-        .where(eq(queues.id, queue.id));
-    });
 
     // Enqueue to publish queue
     await publishQueue.add(
