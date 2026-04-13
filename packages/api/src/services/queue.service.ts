@@ -321,12 +321,13 @@ export async function removePostFromQueue(
 
   const updatedRows = await db
     .update(posts)
-    .set({ queueId: null, queuePosition: null, updatedAt: new Date() })
+    .set({ queueId: null, queuePosition: null, status: 'draft', updatedAt: new Date() })
     .where(
       and(
         eq(posts.id, postId),
         eq(posts.userId, userId),
         eq(posts.queueId, queueId),
+        eq(posts.status, 'queued'),
       ),
     )
     .returning({ id: posts.id });
