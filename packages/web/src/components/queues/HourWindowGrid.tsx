@@ -49,8 +49,9 @@ export function HourWindowGrid({ value, onChange, is24Hour = false }: HourWindow
         </button>
         <button
           type="button"
-          className="text-xs text-primary hover:underline"
+          className="text-xs text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleClearAll}
+          disabled={value.length === 0}
         >
           Clear All
         </button>
