@@ -1,6 +1,6 @@
 ---
 phase: 05-queue-engine
-reviewed: 2026-04-13T00:00:00Z
+reviewed: 2026-04-13T19:45:00Z
 depth: standard
 files_reviewed: 37
 files_reviewed_list:
@@ -19,6 +19,7 @@ files_reviewed_list:
   - packages/shared/src/lib/schedule-evaluation.ts
   - packages/shared/src/lib/spinnable-text.ts
   - packages/shared/src/schemas/queues.ts
+  - packages/shared/package.json
   - packages/web/src/App.tsx
   - packages/web/src/components/layout/Sidebar.tsx
   - packages/web/src/components/posts/PostStatusBadge.tsx
@@ -44,107 +45,87 @@ files_reviewed_list:
   - packages/worker/src/twitter-delete.service.ts
 findings:
   critical: 0
-  warning: 6
-  info: 5
-  total: 11
+  warning: 8
+  info: 6
+  total: 14
 status: issues_found
 ---
 
 # Phase 5: Code Review Report
 
-**Reviewed:** 2026-04-13
+**Reviewed:** 2026-04-13T19:45:00Z
 **Depth:** standard
 **Files Reviewed:** 37
 **Status:** issues_found
 
 ## Summary
 
-Phase 5 delivers the queue engine: the `evaluateQueues` scanner, auto-destruct lifecycle, queue CRUD API routes, and the full React UI for creating and managing queues. The core logic is solid. The `calculateNextRunAt` DST handling is correct, the three-phase auto-destruct pattern mirrors the publish lifecycle correctly, and the transaction-based atomic cursor advance properly prevents double-enqueue.
+Phase 5 delivers the queue engine: schedule evaluation, the `evaluateQueues` scanner, auto-destruct lifecycle, queue CRUD API routes, and the full React UI for managing queues. The core architecture is well-designed -- the three-phase auto-destruct pattern correctly mirrors the publish lifecycle, the transaction-based cursor advance prevents double-enqueue, and the DST handling in schedule evaluation is solid.
 
-The issues below are all correctness or logic gaps — no security vulnerabilities were found. The most consequential is a race condition in the recycling path: the published→queued bulk update and the subsequent MIN(queue_position) select are not inside the same transaction, which means another scanner tick (or a concurrent worker restart) could race between those two operations.
+No security vulnerabilities were found. The issues below are correctness bugs, logic gaps, and consistency problems. The most consequential are: (1) `calculateNextRunAt` uses hardcoded `'UTC'` instead of the user's timezone when computing the initial `nextRunAt` on queue create/update, making the stored next-run time wrong for non-UTC users; (2) the frontend `QueuePostActionsMenu` allows removing published posts from a queue, but the API only permits removing posts with status `'queued'`, causing silent failures; and (3) the `seasonalRepeat` parameter is accepted but never used, making one-time seasonal windows behave identically to repeating ones.
 
 ---
 
 ## Warnings
 
-### WR-01: Recycling path bulk update and MIN select are not atomic
+### WR-01: `calculateNextRunAt` called with hardcoded `'UTC'` instead of user timezone
 
-**File:** `packages/worker/src/queue-scanner.ts:197-229`
+**File:** `packages/api/src/services/queue.service.ts:36` and `packages/api/src/services/queue.service.ts:114`
 
-**Issue:** When recycling triggers, the code bulk-updates all `published` posts back to `queued` (line 199-207), then does a separate `SELECT ... ORDER BY queue_position ASC LIMIT 1` to find the next post (lines 210-228). These two operations are outside the transaction at line 255. If the scanner runs concurrently on a second tick (unlikely but possible due to slow DB operations), or if the process restarts between lines 207 and 229, the `published→queued` transition commits but `nextPost` is never set, the cursor is never advanced, and the queue stalls until the next tick resets it. Additionally, when the recycling reset happens for a queue with many posts, the second `SELECT` could pick up a post that was concurrently moved to a different queue or deleted between the two operations.
+**Issue:** Both `createQueue` (line 36) and `updateQueue` (line 114) call `calculateNextRunAt(..., 'UTC')`. This function uses the timezone argument to evaluate which hour slots and days-of-week are eligible for the next run. Passing `'UTC'` means the initial `nextRunAt` is computed as if the user's hour slots (e.g., 9am, 12pm, 3pm) refer to UTC hours, not the user's local time. For a user in `America/New_York` (UTC-4/5), the stored `nextRunAt` will be 4-5 hours off. The queue scanner in `queue-scanner.ts` correctly reads `users.timezone` from the DB for runtime evaluation, but the persisted `nextRunAt` displayed in the UI (via `getQueues`) will be wrong until the scanner overwrites it on its next pass.
 
-**Fix:** Move the bulk update, the MIN select, and the cursor advance into a single transaction:
+**Fix:** Load the user's timezone from the DB and pass it to `calculateNextRunAt`:
 ```typescript
-// Replace the unprotected recycle block + the later transaction block
-// with a single transaction that does all three steps atomically.
-let nextPost: QueuedPostRow | null = null;
-await db.transaction(async (tx) => {
-  // existing: find queued post after cursor
-  const nextPosts = await tx.select(...).from(posts).where(...).orderBy(...).limit(1);
-  nextPost = nextPosts[0] ?? null;
+const [userRow] = await db
+  .select({ timezone: users.timezone })
+  .from(users)
+  .where(eq(users.id, userId));
+const userTimezone = userRow?.timezone ?? 'UTC';
 
-  if (!nextPost && queue.isRecycling) {
-    // transition published -> queued
-    await tx.update(posts).set({ status: 'queued', updatedAt: new Date() }).where(...);
-    // find MIN position
-    const minPosts = await tx.select(...).from(posts).where(...).orderBy(...).limit(1);
-    nextPost = minPosts[0] ?? null;
-  }
-
-  if (nextPost) {
-    // advance cursor + update nextRunAt
-    await tx.update(queues).set({ cursorPosition: nextPost.queuePosition, ... }).where(...);
-  }
-});
-// enqueue outside transaction (BullMQ calls must not be inside a DB tx)
-if (nextPost) { await publishQueue.add(...); }
+const nextRunAt = calculateNextRunAt(queueConfig, userTimezone);
 ```
 
 ---
 
-### WR-02: `removePostFromQueue` does not reset post status to `draft`
+### WR-02: Frontend allows removing published posts but API rejects them
 
-**File:** `packages/api/src/services/queue.service.ts:307-339`
+**File:** `packages/web/src/components/queues/QueuePostActionsMenu.tsx:45` and `packages/api/src/services/queue.service.ts:330`
 
-**Issue:** When a post is removed from a queue, its `queueId` and `queuePosition` are nulled (line 323) but its `status` is left unchanged. A post that was automatically transitioned from `draft` to `queued` when added (line 289-294 in the same file) will remain in `queued` status after removal. A `queued` post with no `queueId` is an inconsistent state: the worker scanner will never pick it up (it filters by `queueId`), and the UI will show it as "Queued" with no queue association. This will confuse users and may block the post from being rescheduled.
+**Issue:** The frontend `QueuePostActionsMenu` defines `DELETABLE_QUEUE_STATES = ['queued', 'published']` (line 45), enabling the "Delete Post" action for posts with status `published`. However, `removePostFromQueue` in the API service has a WHERE clause that includes `eq(posts.status, 'queued')` (line 330). When a user clicks "Delete Post" on a published post, the API returns 404 ("Post not found in this queue") because the status filter excludes it. The user sees a confusing error for an action the UI told them was available.
 
-**Fix:** Reset to `draft` on removal:
+**Fix:** Either expand the API WHERE clause to also accept `published` status:
 ```typescript
-const updatedRows = await db
-  .update(posts)
-  .set({
-    queueId: null,
-    queuePosition: null,
-    status: 'draft',   // add this
-    updatedAt: new Date(),
-  })
-  .where(
-    and(
-      eq(posts.id, postId),
-      eq(posts.userId, userId),
-      eq(posts.queueId, queueId),
-    ),
-  )
-  .returning({ id: posts.id });
+.where(
+  and(
+    eq(posts.id, postId),
+    eq(posts.userId, userId),
+    eq(posts.queueId, queueId),
+    sql`${posts.status} IN ('queued', 'published')`,
+  ),
+)
 ```
-Only reset to `draft` when the current status is `queued` — add an `eq(posts.status, 'queued')` to the `where` clause if you want to avoid touching posts already in `publishing` or other states (though the existing logic already guards against removing publishing posts at the route level).
+Or restrict the frontend to only show the delete action for `queued` posts:
+```typescript
+const DELETABLE_QUEUE_STATES = ['queued'];
+```
 
 ---
 
-### WR-03: `createQueuesRouter` receives `autoDestructQueueService` in its dependency object but never uses it
+### WR-03: `seasonalRepeat` parameter is accepted but never used
 
-**File:** `packages/api/src/routes/queues.ts:28`
+**File:** `packages/shared/src/lib/schedule-evaluation.ts:57`
 
-**Issue:** The `QueuesDependencies` interface declares `autoDestructQueueService?: AutoDestructQueueService` (line 25), but `createQueuesRouter` destructures only `{ db }` from its argument (line 28), silently discarding the service. The type is imported at line 19 but is dead code. If auto-destruct is supposed to be triggered from a queue API action (e.g., when a post is removed from a recycling queue and needs its scheduled auto-destruct job cancelled), that integration is missing.
+**Issue:** `isWithinSeasonalWindow` accepts `seasonalRepeat: boolean` as its third parameter but never references it in the function body. The function always evaluates the seasonal window as if it repeats annually. A one-time seasonal window (e.g., "only active during Nov-Dec 2026, then never again") behaves identically to a repeating one. The Zod schema, DB column, and UI toggle all expose this as a configurable option, but it has no effect.
 
-**Fix:** If `autoDestructQueueService` is intentionally unused in routes (because auto-destruct is only enqueued from the publish worker), remove it from the interface and the import to avoid misleading readers:
+**Fix:** When `seasonalRepeat` is `false`, the function should also check the year. This requires either storing the year in the seasonal config or adding a `createdAt`/`seasonalYear` field. For now, if one-time seasonal windows are not yet needed, add a code comment documenting the gap and remove the parameter to avoid misleading callers:
 ```typescript
-// routes/queues.ts
-interface QueuesDependencies {
-  db: Db;
-  // Remove: autoDestructQueueService?: AutoDestructQueueService;
-}
-// Remove: import type { AutoDestructQueueService } from '../services/auto-destruct-queue.service.js';
+// TODO: seasonalRepeat=false (one-time window) not yet implemented.
+// Currently all seasonal windows repeat annually.
+export function isWithinSeasonalWindow(
+  seasonalStart: string | null,
+  seasonalEnd: string | null,
+  now?: DateTime,
+): boolean {
 ```
 
 ---
@@ -153,163 +134,172 @@ interface QueuesDependencies {
 
 **File:** `packages/web/src/components/queues/QueueStatusBadge.tsx:18-23`
 
-**Issue:** The `isInSeasonalPause` function determines whether the queue is *outside* its seasonal window (i.e., in a pause). For a cross-year window where `seasonalStart > seasonalEnd` (e.g., Nov–Jan), the queue is active when `today >= start OR today <= end`. The code on line 21 returns `today < seasonalStart && today > seasonalEnd` for the cross-year case, which can never be true for valid dates (no date is simultaneously before November *and* after January). This means a queue with a Nov–Jan seasonal window will always show as "Active" when it should show "Seasonal pause" during Feb–Oct.
-
-The server-side `isWithinSeasonalWindow` in `packages/shared/src/lib/schedule-evaluation.ts` has this logic correct (line 73-76). The frontend component reimplements it with the wrong condition.
+**Issue:** The `isInSeasonalPause` function computes whether the queue is outside its seasonal window. For cross-year windows (e.g., Nov-Jan where `seasonalStart > seasonalEnd`), the function returns `today < seasonalStart && today > seasonalEnd` (line 22). This condition can never be true -- no date is simultaneously before November and after January. A queue with a Nov-Jan seasonal window will never show "Seasonal pause" during Feb-Oct. The server-side `isWithinSeasonalWindow` has this logic correct (lines 73-76 in `schedule-evaluation.ts`).
 
 **Fix:** Align with the shared library logic:
-```typescript
-function isInSeasonalPause(seasonalStart?: string | null, seasonalEnd?: string | null): boolean {
-  if (!seasonalStart || !seasonalEnd) return false;
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const today = `${month}-${day}`;
-
-  // Queue is active when today is within the window; paused otherwise
-  if (seasonalStart <= seasonalEnd) {
-    // Standard window: active when start <= today <= end
-    return today < seasonalStart || today > seasonalEnd;
-  }
-  // Cross-year window (e.g. Nov-Jan): active when today >= start OR today <= end
-  return today < seasonalStart && today > seasonalEnd; // WRONG — always false
-  // Correct:
-  return !(today >= seasonalStart || today <= seasonalEnd);
-}
-```
-Simplified correct version:
 ```typescript
 if (seasonalStart <= seasonalEnd) {
   return today < seasonalStart || today > seasonalEnd;
 }
-// Cross-year: paused when today is in the gap (after end but before start)
+// Cross-year: paused when today is in the gap (after end AND before start)
 return today > seasonalEnd && today < seasonalStart;
 ```
 
 ---
 
-### WR-05: `useRemoveFromQueue` mutation has no error feedback to the user
+### WR-05: `QueueDetail` type has `cursor` but API returns `cursorPosition`
 
-**File:** `packages/web/src/hooks/use-queue-posts.ts:121-132`
+**File:** `packages/web/src/hooks/use-queues.ts:36` and `packages/web/src/pages/queues/QueuePostsPage.tsx:65`
 
-**Issue:** `useRemoveFromQueue` has no `onError` callback. If the delete request fails (network error, 404 because the post was already removed, etc.), the UI silently invalidates the query cache, potentially re-fetching the same post that failed to delete. The user gets no toast or indication that their action did not succeed. Every other mutation in this file (`useMovePostUp`, `useMovePostDown`) and in the rest of the codebase consistently shows a toast on error.
+**Issue:** The `QueueDetail` interface declares `cursor: number` (line 36 of `use-queues.ts`), but the API's `getQueueById` returns the full DB row which has the column named `cursorPosition`. In `QueuePostsPage.tsx` line 65, the code accesses `queue?.cursorPosition ?? 1`. Since `QueueDetail` does not declare `cursorPosition`, TypeScript should flag this as an error (though the runtime JSON object does have the property). The fallback value `1` is also incorrect -- `cursorPosition` defaults to `0` in the DB schema (line 20 of `queues.ts`), so a fresh queue with no publishes has cursor `0`, but the UI would display position `1` as the "Next" post marker instead of `0`.
 
-**Fix:**
+**Fix:** Rename `cursor` to `cursorPosition` in the `QueueDetail` interface:
 ```typescript
-export function useRemoveFromQueue(queueId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (postId: string) =>
-      apiClient.delete<{ success: boolean }>(
-        `/api/queues/${queueId}/posts/${postId}`,
-      ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['queue-posts', queueId] });
-    },
-    onError: () => {
-      toast.error("Couldn't remove post from queue. Try again.");
-    },
-  });
+interface QueueDetail extends QueueListItem {
+  cursorPosition: number;
 }
+```
+And update the fallback:
+```typescript
+const cursorPosition = queue?.cursorPosition ?? 0;
 ```
 
 ---
 
-### WR-06: `HourWindowGrid` "Clear All" allows submitting an invalid form
+### WR-06: `addPostToQueue` silently swallows state transition errors
 
-**File:** `packages/web/src/components/queues/HourWindowGrid.tsx:31-33`
+**File:** `packages/api/src/services/queue.service.ts:289-295`
 
-**Issue:** The "Clear All" button calls `onChange([])`, setting `hourSlots` to an empty array. The Zod schema (`createQueueSchema`) requires `hourSlots` to have at least one entry. While the form will fail validation on submit and show an error message, the user can click "Clear All" repeatedly without understanding why they cannot proceed. There is no visual indicator that an empty selection is invalid until they attempt submission. The `DayOfWeekSelector` has the same pattern but does not have a "Clear All" button, so this is only a concern here.
+**Issue:** When adding a post to a queue, the code checks `if (post.status === 'draft')` (line 289) and then wraps `transitionPost(post.status, 'queued')` in a try-catch that silently swallows all errors (lines 293-295). Since the `if` condition already confirms the status is `'draft'`, the only reason `transitionPost` would throw is if the state machine's transition table is broken (i.e., `draft -> queued` is not a valid transition). Silently swallowing that error hides a state machine bug. If the transition fails, the post gets assigned to the queue with its existing status, creating an inconsistent state.
 
-This is a minor UX issue with a correctness implication: a user who accidentally clears all hours and saves has the client-side error caught, but it's a confusing failure mode.
+**Fix:** Remove the try-catch -- if the state machine rejects `draft -> queued`, that's a real error that should propagate:
+```typescript
+if (post.status === 'draft') {
+  transitionPost(post.status as PostStatus, 'queued');
+  updateFields.status = 'queued';
+}
+```
+Or, if the intent is to handle posts that are already `queued` (re-adding to the same queue), move the status check to cover that case explicitly.
 
-**Fix:** Disable the "Clear All" button if it would leave the selection empty, or immediately show an inline error when the array is empty:
-```tsx
-<button
-  type="button"
-  className="text-xs text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-  onClick={handleClearAll}
-  disabled={value.length === 0}
->
-  Clear All
-</button>
+---
+
+### WR-07: `useAddToQueue` mutation has no error feedback
+
+**File:** `packages/web/src/hooks/use-queue-posts.ts:137-148`
+
+**Issue:** `useAddToQueue` has no `onError` callback. If the add-to-queue request fails (409 for duplicate assignment, network error, etc.), the user receives no feedback. The `NewPostPage.tsx` handles errors from `addToQueueMutation` inline (line 174), but any other caller of `useAddToQueue` would silently fail.
+
+**Fix:** Add consistent error handling:
+```typescript
+onError: () => {
+  toast.error("Couldn't add post to queue. Try again.");
+},
+```
+
+---
+
+### WR-08: `removePostFromQueue` is not wrapped in a transaction
+
+**File:** `packages/api/src/services/queue.service.ts:307-339`
+
+**Issue:** `removePostFromQueue` performs two separate queries -- a queue ownership check (lines 313-316) and the post update (lines 322-333) -- without a transaction. Between the two queries, the queue could be deleted by a concurrent request, making the ownership check stale. While unlikely in a single-user app, this violates the CLAUDE.md convention: "Multi-step DB mutations (delete + re-insert) -> `db.transaction()`". The `addPostToQueue` function correctly uses a transaction for the same pattern.
+
+**Fix:** Wrap in a transaction for consistency:
+```typescript
+await db.transaction(async (tx) => {
+  const [queue] = await tx.select(...).from(queues).where(...);
+  if (!queue) throw new QueueServiceError('Queue not found', 404);
+
+  const updatedRows = await tx.update(posts).set(...).where(...).returning(...);
+  if (updatedRows.length === 0) throw new QueueServiceError('Post not found in this queue', 404);
+});
 ```
 
 ---
 
 ## Info
 
-### IN-01: Duplicate import of `ListOrdered` from lucide-react in Sidebar
+### IN-01: Duplicate import of `ListOrdered` in Sidebar
 
-**File:** `packages/web/src/components/layout/Sidebar.tsx:6-7`
+**File:** `packages/web/src/components/layout/Sidebar.tsx:5-7`
 
-**Issue:** `ListOrdered` is imported twice on lines 6 and 7. TypeScript/bundlers deduplicate this silently but it's dead weight and signals a copy-paste error.
+**Issue:** `ListOrdered` is imported twice from `lucide-react` on lines 5 and 7. The bundler deduplicates silently, but this is dead weight from a copy-paste error.
 
-**Fix:** Remove the duplicate import line.
+**Fix:** Remove line 7 (`ListOrdered,` duplicate).
 
 ---
 
-### IN-02: `QueueListItem` in `use-queues.ts` has fields absent from the API response
+### IN-02: `QueueListItem` declares fields absent from the API list response
 
 **File:** `packages/web/src/hooks/use-queues.ts:11-33`
 
-**Issue:** `QueueListItem` declares `startDate`, `seasonalRepeat`, `createdAt`, `updatedAt`, and `profile` but the `getQueues` service function in `queue.service.ts` does not include these fields in its select projection (lines 148-169). The API returns what the DB select projects, not the full row. `startDate` and `seasonalRepeat` are not in the `getQueues` select; they exist on `getQueueById`. `profile` is a nested object not returned by the list endpoint. Code that reads `queue.startDate` or `queue.profile` from the list response will get `undefined` at runtime while TypeScript believes they are defined (or nullable). `queue.profile?.displayName` in `QueuesPage.tsx:238` will always be `undefined`, showing `'-'` for every profile name.
+**Issue:** `QueueListItem` declares `intervalType`, `intervalValue`, `intervalUnit`, `startDate`, `seasonalRepeat`, `createdAt`, `updatedAt`, and `profile` fields. The `getQueues` service in `queue.service.ts` (lines 148-169) does not include `intervalType`, `intervalValue`, `intervalUnit`, `startDate`, `seasonalRepeat`, `createdAt`, or `updatedAt` in its select projection. It also does not return a nested `profile` object. Code like `queue.profile?.displayName` in `QueuesPage.tsx:238` will always evaluate to `undefined`, showing `'-'` for every profile name -- the `profileName` field is returned directly at the top level, not nested under `profile`.
 
-**Fix:** Either add the missing fields to the `getQueues` select projection, or narrow the `QueueListItem` interface to match what the endpoint actually returns. The simplest fix is to add the missing fields to the `getQueues` DB query in `queue.service.ts`.
+**Fix:** Update `QueueListItem` to match the actual API response shape, or add the missing fields to the `getQueues` select query.
 
 ---
 
-### IN-03: `createLogger` called inside `evaluateQueues` on every invocation
+### IN-03: `createLogger` called inside `evaluateQueues` on every 60s tick
 
 **File:** `packages/worker/src/queue-scanner.ts:83`
 
-**Issue:** `createLogger('queue-scanner')` is called at the top of `evaluateQueues`, which runs every 60 seconds. Depending on pino's factory implementation, this may be cheap, but it's an unnecessary allocation per tick. The module-level logger pattern used throughout the rest of the codebase (e.g., `auto-destruct-lifecycle.service.ts:20`) is the established convention.
+**Issue:** `createLogger('queue-scanner')` is called at the top of `evaluateQueues`, which runs every 60 seconds. A second `createLogger` call exists inside `startQueueScanner` on line 295. The established convention throughout the codebase is a single module-level logger (e.g., `auto-destruct-lifecycle.service.ts:20`).
 
-**Fix:**
+**Fix:** Move to module scope:
 ```typescript
-// Move outside evaluateQueues, at module scope
 const logger = createLogger('queue-scanner');
 
 export async function evaluateQueues(...) {
-  // remove: const logger = createLogger('queue-scanner');
-  ...
+  // use the module-level logger
 }
 ```
-Same for `startQueueScanner` on line 294 — it creates a second logger with the same name.
 
 ---
 
 ### IN-04: Magic number `5` for spinnable variant preview count
 
-**File:** `packages/web/src/components/queues/SpinnableVariantsDialog.tsx:21`
+**File:** `packages/web/src/components/queues/SpinnableVariantsDialog.tsx:21,37`
 
-**Issue:** `generateVariants(postText, 5)` uses `5` as a magic number in two places (line 21 and line 37). This is a minor readability issue but inconsistent with the named-constants convention in the codebase.
+**Issue:** `generateVariants(postText, 5)` uses `5` as a magic number in two places.
 
-**Fix:**
+**Fix:** Extract to a named constant:
 ```typescript
 const PREVIEW_VARIANT_COUNT = 5;
-// ...
-const [variants, setVariants] = useState<string[]>(() =>
-  hasSpinSyntax ? generateVariants(postText, PREVIEW_VARIANT_COUNT) : [],
-);
-// ...
-setVariants(generateVariants(postText, PREVIEW_VARIANT_COUNT));
 ```
 
 ---
 
-### IN-05: `auto-destruct-worker.test.ts` smoke test for `createAutoDestructWorker` does not verify configuration
+### IN-05: `QueuesPage.tsx` profile display references missing nested property
 
-**File:** `packages/worker/src/__tests__/auto-destruct-worker.test.ts:253-259`
+**File:** `packages/web/src/pages/queues/QueuesPage.tsx:237-239`
 
-**Issue:** The test at line 253 only verifies `typeof createAutoDestructWorker === 'function'`. The comment acknowledges this is intentional due to needing a real Redis connection, but the `attempts: 4` configuration mentioned in the test description (and the file comment on line 7) is never actually verified. Compare to the queue scanner tests which properly verify enqueue behavior via mocked queues. The worker package's own `CLAUDE.md` calls for testing both success and failure paths for async ops.
+**Issue:** The queue list table accesses `queue.profile?.platform` and `queue.profile?.displayName`, but the API returns `network` and `profileName` as top-level fields (see `getQueues` service, lines 153-154). The `QueueListItem` type does have a `profile?: QueueProfile` field, but the API never populates it. As a result, the profile column always shows `'-'` and the platform icon is always empty.
 
-This is an info-level gap — the test won't catch regressions in the worker's concurrency, backoff, or attempt configuration.
-
-**Fix:** Consider extracting the worker config object so it can be tested independently, similar to how `AUTO_DESTRUCT_CONFIG` is already defined as a constant on line 33. A test can assert `AUTO_DESTRUCT_CONFIG.attempts === 4` as a lightweight regression check without needing Redis.
+**Fix:** Use the top-level fields that the API actually returns:
+```tsx
+<span className="text-sm">
+  {getPlatformIcon(queue.network)}{' '}
+  {queue.profileName ?? '-'}
+</span>
+```
+And update `QueueListItem` to include `profileName: string` and `network: string` instead of the nested `profile` object.
 
 ---
 
-_Reviewed: 2026-04-13_
+### IN-06: Auto-destruct worker test only checks `typeof` without verifying config
+
+**File:** `packages/worker/src/__tests__/auto-destruct-worker.test.ts:253-259`
+
+**Issue:** The `createAutoDestructWorker` test only verifies the export is a function. The `AUTO_DESTRUCT_CONFIG` constant (line 33 of `auto-destruct-worker.ts`) is a plain object that could be tested directly for regression (e.g., `expect(AUTO_DESTRUCT_CONFIG.attempts).toBe(4)`), but the constant is not exported.
+
+**Fix:** Export `AUTO_DESTRUCT_CONFIG` and add a lightweight assertion:
+```typescript
+expect(AUTO_DESTRUCT_CONFIG.attempts).toBe(4);
+expect(AUTO_DESTRUCT_CONFIG.concurrency).toBe(2);
+```
+
+---
+
+_Reviewed: 2026-04-13T19:45:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
