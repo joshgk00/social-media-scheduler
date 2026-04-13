@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   FileText,
   PenSquare,
+  ListOrdered,
   Users,
   Settings,
   PanelLeftClose,
@@ -20,6 +21,7 @@ interface SidebarProps {
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/posts', icon: FileText, label: 'Posts' },
+  { to: '/queues', icon: ListOrdered, label: 'Queues' },
   { to: '/posts/new', icon: PenSquare, label: 'New Post', isAction: true },
   { to: '/profiles', icon: Users, label: 'Profiles' },
   { to: '/settings', icon: Settings, label: 'Settings' },
