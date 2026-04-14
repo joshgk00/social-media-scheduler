@@ -318,31 +318,33 @@ export async function removePostFromQueue(
   queueId: string,
   postId: string,
 ): Promise<void> {
-  const [queue] = await db
-    .select({ id: queues.id })
-    .from(queues)
-    .where(and(eq(queues.id, queueId), eq(queues.userId, userId)));
+  await db.transaction(async (tx) => {
+    const [queue] = await tx
+      .select({ id: queues.id })
+      .from(queues)
+      .where(and(eq(queues.id, queueId), eq(queues.userId, userId)));
 
-  if (!queue) {
-    throw new QueueServiceError('Queue not found', 404);
-  }
+    if (!queue) {
+      throw new QueueServiceError('Queue not found', 404);
+    }
 
-  const updatedRows = await db
-    .update(posts)
-    .set({ queueId: null, queuePosition: null, status: 'draft', updatedAt: new Date() })
-    .where(
-      and(
-        eq(posts.id, postId),
-        eq(posts.userId, userId),
-        eq(posts.queueId, queueId),
-        eq(posts.status, 'queued'),
-      ),
-    )
-    .returning({ id: posts.id });
+    const updatedRows = await tx
+      .update(posts)
+      .set({ queueId: null, queuePosition: null, status: 'draft', updatedAt: new Date() })
+      .where(
+        and(
+          eq(posts.id, postId),
+          eq(posts.userId, userId),
+          eq(posts.queueId, queueId),
+          eq(posts.status, 'queued'),
+        ),
+      )
+      .returning({ id: posts.id });
 
-  if (updatedRows.length === 0) {
-    throw new QueueServiceError('Post not found in this queue', 404);
-  }
+    if (updatedRows.length === 0) {
+      throw new QueueServiceError('Post not found in this queue', 404);
+    }
+  });
 
   logger.info({ queueId, postId, userId }, 'Post removed from queue');
 }
