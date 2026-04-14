@@ -1,6 +1,7 @@
 import { pgTable, pgEnum, uuid, text, varchar, timestamp, boolean, integer, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { users } from './users.js';
 import { socialProfiles } from './social-profiles.js';
+import { queues } from './queues.js';
 
 // Keep in sync with POST_STATUSES in packages/shared/src/constants/post-states.ts
 export const postStatusEnum = pgEnum('post_status', [
@@ -30,6 +31,9 @@ export const posts = pgTable('posts', {
   postVersion: integer('post_version').notNull().default(1),
   hasSpinnableText: boolean('has_spinnable_text').notNull().default(false),
   autoDestructAfter: varchar('auto_destruct_after', { length: 50 }),
+  queueId: uuid('queue_id').references(() => queues.id, { onDelete: 'set null' }),
+  queuePosition: integer('queue_position'),
+  destroyedAt: timestamp('destroyed_at', { withTimezone: true }),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -38,4 +42,5 @@ export const posts = pgTable('posts', {
   uniqueIndex('posts_platform_post_id').on(table.platformPostId),
   index('posts_user_status').on(table.userId, table.status),
   index('posts_profile_status').on(table.profileId, table.status),
+  index('posts_queue_position').on(table.queueId, table.queuePosition),
 ]);

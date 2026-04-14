@@ -157,6 +157,9 @@ importers:
 
   packages/shared:
     dependencies:
+      luxon:
+        specifier: ~3.7.2
+        version: 3.7.2
       pino:
         specifier: ~10.3.1
         version: 10.3.1
@@ -167,6 +170,9 @@ importers:
         specifier: ~3.25.76
         version: 3.25.76
     devDependencies:
+      '@types/luxon':
+        specifier: ^3.7.1
+        version: 3.7.1
       '@types/node':
         specifier: ^25.5.2
         version: 25.5.2

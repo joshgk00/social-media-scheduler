@@ -49,9 +49,9 @@ describe('post state machine', () => {
       }
     });
 
-    it('rejects queued -> draft (cannot cancel once queued)', () => {
-      expect(isValidTransition('queued', 'draft')).toBe(false);
-      expect(() => transitionPost('queued', 'draft')).toThrow(/Invalid state transition/);
+    it('allows queued -> draft (queue removal)', () => {
+      expect(isValidTransition('queued', 'draft')).toBe(true);
+      expect(transitionPost('queued', 'draft')).toBe('draft');
     });
   });
 

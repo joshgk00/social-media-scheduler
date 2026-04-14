@@ -35,12 +35,17 @@ const STATUS_STYLES: Record<PostStatus, StatusStyle> = {
     label: 'Failed',
   },
   auto_destructing: {
-    bg: 'bg-[--color-warning]/10',
-    text: 'text-[--color-warning]',
-    border: 'border-[--color-warning]/30',
-    label: 'Deleting',
+    bg: 'bg-destructive/10',
+    text: 'text-destructive/80',
+    border: 'border-destructive/20',
+    label: 'Auto-destructing',
   },
-  destroyed: { bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border', label: 'Destroyed' },
+  destroyed: {
+    bg: 'bg-[--color-success]/10',
+    text: 'text-[--color-success]/70',
+    border: 'border-[--color-success]/20',
+    label: 'Destroyed',
+  },
 };
 
 interface PostStatusBadgeProps {

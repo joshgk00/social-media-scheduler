@@ -14,6 +14,9 @@ const ProfilesPage = lazy(() => import('./pages/profiles/ProfilesPage'));
 const PostsPage = lazy(() => import('./pages/posts/PostsPage'));
 const NewPostPage = lazy(() => import('./pages/posts/NewPostPage'));
 const EditPostPage = lazy(() => import('./pages/posts/EditPostPage'));
+const QueuesPage = lazy(() => import('./pages/queues/QueuesPage'));
+const QueueDetailPage = lazy(() => import('./pages/queues/QueueDetailPage'));
+const QueuePostsPage = lazy(() => import('./pages/queues/QueuePostsPage'));
 
 function DashboardPlaceholder() {
   return (
@@ -40,6 +43,10 @@ export function App() {
               <Route path="/posts" element={<PostsPage />} />
               <Route path="/posts/new" element={<NewPostPage />} />
               <Route path="/posts/:id/edit" element={<EditPostPage />} />
+              <Route path="/queues" element={<QueuesPage />} />
+              <Route path="/queues/new" element={<QueueDetailPage />} />
+              <Route path="/queues/:id/edit" element={<QueueDetailPage />} />
+              <Route path="/queues/:id/posts" element={<QueuePostsPage />} />
               <Route path="/profiles" element={<ProfilesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>

@@ -24,5 +24,8 @@ export {
   type PostStatus,
 } from './constants/post-states.js';
 export * from './constants/queues.js';
+export * from './schemas/queues.js';
 export * from './lib/error-classifier.js';
+export * from './lib/spinnable-text.js';
+export * from './lib/schedule-evaluation.js';
 export * from './rate-limit/check-budget.js';
