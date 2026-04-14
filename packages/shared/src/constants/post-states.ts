@@ -13,7 +13,7 @@ export const POST_STATUSES = [
 export type PostStatus = (typeof POST_STATUSES)[number];
 
 export const POST_STATE_TRANSITIONS: Record<PostStatus, readonly PostStatus[]> = {
-  draft: ['scheduled', 'publishing'],
+  draft: ['scheduled', 'queued', 'publishing'],
   scheduled: ['draft', 'queued', 'publishing'],
   // queued -> publishing only. Cancellation is not supported once a post enters the queue.
   // To stop a queued post, the user must wait for it to fail or be published, then delete.

@@ -4,7 +4,6 @@ import {
   FileText,
   ListOrdered,
   PenSquare,
-  ListOrdered,
   Users,
   Settings,
   PanelLeftClose,

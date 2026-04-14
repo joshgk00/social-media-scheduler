@@ -158,7 +158,7 @@ export default function NewPostPage() {
         profileId: queueData.profileId,
         text,
         isThread,
-        status: 'queued',
+        status: 'draft',
         hasSpinnableText: form.getValues('hasSpinnableText'),
         autoDestructAfter: form.getValues('autoDestructAfter'),
         notes: form.getValues('notes') || null,
