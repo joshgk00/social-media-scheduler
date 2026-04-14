@@ -95,6 +95,22 @@ export const apiClient = {
     return mutationRequest<T>('DELETE', path);
   },
 
+  async retryPost<T = unknown>(postId: string): Promise<T> {
+    return mutationRequest<T>('POST', `/api/posts/${postId}/retry`);
+  },
+
+  async getPostHistory<T = unknown>(postId: string): Promise<T> {
+    return this.get<T>(`/api/posts/${postId}/history`);
+  },
+
+  async getRateLimit<T = unknown>(profileId: string): Promise<T> {
+    return this.get<T>(`/api/profiles/${profileId}/rate-limit`);
+  },
+
+  async updateRateLimit<T = unknown>(profileId: string, body: unknown): Promise<T> {
+    return mutationRequest<T>('PATCH', `/api/profiles/${profileId}/rate-limit`, body);
+  },
+
   async postFormData<T = unknown>(path: string, formData: FormData): Promise<T> {
     const token = await getCsrfToken();
     const res = await fetch(path, {

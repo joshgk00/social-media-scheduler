@@ -19,6 +19,8 @@ import { TagSelector } from '../../components/posts/TagSelector';
 import { AutoDestructPicker } from '../../components/posts/AutoDestructPicker';
 import { ScheduleConflictBanner } from '../../components/posts/ScheduleConflictBanner';
 import { TagManagementDialog } from '../../components/posts/TagManagementDialog';
+import { RateLimitBanner } from '../../components/posts/RateLimitBanner';
+import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
 import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -59,6 +61,7 @@ export default function EditPostPage() {
   ]);
   const [isTagManageOpen, setIsTagManageOpen] = useState(false);
   const [isFormInitialized, setIsFormInitialized] = useState(false);
+  const [isRateLimitDialogOpen, setIsRateLimitDialogOpen] = useState(false);
 
   const form = useForm<EditFormValues>({
     defaultValues: {
@@ -314,6 +317,12 @@ export default function EditPostPage() {
         },
         onError: (error: Error & { status?: number; body?: Record<string, unknown> }) => {
           if (error.status === 409) {
+            if (error.body?.code === 'twitter_budget_exceeded') {
+              toast.error(
+                `Twitter monthly budget reached (${error.body.currentCount}/${error.body.budget}).`,
+              );
+              return;
+            }
             const errorMsg = String(error.body?.error ?? '');
             if (errorMsg.includes('modified elsewhere')) {
               toast.error('This post was modified elsewhere. Refreshing to show latest version.');
@@ -338,6 +347,11 @@ export default function EditPostPage() {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Left column: form */}
         <div className="flex-1 lg:max-w-[60%] space-y-6">
+          <RateLimitBanner
+            profileId={watchedProfileId || null}
+            onEditBudget={() => setIsRateLimitDialogOpen(true)}
+          />
+
           {/* Profile selector */}
           <div className="space-y-2">
             <Label htmlFor="profile-select">Profile</Label>
@@ -479,6 +493,13 @@ export default function EditPostPage() {
       </div>
 
       <TagManagementDialog open={isTagManageOpen} onOpenChange={setIsTagManageOpen} />
+
+      <RateLimitSettingsDialog
+        profileId={watchedProfileId || null}
+        handle={selectedProfile?.handle ?? ''}
+        open={isRateLimitDialogOpen}
+        onOpenChange={setIsRateLimitDialogOpen}
+      />
     </main>
   );
 }

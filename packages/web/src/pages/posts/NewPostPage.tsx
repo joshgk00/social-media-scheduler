@@ -18,6 +18,9 @@ import { TagSelector } from '../../components/posts/TagSelector';
 import { AutoDestructPicker } from '../../components/posts/AutoDestructPicker';
 import { ScheduleConflictBanner } from '../../components/posts/ScheduleConflictBanner';
 import { TagManagementDialog } from '../../components/posts/TagManagementDialog';
+import { RateLimitBanner } from '../../components/posts/RateLimitBanner';
+import { RateLimitBlockError, type RateLimitBlockErrorDetail } from '../../components/posts/RateLimitBlockError';
+import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
 import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -53,6 +56,8 @@ export default function NewPostPage() {
     { id: crypto.randomUUID(), text: '' },
   ]);
   const [isTagManageOpen, setIsTagManageOpen] = useState(false);
+  const [rateLimitBlockError, setRateLimitBlockError] = useState<RateLimitBlockErrorDetail | null>(null);
+  const [isRateLimitDialogOpen, setIsRateLimitDialogOpen] = useState(false);
 
   const form = useForm<PostFormValues>({
     defaultValues: {
@@ -134,6 +139,7 @@ export default function NewPostPage() {
       ? form.getValues('scheduledAt')
       : null;
 
+    setRateLimitBlockError(null);
     createPostMutation.mutate(
       {
         profileId: form.getValues('profileId'),
@@ -151,7 +157,15 @@ export default function NewPostPage() {
           toast.success(action === 'draft' ? 'Draft saved.' : 'Post scheduled.');
           navigate('/posts');
         },
-        onError: (error: Error) => {
+        onError: (error: Error & { status?: number; body?: Record<string, unknown> }) => {
+          if (error.status === 409 && error.body?.code === 'twitter_budget_exceeded') {
+            setRateLimitBlockError({
+              code: 'twitter_budget_exceeded',
+              budget: Number(error.body.budget ?? 0),
+              currentCount: Number(error.body.currentCount ?? 0),
+            });
+            return;
+          }
           toast.error(error.message || 'Failed to create post.');
         },
       },
@@ -179,6 +193,11 @@ export default function NewPostPage() {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Left column: form */}
         <div className="flex-1 lg:max-w-[60%] space-y-6">
+          <RateLimitBanner
+            profileId={watchedProfileId || null}
+            onEditBudget={() => setIsRateLimitDialogOpen(true)}
+          />
+
           {/* Profile selector */}
           <div className="space-y-2">
             <Label htmlFor="profile-select">Profile</Label>
@@ -253,6 +272,12 @@ export default function NewPostPage() {
             {conflicts && conflicts.length > 0 && (
               <ScheduleConflictBanner conflicts={conflicts} />
             )}
+            {rateLimitBlockError && (
+              <RateLimitBlockError
+                error={rateLimitBlockError}
+                onRaiseBudget={() => setIsRateLimitDialogOpen(true)}
+              />
+            )}
           </div>
 
           {/* Tags selector */}
@@ -320,6 +345,13 @@ export default function NewPostPage() {
       </div>
 
       <TagManagementDialog open={isTagManageOpen} onOpenChange={setIsTagManageOpen} />
+
+      <RateLimitSettingsDialog
+        profileId={watchedProfileId || null}
+        handle={selectedProfile?.handle ?? ''}
+        open={isRateLimitDialogOpen}
+        onOpenChange={setIsRateLimitDialogOpen}
+      />
     </main>
   );
 }

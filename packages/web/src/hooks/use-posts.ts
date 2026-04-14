@@ -75,6 +75,8 @@ export function usePosts(filters: PostFilters = {}) {
     queryKey: ['posts', filters],
     queryFn: () => apiClient.get<PostsResponse>(`/api/posts${queryString ? `?${queryString}` : ''}`),
     staleTime: 15_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false, // pause polling when tab hidden (D-15)
   });
 }
 

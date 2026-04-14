@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Infrastructure & Foundation** - Monorepo scaffold, Docker Compose stack, database, Redis, HTTPS, encryption module, health endpoint, structured logging
 - [ ] **Phase 2: Authentication & User Account** - Login, sessions, 2FA, password management, user settings
 - [ ] **Phase 3: Twitter Profile & Post Creation** - Twitter OAuth connection, tweet creation forms, common post fields, post state machine, tags
-- [ ] **Phase 4: Publish Worker & Scheduled Posts** - BullMQ worker service, publish pipeline with retry and idempotency, scheduled posts list, Twitter rate limit tracking
+- [x] **Phase 4: Publish Worker & Scheduled Posts** - BullMQ worker service, publish pipeline with retry and idempotency, scheduled posts list, Twitter rate limit tracking (completed 2026-04-10)
 - [ ] **Phase 5: Queue Engine** - Queue CRUD, timezone-aware queue scheduling, queue post management, auto-destruct worker
 - [ ] **Phase 6: Media Handling** - Image upload and thumbnailing, video transcoding via ffmpeg, storage backend selection, media cleanup
 - [ ] **Phase 7: Multi-Platform Profiles & Token Lifecycle** - LinkedIn and Facebook OAuth connections, profile management UI, token health monitoring, auto-refresh
@@ -92,13 +92,14 @@ Plans:
   3. Stalled job recovery does not cause duplicate posts -- worker checks `platform_post_id` before re-attempting publish
   4. User can view all scheduled posts in a filterable list with per-post actions (edit, delete, view history, view full text)
   5. Twitter rate limit tracking respects the user's configured monthly budget; publishing is blocked when budget is reached; new posts show pre-flight warning at 90%
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [x] 04-01-PLAN.md — post_attempts table + social_profiles rate-limit columns + Drizzle migration ([BLOCKING] schema push)
+- [x] 04-02-PLAN.md — Shared queue constants, error classifier, Zod schemas, rate-limit + publish-queue services, dependency installs
+- [x] 04-03-PLAN.md — Publish worker, scanner, lifecycle service, twitter publish service, graceful shutdown
+- [x] 04-04-PLAN.md — Retry/history/rate-limit/admin endpoints with security checks (Bull-Board mounted behind requireAuth)
+- [x] 04-05-PLAN.md — Posts page extensions, history modal, rate limit banner/block/settings UI (human verification checkpoint)
+- [x] 04-06-PLAN.md — Integration tests (testcontainers), graceful shutdown test, finalize VALIDATION.md, phase sign-off
 
 ### Phase 5: Queue Engine
 **Goal**: User can create persistent post queues that publish on a recurring schedule with timezone-aware timing, post recycling, and auto-destruct
@@ -237,7 +238,7 @@ Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could the
 | 1. Infrastructure & Foundation | 0/5 | Planning complete | - |
 | 2. Authentication & User Account | 0/6 | Planning complete | - |
 | 3. Twitter Profile & Post Creation | 0/TBD | Not started | - |
-| 4. Publish Worker & Scheduled Posts | 0/TBD | Not started | - |
+| 4. Publish Worker & Scheduled Posts | 6/6 | Complete    | 2026-04-10 |
 | 5. Queue Engine | 0/TBD | Not started | - |
 | 6. Media Handling | 0/TBD | Not started | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |

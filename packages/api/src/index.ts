@@ -7,10 +7,13 @@ const __dirname = dirname(__filename);
 config({ path: resolve(__dirname, '../../../.env') });
 
 import { Redis } from 'ioredis';
+import { Queue } from 'bullmq';
+import { QUEUE_NAMES } from '@sms/shared';
 import { runMigrations, createDbClient } from '@sms/db';
 import { requireEnv } from '@sms/shared/env';
 import { logger } from './middleware/logger.js';
 import { createApp } from './app.js';
+import { createPublishQueueService } from './services/publish-queue.service.js';
 
 const DATABASE_URL = requireEnv('DATABASE_URL');
 const REDIS_URL = requireEnv('REDIS_URL');
@@ -25,10 +28,27 @@ async function main() {
 
   const { sql, db } = createDbClient(DATABASE_URL);
 
-  const redis = new Redis(REDIS_URL);
+  const redis = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
   redis.on('error', (err) => logger.error({ err }, 'Redis connection error'));
 
-  const app = createApp({ redis, sql, db, sessionSecret: SESSION_SECRET });
+  const publishQueueService = createPublishQueueService(redis);
+  const notificationQueue = new Queue(QUEUE_NAMES.notification, {
+    connection: redis,
+    defaultJobOptions: {
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 500 },
+      attempts: 3,
+    },
+  });
+
+  const app = createApp({
+    redis,
+    sql,
+    db,
+    sessionSecret: SESSION_SECRET,
+    publishQueueService,
+    notificationQueue,
+  });
   const port = parseInt(process.env.PORT || '3000', 10);
 
   app.listen(port, () => {
@@ -37,6 +57,8 @@ async function main() {
 
   const shutdown = async () => {
     logger.info('Shutting down...');
+    try { await publishQueueService.publishQueue.close(); } catch (err) { logger.error({ err }, 'Publish queue shutdown error'); }
+    try { await notificationQueue.close(); } catch (err) { logger.error({ err }, 'Notification queue shutdown error'); }
     try { await redis.quit(); } catch (err) { logger.error({ err }, 'Redis shutdown error'); }
     try { await sql.end(); } catch (err) { logger.error({ err }, 'Database shutdown error'); }
     process.exit(0);
