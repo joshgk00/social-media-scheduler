@@ -111,12 +111,4 @@ export function useDeleteQueue() {
   });
 }
 
-export function useCopyQueueConfig(id: string) {
-  return useQuery({
-    queryKey: ['queues', id, 'config'],
-    queryFn: () => apiClient.get<QueueConfig>(`/api/queues/${id}/config`),
-    enabled: false,
-  });
-}
-
 export type { QueueDetail, QueueConfig };

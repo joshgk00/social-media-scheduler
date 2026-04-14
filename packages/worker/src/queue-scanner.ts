@@ -29,6 +29,7 @@ import {
   hasIntervalElapsed,
   isWithinSeasonalWindow,
   resolveSpinnableText,
+  calculateNextRunAt,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import { DateTime } from 'luxon';
@@ -123,11 +124,11 @@ export async function evaluateQueues(
       }
     }
 
-    // 2. Seasonal window check
+    // 2. Seasonal window check (timezone-adjusted so near-midnight evaluations use correct local date)
     if (!isWithinSeasonalWindow(
       queue.seasonalStart,
       queue.seasonalEnd,
-      currentNow,
+      currentNow.setZone(userTimezone),
     )) {
       continue;
     }
@@ -234,7 +235,22 @@ export async function evaluateQueues(
           .update(queues)
           .set({
             cursorPosition: result.queuePosition,
-            nextRunAt: new Date(currentNow.plus({ minutes: 5 }).toMillis()),
+            nextRunAt: (() => {
+              const next = calculateNextRunAt(
+                {
+                  intervalType: queue.intervalType,
+                  intervalValue: queue.intervalValue,
+                  intervalUnit: queue.intervalUnit,
+                  hourSlots: queue.hourSlots as number[],
+                  daysOfWeek: queue.daysOfWeek as number[],
+                  lastPublishedAt: queue.lastPublishedAt,
+                  startDate: queue.startDate,
+                },
+                userTimezone,
+                currentNow,
+              );
+              return next ? new Date(next.toMillis()) : new Date(currentNow.plus({ minutes: 5 }).toMillis());
+            })(),
             updatedAt: new Date(),
           })
           .where(eq(queues.id, queue.id));

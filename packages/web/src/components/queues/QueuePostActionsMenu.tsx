@@ -33,7 +33,8 @@ interface QueuePostActionsMenuProps {
   queueId: string;
   isRecycling: boolean;
   cursorPosition: number;
-  totalPosts: number;
+  isFirst: boolean;
+  isLast: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDelete: () => void;
@@ -49,7 +50,8 @@ export function QueuePostActionsMenu({
   queueId,
   isRecycling,
   cursorPosition,
-  totalPosts,
+  isFirst,
+  isLast,
   onMoveUp,
   onMoveDown,
   onDelete,
@@ -60,16 +62,12 @@ export function QueuePostActionsMenu({
   const navigate = useNavigate();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const position = post.queuePosition ?? 0;
   const isQueued = post.status === 'queued';
   const isPublishing = post.status === 'publishing';
   const isDeletable = DELETABLE_QUEUE_STATES.includes(post.status);
 
-  const isFirstPosition = position <= 1;
-  const isLastPosition = position >= totalPosts;
-
-  const canMoveUp = !isFirstPosition && isQueued && !isPublishing;
-  const canMoveDown = !isLastPosition && isQueued && !isPublishing;
+  const canMoveUp = !isFirst && isQueued && !isPublishing;
+  const canMoveDown = !isLast && isQueued && !isPublishing;
   const canEdit = isQueued && !isPublishing;
   const canDelete = isDeletable && !isPublishing;
 

@@ -184,7 +184,7 @@ export function ScheduleBuilder({ control, watch }: ScheduleBuilderProps) {
                 value={field.value ? field.value.split('T')[0] : ''}
                 onChange={(e) => {
                   const dateValue = e.target.value;
-                  field.onChange(dateValue ? `${dateValue}T00:00:00.000Z` : undefined);
+                  field.onChange(dateValue || undefined);
                 }}
               />
             </FormControl>

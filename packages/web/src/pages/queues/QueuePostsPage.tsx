@@ -190,12 +190,12 @@ export default function QueuePostsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {queuePosts?.map((post) => {
+              {queuePosts?.map((post, index) => {
                 const position = post.queuePosition ?? 0;
                 const isCursor = position === cursorPosition;
                 const isDisabled = isReorderDisabled(post);
-                const isFirst = position <= 1;
-                const isLast = position >= totalPosts;
+                const isFirst = index === 0;
+                const isLast = index === (queuePosts.length - 1);
 
                 return (
                   <TableRow key={post.id} className={getRowClassName(post)}>
@@ -290,7 +290,8 @@ export default function QueuePostsPage() {
                         queueId={queueId ?? ''}
                         isRecycling={isRecycling}
                         cursorPosition={cursorPosition}
-                        totalPosts={totalPosts}
+                        isFirst={isFirst}
+                        isLast={isLast}
                         onMoveUp={() => moveUpMutation.mutate(post.id)}
                         onMoveDown={() => moveDownMutation.mutate(post.id)}
                         onDelete={() => removeMutation.mutate(post.id)}

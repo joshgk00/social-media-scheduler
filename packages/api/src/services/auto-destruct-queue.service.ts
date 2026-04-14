@@ -42,7 +42,7 @@ export function createAutoDestructQueueService(redis: Redis): AutoDestructQueueS
     defaultJobOptions: {
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 500 },
-      attempts: 3,
+      attempts: 4,
       backoff: { type: 'exponential', delay: 30_000 },
     },
   });

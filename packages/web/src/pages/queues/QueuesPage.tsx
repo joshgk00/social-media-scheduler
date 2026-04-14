@@ -4,7 +4,9 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { Plus, Search, ListOrdered } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { useQueues, useDeleteQueue, useCopyQueueConfig, type QueueListItem, type QueueFilters } from '../../hooks/use-queues';
+import { useQueryClient } from '@tanstack/react-query';
+import { useQueues, useDeleteQueue, type QueueListItem, type QueueFilters } from '../../hooks/use-queues';
+import { apiClient } from '../../lib/api-client';
 import { QueueStatusBadge } from '../../components/queues/QueueStatusBadge';
 import { QueueActionsMenu } from '../../components/queues/QueueActionsMenu';
 
@@ -38,11 +40,9 @@ export default function QueuesPage() {
 
   const [filters, setFilters] = useState<QueueFilters>({});
   const [searchInput, setSearchInput] = useState('');
-  const [copyingQueueId, setCopyingQueueId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: queues, isLoading, isError, refetch } = useQueues(filters);
-
-  const copyConfigQuery = useCopyQueueConfig(copyingQueueId ?? '');
 
   const hasActiveFilters = !!(filters.network || filters.status || searchInput);
 
@@ -61,17 +61,15 @@ export default function QueuesPage() {
   }
 
   async function handleCopyConfig(queueId: string) {
-    setCopyingQueueId(queueId);
     try {
-      const { data } = await copyConfigQuery.refetch();
-      if (data) {
-        toast.success('Queue configuration copied. Create a new queue to use it.');
-        navigate(`/queues/new?copyFrom=${queueId}`, { state: { copiedConfig: data } });
-      }
+      const data = await queryClient.fetchQuery({
+        queryKey: ['queues', queueId, 'config'],
+        queryFn: () => apiClient.get(`/api/queues/${queueId}/config`),
+      });
+      toast.success('Queue configuration copied. Create a new queue to use it.');
+      navigate(`/queues/new?copyFrom=${queueId}`, { state: { copiedConfig: data } });
     } catch {
       toast.error('Failed to copy queue configuration.');
-    } finally {
-      setCopyingQueueId(null);
     }
   }
 
