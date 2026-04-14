@@ -10,16 +10,16 @@
 //   4. Hour window
 //   5. Interval elapsed
 //
-// Pitfall 2 prevention: nextRunAt updated atomically within a transaction
-// before the publish job is enqueued, preventing double-evaluation on the
-// next 60s tick.
+// Pitfall 2 prevention: BullMQ enqueue happens BEFORE cursor advance.
+// If Redis fails, cursor stays put and the post retries next tick.
+// BullMQ jobId dedup (buildPublishJobId) prevents double-publish.
 //
 // Pitfall 6: cursor advancement uses queue_position > cursorPosition,
 // not = cursorPosition+1, to handle gaps from deleted posts.
 
 import { Queue, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { eq, and, gt, asc, sql } from 'drizzle-orm';
+import { eq, and, gt, asc, lte, sql } from 'drizzle-orm';
 import { queues, posts, users } from '@sms/db';
 import {
   JOB_NAMES,
@@ -30,13 +30,13 @@ import {
   isWithinSeasonalWindow,
   resolveSpinnableText,
   calculateNextRunAt,
+  transitionPost,
+  type PostStatus,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import { DateTime } from 'luxon';
 import { randomUUID } from 'node:crypto';
 import type { WorkerDb } from './db.js';
-
-let lastNotificationError: number = 0;
 
 export const QUEUE_SCANNER_QUEUE_NAME = 'queue-scanner';
 export const QUEUE_SCAN_INTERVAL_MS = 60_000;
@@ -52,11 +52,11 @@ interface ActiveQueueRow {
   userId: string;
   profileId: string;
   isPaused: boolean;
-  intervalType: string;
+  intervalType: 'fixed' | 'variable';
   intervalValue: number;
   intervalUnit: string;
-  daysOfWeek: unknown;
-  hourSlots: unknown;
+  daysOfWeek: number[];
+  hourSlots: number[];
   seasonalStart: string | null;
   seasonalEnd: string | null;
   seasonalRepeat: boolean;
@@ -82,6 +82,7 @@ export async function evaluateQueues(
   publishQueue: Queue,
   notificationQueue: Queue,
   now?: DateTime,
+  notificationThrottle: Map<string, number> = new Map(),
 ): Promise<number> {
   const logger = createLogger('queue-scanner');
   const currentNow = now ?? DateTime.utc();
@@ -111,94 +112,87 @@ export async function evaluateQueues(
     })
     .from(queues)
     .innerJoin(users, eq(queues.userId, users.id))
-    .where(eq(queues.isPaused, false));
+    .where(and(eq(queues.isPaused, false), lte(queues.nextRunAt, sql`NOW()`)));
 
   logger.info({ activeQueueCount: activeQueues.length }, 'Queue scanner pass');
 
   for (const queue of activeQueues as ActiveQueueRow[]) {
-    const userTimezone = queue.timezone || 'UTC';
+    try {
+      const userTimezone = queue.timezone || 'UTC';
 
-    // 1. startDate check
-    if (queue.startDate) {
-      const startDateTime = DateTime.fromJSDate(queue.startDate);
-      if (currentNow < startDateTime) {
+      // 1. startDate check
+      if (queue.startDate) {
+        const startDateTime = DateTime.fromJSDate(queue.startDate);
+        if (currentNow < startDateTime) {
+          continue;
+        }
+      }
+
+      // 2. Seasonal window check (timezone-adjusted so near-midnight evaluations use correct local date)
+      if (!isWithinSeasonalWindow(
+        queue.seasonalStart,
+        queue.seasonalEnd,
+        currentNow.setZone(userTimezone),
+      )) {
         continue;
       }
-    }
 
-    // 2. Seasonal window check (timezone-adjusted so near-midnight evaluations use correct local date)
-    if (!isWithinSeasonalWindow(
-      queue.seasonalStart,
-      queue.seasonalEnd,
-      currentNow.setZone(userTimezone),
-    )) {
-      continue;
-    }
+      // 3. Day-of-week check
+      if (!isDayOfWeekAllowed(queue.daysOfWeek, userTimezone, currentNow)) {
+        continue;
+      }
 
-    // 3. Day-of-week check
-    if (!isDayOfWeekAllowed(queue.daysOfWeek as number[], userTimezone, currentNow)) {
-      continue;
-    }
+      // 4. Hour window check
+      if (!isWithinHourWindow(queue.hourSlots, userTimezone, currentNow)) {
+        continue;
+      }
 
-    // 4. Hour window check
-    if (!isWithinHourWindow(queue.hourSlots as number[], userTimezone, currentNow)) {
-      continue;
-    }
+      // 5. Interval elapsed check
+      const lastPublishedLuxon = queue.lastPublishedAt
+        ? DateTime.fromJSDate(queue.lastPublishedAt)
+        : null;
+      if (!hasIntervalElapsed(
+        queue.intervalType,
+        queue.intervalValue,
+        queue.intervalUnit,
+        lastPublishedLuxon,
+        userTimezone,
+        currentNow,
+      )) {
+        continue;
+      }
 
-    // 5. Interval elapsed check
-    const lastPublishedLuxon = queue.lastPublishedAt
-      ? DateTime.fromJSDate(queue.lastPublishedAt)
-      : null;
-    if (!hasIntervalElapsed(
-      queue.intervalType as 'fixed' | 'variable',
-      queue.intervalValue,
-      queue.intervalUnit,
-      lastPublishedLuxon,
-      userTimezone,
-      currentNow,
-    )) {
-      continue;
-    }
-
-    // Pitfall 2: All post selection, recycling, and cursor advance in one transaction
-    const nextPost = await db.transaction(async (tx): Promise<QueuedPostRow | null> => {
-      // Find next queued post: queue_position > cursor (Pitfall 6: gap-safe)
-      const nextPosts = await tx
-        .select({
-          id: posts.id,
-          postVersion: posts.postVersion,
-          text: posts.text,
-          hasSpinnableText: posts.hasSpinnableText,
-          queuePosition: posts.queuePosition,
-          status: posts.status,
-        })
-        .from(posts)
-        .where(
-          and(
-            eq(posts.queueId, queue.id),
-            gt(posts.queuePosition, queue.cursorPosition),
-            eq(posts.status, 'queued'),
-          ),
-        )
-        .orderBy(asc(posts.queuePosition))
-        .limit(1);
-
-      let result: QueuedPostRow | null = (nextPosts[0] as QueuedPostRow | undefined) ?? null;
-
-      // If no queued post found and recycling is ON: transition published->queued, wrap cursor
-      if (!result && queue.isRecycling) {
-        const publishedPosts = await tx
-          .select({ id: posts.id })
+      // Select next post and handle recycling in a transaction (no cursor advance yet)
+      const nextQueuedPost = await db.transaction(async (tx): Promise<QueuedPostRow | null> => {
+        // Find next queued post: queue_position > cursor (Pitfall 6: gap-safe)
+        const nextPosts = await tx
+          .select({
+            id: posts.id,
+            postVersion: posts.postVersion,
+            text: posts.text,
+            hasSpinnableText: posts.hasSpinnableText,
+            queuePosition: posts.queuePosition,
+            status: posts.status,
+          })
           .from(posts)
           .where(
             and(
               eq(posts.queueId, queue.id),
-              eq(posts.status, 'published'),
+              gt(posts.queuePosition, queue.cursorPosition),
+              eq(posts.status, 'queued'),
             ),
-          );
+          )
+          .orderBy(asc(posts.queuePosition))
+          .limit(1);
 
-        if (publishedPosts.length > 0) {
-          await tx
+        let candidate: QueuedPostRow | null = (nextPosts[0] as QueuedPostRow | undefined) ?? null;
+
+        // If no queued post found and recycling is ON: transition published->queued, wrap cursor
+        if (!candidate && queue.isRecycling) {
+          // Validate the transition is legal before bulk update (will throw if not)
+          transitionPost('published', 'queued');
+
+          const recycled = await tx
             .update(posts)
             .set({ status: 'queued', updatedAt: new Date() })
             .where(
@@ -206,102 +200,109 @@ export async function evaluateQueues(
                 eq(posts.queueId, queue.id),
                 eq(posts.status, 'published'),
               ),
-            );
-
-          const minPosts = await tx
-            .select({
-              id: posts.id,
-              postVersion: posts.postVersion,
-              text: posts.text,
-              hasSpinnableText: posts.hasSpinnableText,
-              queuePosition: posts.queuePosition,
-              status: posts.status,
-            })
-            .from(posts)
-            .where(
-              and(
-                eq(posts.queueId, queue.id),
-                eq(posts.status, 'queued'),
-              ),
             )
-            .orderBy(asc(posts.queuePosition))
-            .limit(1);
+            .returning({
+              id: posts.id,
+            });
 
-          result = (minPosts[0] as QueuedPostRow | undefined) ?? null;
+          if (recycled.length > 0) {
+            const minPosts = await tx
+              .select({
+                id: posts.id,
+                postVersion: posts.postVersion,
+                text: posts.text,
+                hasSpinnableText: posts.hasSpinnableText,
+                queuePosition: posts.queuePosition,
+                status: posts.status,
+              })
+              .from(posts)
+              .where(
+                and(
+                  eq(posts.queueId, queue.id),
+                  eq(posts.status, 'queued'),
+                ),
+              )
+              .orderBy(asc(posts.queuePosition))
+              .limit(1);
+
+            candidate = (minPosts[0] as QueuedPostRow | undefined) ?? null;
+          }
         }
-      }
 
-      if (result) {
-        // Advance cursor to the selected post's position
-        await tx
-          .update(queues)
-          .set({
-            cursorPosition: result.queuePosition,
-            nextRunAt: (() => {
-              const next = calculateNextRunAt(
-                {
-                  intervalType: queue.intervalType,
-                  intervalValue: queue.intervalValue,
-                  intervalUnit: queue.intervalUnit,
-                  hourSlots: queue.hourSlots as number[],
-                  daysOfWeek: queue.daysOfWeek as number[],
-                  lastPublishedAt: queue.lastPublishedAt,
-                  startDate: queue.startDate,
-                },
-                userTimezone,
-                currentNow,
-              );
-              return next ? new Date(next.toMillis()) : new Date(currentNow.plus({ minutes: 5 }).toMillis());
-            })(),
-            updatedAt: new Date(),
-          })
-          .where(eq(queues.id, queue.id));
-      }
+        return candidate;
+      });
 
-      return result;
-    });
-
-    // If no post found: emit queue-empty notification (outside tx — BullMQ calls must not be inside a DB tx)
-    if (!nextPost) {
-      if (Date.now() - lastNotificationError < 60_000) {
+      // If no post found: emit queue-empty notification (outside tx -- BullMQ calls must not be inside a DB tx)
+      if (!nextQueuedPost) {
+        const lastError = notificationThrottle.get(queue.id) ?? 0;
+        if (Date.now() - lastError < 60_000) {
+          continue;
+        }
+        await notificationQueue.add(JOB_NAMES.queueEmptyNotification, {
+          kind: 'queue_empty',
+          queueId: queue.id,
+          queueName: queue.name,
+          at: new Date().toISOString(),
+        }).catch((err: unknown) => {
+          notificationThrottle.set(queue.id, Date.now());
+          logger.error({ err, queueId: queue.id }, 'Failed to enqueue queue-empty notification');
+        });
         continue;
       }
-      await notificationQueue.add(JOB_NAMES.queueEmptyNotification, {
-        kind: 'queue_empty',
-        queueId: queue.id,
-        queueName: queue.name,
-        at: new Date().toISOString(),
-      }).catch((err: unknown) => {
-        lastNotificationError = Date.now();
-        logger.error({ err, queueId: queue.id }, 'Failed to enqueue queue-empty notification');
-      });
+
+      // Resolve spinnable text at enqueue time (D-05)
+      const resolvedText = nextQueuedPost.hasSpinnableText
+        ? resolveSpinnableText(nextQueuedPost.text)
+        : undefined;
+
+      const correlationId = randomUUID();
+      const jobId = buildPublishJobId(nextQueuedPost.id, nextQueuedPost.postVersion);
+
+      // Enqueue to publish queue BEFORE advancing cursor (BullMQ jobId dedup prevents double-publish)
+      await publishQueue.add(
+        JOB_NAMES.publishPost,
+        {
+          postId: nextQueuedPost.id,
+          postVersion: nextQueuedPost.postVersion,
+          correlationId,
+          ...(resolvedText !== undefined ? { resolvedText } : {}),
+        },
+        {
+          delay: 0,
+          jobId,
+        },
+      );
+
+      // Advance cursor only after successful enqueue
+      await db
+        .update(queues)
+        .set({
+          cursorPosition: nextQueuedPost.queuePosition,
+          nextRunAt: (() => {
+            const next = calculateNextRunAt(
+              {
+                intervalType: queue.intervalType,
+                intervalValue: queue.intervalValue,
+                intervalUnit: queue.intervalUnit,
+                hourSlots: queue.hourSlots,
+                daysOfWeek: queue.daysOfWeek,
+                lastPublishedAt: queue.lastPublishedAt,
+                startDate: queue.startDate,
+              },
+              userTimezone,
+              currentNow,
+            );
+            return next ? new Date(next.toMillis()) : new Date(currentNow.plus({ minutes: 5 }).toMillis());
+          })(),
+          updatedAt: new Date(),
+        })
+        .where(eq(queues.id, queue.id));
+
+      enqueuedCount++;
+    } catch (queueErr) {
+      logger.error({ err: queueErr, queueId: queue.id }, 'Failed to process queue');
       continue;
     }
-
-    // Resolve spinnable text at enqueue time (D-05)
-    const resolvedText = nextPost.hasSpinnableText
-      ? resolveSpinnableText(nextPost.text)
-      : undefined;
-
-    const correlationId = randomUUID();
-    const jobId = buildPublishJobId(nextPost.id, nextPost.postVersion);
-
-    // Enqueue to publish queue
-    await publishQueue.add(
-      JOB_NAMES.publishPost,
-      {
-        postId: nextPost.id,
-        postVersion: nextPost.postVersion,
-        correlationId,
-        ...(resolvedText !== undefined ? { resolvedText } : {}),
-      },
-      {
-        delay: 0,
-        jobId,
-      },
-    );
-
-    enqueuedCount++;
   }
 
   if (enqueuedCount === 0) {
@@ -318,6 +319,7 @@ export async function startQueueScanner(
   notificationQueue: Queue,
 ): Promise<StartQueueScannerResult> {
   const logger = createLogger('queue-scanner');
+  const notificationThrottle = new Map<string, number>();
 
   const queueScannerQueue = new Queue(QUEUE_SCANNER_QUEUE_NAME, {
     connection: redis,
@@ -338,7 +340,7 @@ export async function startQueueScanner(
     QUEUE_SCANNER_QUEUE_NAME,
     async () => {
       try {
-        await evaluateQueues(db, publishQueue, notificationQueue);
+        await evaluateQueues(db, publishQueue, notificationQueue, undefined, notificationThrottle);
       } catch (err) {
         logger.error({ err }, 'Queue scanner pass failed');
         throw err;

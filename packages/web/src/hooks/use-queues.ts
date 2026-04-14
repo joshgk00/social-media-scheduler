@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiClient } from '../lib/api-client';
 import type { CreateQueueInput, UpdateQueueInput } from '@sms/shared';
 
@@ -85,6 +86,9 @@ export function useCreateQueue() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
     },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to create queue');
+    },
   });
 }
 
@@ -97,6 +101,9 @@ export function useUpdateQueue() {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
       queryClient.invalidateQueries({ queryKey: ['queues', variables.id] });
     },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to update queue');
+    },
   });
 }
 
@@ -107,6 +114,9 @@ export function useDeleteQueue() {
       apiClient.delete<{ success: boolean }>(`/api/queues/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to delete queue');
     },
   });
 }

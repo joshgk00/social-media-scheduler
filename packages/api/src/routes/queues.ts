@@ -14,10 +14,10 @@ import {
   getQueuePosts,
   movePostUp,
   movePostDown,
-  QueueServiceError,
 } from '../services/queue.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { validateUuidParam } from '../middleware/validation.js';
+import { queueMutationLimiter } from '../middleware/rate-limiter.js';
 
 interface QueuesDependencies {
   db: Db;
@@ -37,23 +37,15 @@ export function createQueuesRouter({ db }: QueuesDependencies) {
     res.json(queueList);
   });
 
-  router.post('/', requireAuth, async (req, res) => {
+  router.post('/', requireAuth, queueMutationLimiter, async (req, res) => {
     const parsed = createQueueSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
       return;
     }
 
-    try {
-      const queue = await createQueue(db, req.session.userId!, parsed.data);
-      res.status(201).json(queue);
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    const queue = await createQueue(db, req.session.userId!, parsed.data);
+    res.status(201).json(queue);
   });
 
   router.get('/:id', requireAuth, async (req, res) => {
@@ -66,7 +58,7 @@ export function createQueuesRouter({ db }: QueuesDependencies) {
     res.json(queue);
   });
 
-  router.put('/:id', requireAuth, async (req, res) => {
+  router.put('/:id', requireAuth, queueMutationLimiter, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
     const parsed = updateQueueSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -74,61 +66,29 @@ export function createQueuesRouter({ db }: QueuesDependencies) {
       return;
     }
 
-    try {
-      const queue = await updateQueue(db, req.session.userId!, queueId, parsed.data);
-      res.json(queue);
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    const queue = await updateQueue(db, req.session.userId!, queueId, parsed.data);
+    res.json(queue);
   });
 
-  router.delete('/:id', requireAuth, async (req, res) => {
+  router.delete('/:id', requireAuth, queueMutationLimiter, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
-    try {
-      await deleteQueue(db, req.session.userId!, queueId);
-      res.status(204).send();
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    await deleteQueue(db, req.session.userId!, queueId);
+    res.status(204).send();
   });
 
   router.get('/:id/config', requireAuth, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
-    try {
-      const config = await copyQueueConfig(db, req.session.userId!, queueId);
-      res.json(config);
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    const config = await copyQueueConfig(db, req.session.userId!, queueId);
+    res.json(config);
   });
 
   router.get('/:id/posts', requireAuth, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
-    try {
-      const queuePosts = await getQueuePosts(db, req.session.userId!, queueId);
-      res.json(queuePosts);
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    const queuePosts = await getQueuePosts(db, req.session.userId!, queueId);
+    res.json(queuePosts);
   });
 
-  router.post('/:id/posts', requireAuth, async (req, res) => {
+  router.post('/:id/posts', requireAuth, queueMutationLimiter, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
     const postId = req.body?.postId;
     if (typeof postId !== 'string') {
@@ -142,64 +102,32 @@ export function createQueuesRouter({ db }: QueuesDependencies) {
       return;
     }
 
-    try {
-      await addPostToQueue(db, req.session.userId!, queueId, postId);
-      res.status(201).json({ success: true });
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    await addPostToQueue(db, req.session.userId!, queueId, postId);
+    res.status(201).json({ success: true });
   });
 
-  router.post('/:id/posts/:postId/move-up', requireAuth, async (req, res) => {
+  router.post('/:id/posts/:postId/move-up', requireAuth, queueMutationLimiter, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
     const postId = validateUuidParam(req.params.postId as string);
 
-    try {
-      await movePostUp(db, req.session.userId!, queueId, postId);
-      res.json({ success: true });
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    await movePostUp(db, req.session.userId!, queueId, postId);
+    res.json({ success: true });
   });
 
-  router.post('/:id/posts/:postId/move-down', requireAuth, async (req, res) => {
+  router.post('/:id/posts/:postId/move-down', requireAuth, queueMutationLimiter, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
     const postId = validateUuidParam(req.params.postId as string);
 
-    try {
-      await movePostDown(db, req.session.userId!, queueId, postId);
-      res.json({ success: true });
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    await movePostDown(db, req.session.userId!, queueId, postId);
+    res.json({ success: true });
   });
 
-  router.delete('/:id/posts/:postId', requireAuth, async (req, res) => {
+  router.delete('/:id/posts/:postId', requireAuth, queueMutationLimiter, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
     const postId = validateUuidParam(req.params.postId as string);
 
-    try {
-      await removePostFromQueue(db, req.session.userId!, queueId, postId);
-      res.json({ success: true });
-    } catch (err: unknown) {
-      if (err instanceof QueueServiceError) {
-        res.status(err.statusCode).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    await removePostFromQueue(db, req.session.userId!, queueId, postId);
+    res.json({ success: true });
   });
 
   return router;

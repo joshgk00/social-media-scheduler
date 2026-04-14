@@ -62,12 +62,12 @@ export default function QueuesPage() {
 
   async function handleCopyConfig(queueId: string) {
     try {
-      const data = await queryClient.fetchQuery({
+      const copiedQueueConfig = await queryClient.fetchQuery({
         queryKey: ['queues', queueId, 'config'],
         queryFn: () => apiClient.get(`/api/queues/${queueId}/config`),
       });
       toast.success('Queue configuration copied. Create a new queue to use it.');
-      navigate(`/queues/new?copyFrom=${queueId}`, { state: { copiedConfig: data } });
+      navigate(`/queues/new?copyFrom=${queueId}`, { state: { copiedConfig: copiedQueueConfig } });
     } catch {
       toast.error('Failed to copy queue configuration.');
     }

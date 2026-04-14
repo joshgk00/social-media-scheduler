@@ -115,7 +115,7 @@ export function QueuePostActionsMenu({
           <DropdownMenuItem
             disabled={!canMoveUp}
             onClick={onMoveUp}
-            aria-label={`Move post to position ${position - 1}`}
+            aria-label="Move post up"
           >
             <ChevronUp className="mr-2 h-4 w-4" />
             Move Up
@@ -124,7 +124,7 @@ export function QueuePostActionsMenu({
           <DropdownMenuItem
             disabled={!canMoveDown}
             onClick={onMoveDown}
-            aria-label={`Move post to position ${position + 1}`}
+            aria-label="Move post down"
           >
             <ChevronDown className="mr-2 h-4 w-4" />
             Move Down

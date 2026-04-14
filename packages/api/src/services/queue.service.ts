@@ -1,9 +1,13 @@
-import { eq, and, sql, count as drizzleCount, max } from 'drizzle-orm';
+import { eq, and, sql, count as drizzleCount, max, lt, gt, desc, asc } from 'drizzle-orm';
+import type { InferInsertModel } from 'drizzle-orm';
 import { AppError, transitionPost, calculateNextRunAt } from '@sms/shared';
 import type { PostStatus, CreateQueueInput, UpdateQueueInput, QueueQueryInput } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
 import { queues, posts, socialProfiles, users } from '@sms/db';
+
+type QueueInsert = InferInsertModel<typeof queues>;
+type PostInsert = InferInsertModel<typeof posts>;
 
 const logger = createLogger('queue-service');
 
@@ -82,21 +86,21 @@ export async function updateQueue(
 
   const existingQueue = existingRows[0];
 
-  const queuePatchFields: Record<string, unknown> = { updatedAt: new Date() };
+  const queuePatch: Partial<QueueInsert> = { updatedAt: new Date() };
 
-  if (input.name !== undefined) queuePatchFields.name = input.name;
-  if (input.profileId !== undefined) queuePatchFields.profileId = input.profileId;
-  if (input.intervalType !== undefined) queuePatchFields.intervalType = input.intervalType;
-  if (input.intervalValue !== undefined) queuePatchFields.intervalValue = input.intervalValue;
-  if (input.intervalUnit !== undefined) queuePatchFields.intervalUnit = input.intervalUnit;
-  if (input.daysOfWeek !== undefined) queuePatchFields.daysOfWeek = input.daysOfWeek;
-  if (input.hourSlots !== undefined) queuePatchFields.hourSlots = input.hourSlots;
-  if (input.startDate !== undefined) queuePatchFields.startDate = input.startDate ? new Date(input.startDate) : null;
-  if (input.seasonalStart !== undefined) queuePatchFields.seasonalStart = input.seasonalStart;
-  if (input.seasonalEnd !== undefined) queuePatchFields.seasonalEnd = input.seasonalEnd;
-  if (input.seasonalRepeat !== undefined) queuePatchFields.seasonalRepeat = input.seasonalRepeat;
-  if (input.isRecycling !== undefined) queuePatchFields.isRecycling = input.isRecycling;
-  if (input.notes !== undefined) queuePatchFields.notes = input.notes;
+  if (input.name !== undefined) queuePatch.name = input.name;
+  if (input.profileId !== undefined) queuePatch.profileId = input.profileId;
+  if (input.intervalType !== undefined) queuePatch.intervalType = input.intervalType;
+  if (input.intervalValue !== undefined) queuePatch.intervalValue = input.intervalValue;
+  if (input.intervalUnit !== undefined) queuePatch.intervalUnit = input.intervalUnit;
+  if (input.daysOfWeek !== undefined) queuePatch.daysOfWeek = input.daysOfWeek;
+  if (input.hourSlots !== undefined) queuePatch.hourSlots = input.hourSlots;
+  if (input.startDate !== undefined) queuePatch.startDate = input.startDate ? new Date(input.startDate) : null;
+  if (input.seasonalStart !== undefined) queuePatch.seasonalStart = input.seasonalStart;
+  if (input.seasonalEnd !== undefined) queuePatch.seasonalEnd = input.seasonalEnd;
+  if (input.seasonalRepeat !== undefined) queuePatch.seasonalRepeat = input.seasonalRepeat;
+  if (input.isRecycling !== undefined) queuePatch.isRecycling = input.isRecycling;
+  if (input.notes !== undefined) queuePatch.notes = input.notes;
 
   const effectiveIntervalType = (input.intervalType ?? existingQueue.intervalType) as string;
   const effectiveIntervalValue = input.intervalValue ?? existingQueue.intervalValue;
@@ -125,11 +129,11 @@ export async function updateQueue(
     },
     userTimezone,
   );
-  queuePatchFields.nextRunAt = nextRunAt?.toJSDate() ?? null;
+  queuePatch.nextRunAt = nextRunAt?.toJSDate() ?? null;
 
   const [updated] = await db
     .update(queues)
-    .set(queuePatchFields)
+    .set(queuePatch)
     .where(and(eq(queues.id, queueId), eq(queues.userId, userId)))
     .returning();
 
@@ -156,28 +160,39 @@ export async function deleteQueue(
 }
 
 export async function getQueues(db: Db, userId: string, filters: QueueQueryInput) {
-  const queueRows = await db
-    .select({
-      id: queues.id,
-      name: queues.name,
-      profileId: queues.profileId,
-      profileName: socialProfiles.displayName,
-      network: socialProfiles.platform,
-      isPaused: queues.isPaused,
-      isRecycling: queues.isRecycling,
-      lastPublishedAt: queues.lastPublishedAt,
-      nextRunAt: queues.nextRunAt,
-      cursorPosition: queues.cursorPosition,
-      seasonalStart: queues.seasonalStart,
-      seasonalEnd: queues.seasonalEnd,
-      hourSlots: queues.hourSlots,
-      daysOfWeek: queues.daysOfWeek,
-      notes: queues.notes,
-    })
-    .from(queues)
-    .innerJoin(socialProfiles, eq(queues.profileId, socialProfiles.id))
-    .where(eq(queues.userId, userId))
-    .orderBy(queues.name);
+  const whereConditions = [eq(queues.userId, userId)];
+  if (filters.network && filters.network !== 'all') {
+    whereConditions.push(eq(socialProfiles.platform, filters.network));
+  }
+
+  let queueRows;
+  try {
+    queueRows = await db
+      .select({
+        id: queues.id,
+        name: queues.name,
+        profileId: queues.profileId,
+        profileName: socialProfiles.displayName,
+        network: socialProfiles.platform,
+        isPaused: queues.isPaused,
+        isRecycling: queues.isRecycling,
+        lastPublishedAt: queues.lastPublishedAt,
+        nextRunAt: queues.nextRunAt,
+        cursorPosition: queues.cursorPosition,
+        seasonalStart: queues.seasonalStart,
+        seasonalEnd: queues.seasonalEnd,
+        hourSlots: queues.hourSlots,
+        daysOfWeek: queues.daysOfWeek,
+        notes: queues.notes,
+      })
+      .from(queues)
+      .innerJoin(socialProfiles, eq(queues.profileId, socialProfiles.id))
+      .where(and(...whereConditions))
+      .orderBy(queues.name);
+  } catch (err) {
+    logger.error({ err, userId }, 'Failed to load queues');
+    throw new QueueServiceError('Unable to load queues', 500);
+  }
 
   let postCountRows;
   try {
@@ -199,10 +214,6 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
   );
 
   let filteredQueues = queueRows;
-
-  if (filters.network && filters.network !== 'all') {
-    filteredQueues = filteredQueues.filter((q) => q.network === filters.network);
-  }
 
   if (filters.status && filters.status !== 'all') {
     filteredQueues = filteredQueues.filter((q) => {
@@ -303,7 +314,7 @@ export async function addPostToQueue(
 
     const nextPosition = (maxResult?.maxPosition ?? 0) + 1;
 
-    const updateFields: Record<string, unknown> = {
+    const postPatch: Partial<PostInsert> = {
       queueId,
       queuePosition: nextPosition,
       updatedAt: new Date(),
@@ -311,12 +322,12 @@ export async function addPostToQueue(
 
     if (post.status === 'draft') {
       transitionPost(post.status as PostStatus, 'queued');
-      updateFields.status = 'queued';
+      postPatch.status = 'queued';
     }
 
     await tx
       .update(posts)
-      .set(updateFields)
+      .set(postPatch)
       .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
   });
 
@@ -391,11 +402,14 @@ export async function getQueuePosts(db: Db, userId: string, queueId: string) {
   }));
 }
 
-export async function movePostUp(
+type SwapDirection = 'up' | 'down';
+
+async function swapPostPosition(
   db: Db,
   userId: string,
   queueId: string,
   postId: string,
+  direction: SwapDirection,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [queue] = await tx
@@ -417,84 +431,46 @@ export async function movePostUp(
     }
 
     const currentPosition = targetPost.queuePosition;
-    if (currentPosition === null || currentPosition <= 1) {
+    if (currentPosition === null) {
       throw new QueueServiceError('Post is already at the boundary position', 409);
     }
 
-    const queuePosts = await tx
+    const positionFilter = direction === 'up'
+      ? lt(posts.queuePosition, currentPosition)
+      : gt(posts.queuePosition, currentPosition);
+    const positionOrder = direction === 'up'
+      ? desc(posts.queuePosition)
+      : asc(posts.queuePosition);
+
+    const [neighbor] = await tx
       .select({ id: posts.id, queuePosition: posts.queuePosition })
       .from(posts)
-      .where(and(eq(posts.queueId, queueId), eq(posts.userId, userId)))
-      .orderBy(posts.queuePosition);
+      .where(and(
+        eq(posts.queueId, queueId),
+        positionFilter,
+        eq(posts.status, 'queued'),
+      ))
+      .orderBy(positionOrder)
+      .limit(1);
 
-    const targetIndex = queuePosts.findIndex((p) => p.id === postId);
-    if (targetIndex <= 0) {
+    if (!neighbor) {
       throw new QueueServiceError('Post is already at the boundary position', 409);
     }
-
-    const previousPost = queuePosts[targetIndex - 1];
-    const previousPosition = previousPost.queuePosition;
 
     await tx
       .update(posts)
-      .set({ queuePosition: previousPosition, updatedAt: new Date() })
+      .set({ queuePosition: neighbor.queuePosition, updatedAt: new Date() })
       .where(eq(posts.id, postId));
 
     await tx
       .update(posts)
       .set({ queuePosition: currentPosition, updatedAt: new Date() })
-      .where(eq(posts.id, previousPost.id));
+      .where(eq(posts.id, neighbor.id));
   });
 }
 
-export async function movePostDown(
-  db: Db,
-  userId: string,
-  queueId: string,
-  postId: string,
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    const [queue] = await tx
-      .select({ id: queues.id })
-      .from(queues)
-      .where(and(eq(queues.id, queueId), eq(queues.userId, userId)));
+export const movePostUp = (db: Db, userId: string, queueId: string, postId: string) =>
+  swapPostPosition(db, userId, queueId, postId, 'up');
 
-    if (!queue) {
-      throw new QueueServiceError('Queue not found', 404);
-    }
-
-    const [targetPost] = await tx
-      .select({ id: posts.id, queuePosition: posts.queuePosition, queueId: posts.queueId })
-      .from(posts)
-      .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
-
-    if (!targetPost || targetPost.queueId !== queueId) {
-      throw new QueueServiceError('Post not found in this queue', 404);
-    }
-
-    const queuePosts = await tx
-      .select({ id: posts.id, queuePosition: posts.queuePosition })
-      .from(posts)
-      .where(and(eq(posts.queueId, queueId), eq(posts.userId, userId)))
-      .orderBy(posts.queuePosition);
-
-    const targetIndex = queuePosts.findIndex((p) => p.id === postId);
-    if (targetIndex < 0 || targetIndex >= queuePosts.length - 1) {
-      throw new QueueServiceError('Post is already at the boundary position', 409);
-    }
-
-    const nextPost = queuePosts[targetIndex + 1];
-    const currentPosition = targetPost.queuePosition;
-    const nextPosition = nextPost.queuePosition;
-
-    await tx
-      .update(posts)
-      .set({ queuePosition: nextPosition, updatedAt: new Date() })
-      .where(eq(posts.id, postId));
-
-    await tx
-      .update(posts)
-      .set({ queuePosition: currentPosition, updatedAt: new Date() })
-      .where(eq(posts.id, nextPost.id));
-  });
-}
+export const movePostDown = (db: Db, userId: string, queueId: string, postId: string) =>
+  swapPostPosition(db, userId, queueId, postId, 'down');

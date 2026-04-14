@@ -26,3 +26,8 @@ export const profileLimiter = createLimiter({
   max: 10,
   message: { error: 'Too many profile creation attempts. Try again in 15 minutes.' },
 });
+
+export const queueMutationLimiter = createLimiter({
+  max: 60,
+  message: { error: 'Too many queue requests. Try again in 15 minutes.' },
+});

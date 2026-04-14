@@ -7,8 +7,8 @@ const HEARTBEAT_TTL_SECONDS = 120;
 export function startHeartbeat(redis: Redis): NodeJS.Timeout {
   const tick = () => {
     redis.set(HEARTBEAT_KEY, Date.now().toString(), 'EX', HEARTBEAT_TTL_SECONDS)
-      .catch(() => {
-        // Non-critical: heartbeat retries on next interval
+      .catch((err) => {
+        console.error('Heartbeat write failed:', err);
       });
   };
   tick();

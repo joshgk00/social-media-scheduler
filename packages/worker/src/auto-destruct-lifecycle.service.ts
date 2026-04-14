@@ -14,7 +14,7 @@
 import { sql, eq } from 'drizzle-orm';
 import { ApiResponseError } from 'twitter-api-v2';
 import { posts, socialProfiles } from '@sms/db';
-import { transitionPost } from '@sms/shared';
+import { transitionPost, type PostStatus } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { WorkerDb } from './db.js';
 
@@ -70,9 +70,6 @@ export async function autoDestructPost(
       throw new Error(`Post ${args.postId} not found for auto-destruct`);
     }
 
-    // Validate state transition: published -> auto_destructing
-    transitionPost(post.status as Parameters<typeof transitionPost>[0], 'auto_destructing');
-
     if (!post.profile_id) {
       throw new Error(`Post ${args.postId} has no associated profile`);
     }
@@ -87,11 +84,18 @@ export async function autoDestructPost(
       throw new Error(`Profile ${post.profile_id} not found for auto-destruct`);
     }
 
-    // Transition to auto_destructing
-    await tx
-      .update(posts)
-      .set({ status: 'auto_destructing', updatedAt: new Date() })
-      .where(eq(posts.id, args.postId));
+    if (post.status !== 'auto_destructing') {
+      // Validate state transition: published -> auto_destructing
+      transitionPost(post.status as PostStatus, 'auto_destructing');
+
+      await tx
+        .update(posts)
+        .set({ status: 'auto_destructing', updatedAt: new Date() })
+        .where(eq(posts.id, args.postId));
+    } else {
+      // Already in auto_destructing from a previous attempt — skip to Phase 2
+      lifecycleLogger.warn('Post already in auto_destructing state — resuming from Phase 2');
+    }
 
     return { profile: loadedProfile };
   });
@@ -106,22 +110,26 @@ export async function autoDestructPost(
     lifecycleLogger.error({ err: deleteErr }, 'Auto-destruct delete call failed');
 
     // Set failureReason, leave in auto_destructing for retry
-    await db
-      .update(posts)
-      .set({
-        failureReason: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
-        updatedAt: new Date(),
-      })
-      .where(eq(posts.id, args.postId));
+    try {
+      await db
+        .update(posts)
+        .set({
+          failureReason: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
+          updatedAt: new Date(),
+        })
+        .where(eq(posts.id, args.postId));
+    } catch (updateErr) {
+      lifecycleLogger.warn({ err: updateErr, postId: args.postId }, 'Failed to persist auto-destruct failure reason');
+    }
 
     // Error classification: 401/403 are credential failures that won't
     // resolve on retry -- throw immediately so BullMQ treats it as a
     // permanent failure. 429 and 5xx are transient -- rethrow to retry.
     if (deleteErr instanceof ApiResponseError) {
-      const status = deleteErr.code;
-      if (status === 401 || status === 403) {
+      const httpStatus = deleteErr.code;
+      if (httpStatus === 401 || httpStatus === 403) {
         throw new Error(
-          `Auto-destruct failed: credentials invalid or revoked (HTTP ${status})`,
+          `Auto-destruct failed: credentials invalid or revoked (HTTP ${httpStatus})`,
         );
       }
     }
@@ -130,14 +138,24 @@ export async function autoDestructPost(
   }
 
   // PHASE 3: Commit -- transition to destroyed
-  await db
-    .update(posts)
-    .set({
-      status: 'destroyed',
-      destroyedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(posts.id, args.postId));
+  transitionPost('auto_destructing' as PostStatus, 'destroyed');
+
+  try {
+    await db
+      .update(posts)
+      .set({
+        status: 'destroyed',
+        destroyedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(posts.id, args.postId));
+  } catch (commitErr) {
+    lifecycleLogger.error(
+      { err: commitErr, postId: args.postId, platformPostId: args.platformPostId, correlationId: args.correlationId },
+      'Phase 3 DB commit failed — tweet already deleted from platform',
+    );
+    throw new Error(`Auto-destruct commit failed for post ${args.postId} — tweet already deleted from platform`);
+  }
 
   lifecycleLogger.info('Auto-destruct lifecycle completed -- post destroyed');
 }

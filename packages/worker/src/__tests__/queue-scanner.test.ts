@@ -20,10 +20,12 @@ vi.mock('@sms/shared/logger', () => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    debug: vi.fn(),
     child: () => ({
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
+      debug: vi.fn(),
     }),
   }),
 }));
@@ -76,19 +78,36 @@ function createMockDb(overrides: {
     minQueuedPosition = null,
   } = overrides;
 
-  let selectCallCount = 0;
-  const updateCalls: Array<{ setArgs: unknown; whereArgs: unknown }> = [];
-
   const transactionFn = vi.fn().mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => {
-    const txUpdateSet = vi.fn();
-    const txUpdateWhere = vi.fn().mockResolvedValue(undefined);
-    txUpdateSet.mockReturnValue({ where: txUpdateWhere });
+    let txSelectIndex = 0;
+
+    // tx.select() — used inside the transaction for post queries
+    const txSelect = vi.fn().mockImplementation(() => {
+      txSelectIndex++;
+      if (txSelectIndex === 1) {
+        // Next queued post (queue_position > cursor)
+        return thenableChain(nextPost ? [nextPost] : []);
+      }
+      if (txSelectIndex === 2) {
+        // Min queued position after recycling
+        return thenableChain(minQueuedPosition ? [minQueuedPosition] : []);
+      }
+      return thenableChain([]);
+    });
+
+    // tx.update() — used for recycling (published -> queued) with .returning()
+    const txUpdateReturning = vi.fn().mockResolvedValue(
+      publishedPosts.map(p => ({ id: (p as MockDbRow).id })),
+    );
+    const txUpdateWhere = vi.fn().mockReturnValue({ returning: txUpdateReturning });
+    const txUpdateSet = vi.fn().mockReturnValue({ where: txUpdateWhere });
     const txUpdate = vi.fn().mockReturnValue({ set: txUpdateSet });
 
-    const tx = { update: txUpdate };
+    const tx = { select: txSelect, update: txUpdate };
     return callback(tx);
   });
 
+  // db.update() — used outside the transaction for cursor advance
   const topUpdateSet = vi.fn();
   const topUpdateWhere = vi.fn().mockResolvedValue(undefined);
   topUpdateSet.mockReturnValue({ where: topUpdateWhere });
@@ -96,28 +115,11 @@ function createMockDb(overrides: {
 
   const db = {
     select: vi.fn().mockImplementation(() => {
-      selectCallCount++;
-      if (selectCallCount === 1) {
-        // Active queues query (with innerJoin)
-        return thenableChain(activeQueues);
-      }
-      if (selectCallCount === 2) {
-        // Next queued post
-        return thenableChain(nextPost ? [nextPost] : []);
-      }
-      if (selectCallCount === 3) {
-        // Published posts for recycling
-        return thenableChain(publishedPosts);
-      }
-      if (selectCallCount === 4) {
-        // Min queued position after recycling
-        return thenableChain(minQueuedPosition ? [minQueuedPosition] : []);
-      }
-      return thenableChain([]);
+      // Active queues query (with innerJoin) — the only db.select() call
+      return thenableChain(activeQueues);
     }),
     update: topUpdate,
     transaction: transactionFn,
-    _updateCalls: updateCalls,
   } as unknown as WorkerDb;
 
   return db;
