@@ -12,6 +12,7 @@
 // 'auto_destructing', rethrows for BullMQ retry (D-12).
 
 import { sql, eq } from 'drizzle-orm';
+import { ApiResponseError } from 'twitter-api-v2';
 import { posts, socialProfiles } from '@sms/db';
 import { transitionPost } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -50,6 +51,9 @@ export async function autoDestructPost(
   let profile: typeof socialProfiles.$inferSelect;
 
   const txResult = await db.transaction(async (tx) => {
+    // Lock held for duration of this transaction only. If concurrent
+    // destruct jobs target the same post, the second job waits for lock
+    // release then fails the status check.
     const lockedRows = await tx.execute<LockedAutoDestructRow>(sql`
       SELECT id, status, profile_id, platform_post_id
         FROM posts
@@ -109,6 +113,18 @@ export async function autoDestructPost(
         updatedAt: new Date(),
       })
       .where(eq(posts.id, args.postId));
+
+    // Error classification: 401/403 are credential failures that won't
+    // resolve on retry -- throw immediately so BullMQ treats it as a
+    // permanent failure. 429 and 5xx are transient -- rethrow to retry.
+    if (deleteErr instanceof ApiResponseError) {
+      const status = deleteErr.code;
+      if (status === 401 || status === 403) {
+        throw new Error(
+          `Auto-destruct failed: credentials invalid or revoked (HTTP ${status})`,
+        );
+      }
+    }
 
     throw deleteErr;
   }

@@ -60,6 +60,11 @@ export function isWithinSeasonalWindow(
 ): boolean {
   if (seasonalStart === null || seasonalEnd === null) return true;
 
+  const mmddPattern = /^\d{2}-\d{2}$/;
+  if (!mmddPattern.test(seasonalStart) || !mmddPattern.test(seasonalEnd)) {
+    return true; // treat invalid format as "no seasonal restriction"
+  }
+
   const currentNow = now ?? DateTime.utc();
   const startMonth = parseInt(seasonalStart.slice(0, 2), 10);
   const startDay = parseInt(seasonalStart.slice(3, 5), 10);

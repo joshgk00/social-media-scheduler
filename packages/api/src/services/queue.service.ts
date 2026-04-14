@@ -80,32 +80,32 @@ export async function updateQueue(
     throw new QueueServiceError('Queue not found', 404);
   }
 
-  const existing = existingRows[0];
+  const existingQueue = existingRows[0];
 
-  const updateFields: Record<string, unknown> = { updatedAt: new Date() };
+  const queuePatchFields: Record<string, unknown> = { updatedAt: new Date() };
 
-  if (input.name !== undefined) updateFields.name = input.name;
-  if (input.profileId !== undefined) updateFields.profileId = input.profileId;
-  if (input.intervalType !== undefined) updateFields.intervalType = input.intervalType;
-  if (input.intervalValue !== undefined) updateFields.intervalValue = input.intervalValue;
-  if (input.intervalUnit !== undefined) updateFields.intervalUnit = input.intervalUnit;
-  if (input.daysOfWeek !== undefined) updateFields.daysOfWeek = input.daysOfWeek;
-  if (input.hourSlots !== undefined) updateFields.hourSlots = input.hourSlots;
-  if (input.startDate !== undefined) updateFields.startDate = input.startDate ? new Date(input.startDate) : null;
-  if (input.seasonalStart !== undefined) updateFields.seasonalStart = input.seasonalStart;
-  if (input.seasonalEnd !== undefined) updateFields.seasonalEnd = input.seasonalEnd;
-  if (input.seasonalRepeat !== undefined) updateFields.seasonalRepeat = input.seasonalRepeat;
-  if (input.isRecycling !== undefined) updateFields.isRecycling = input.isRecycling;
-  if (input.notes !== undefined) updateFields.notes = input.notes;
+  if (input.name !== undefined) queuePatchFields.name = input.name;
+  if (input.profileId !== undefined) queuePatchFields.profileId = input.profileId;
+  if (input.intervalType !== undefined) queuePatchFields.intervalType = input.intervalType;
+  if (input.intervalValue !== undefined) queuePatchFields.intervalValue = input.intervalValue;
+  if (input.intervalUnit !== undefined) queuePatchFields.intervalUnit = input.intervalUnit;
+  if (input.daysOfWeek !== undefined) queuePatchFields.daysOfWeek = input.daysOfWeek;
+  if (input.hourSlots !== undefined) queuePatchFields.hourSlots = input.hourSlots;
+  if (input.startDate !== undefined) queuePatchFields.startDate = input.startDate ? new Date(input.startDate) : null;
+  if (input.seasonalStart !== undefined) queuePatchFields.seasonalStart = input.seasonalStart;
+  if (input.seasonalEnd !== undefined) queuePatchFields.seasonalEnd = input.seasonalEnd;
+  if (input.seasonalRepeat !== undefined) queuePatchFields.seasonalRepeat = input.seasonalRepeat;
+  if (input.isRecycling !== undefined) queuePatchFields.isRecycling = input.isRecycling;
+  if (input.notes !== undefined) queuePatchFields.notes = input.notes;
 
-  const effectiveIntervalType = (input.intervalType ?? existing.intervalType) as string;
-  const effectiveIntervalValue = input.intervalValue ?? existing.intervalValue;
-  const effectiveIntervalUnit = (input.intervalUnit ?? existing.intervalUnit) as string;
-  const effectiveHourSlots = (input.hourSlots ?? existing.hourSlots) as number[];
-  const effectiveDaysOfWeek = (input.daysOfWeek ?? existing.daysOfWeek) as number[];
+  const effectiveIntervalType = (input.intervalType ?? existingQueue.intervalType) as string;
+  const effectiveIntervalValue = input.intervalValue ?? existingQueue.intervalValue;
+  const effectiveIntervalUnit = (input.intervalUnit ?? existingQueue.intervalUnit) as string;
+  const effectiveHourSlots = (input.hourSlots ?? existingQueue.hourSlots) as number[];
+  const effectiveDaysOfWeek = (input.daysOfWeek ?? existingQueue.daysOfWeek) as number[];
   const effectiveStartDate = input.startDate !== undefined
     ? (input.startDate ? new Date(input.startDate) : null)
-    : existing.startDate;
+    : existingQueue.startDate;
 
   const [userRow] = await db
     .select({ timezone: users.timezone })
@@ -120,16 +120,16 @@ export async function updateQueue(
       intervalUnit: effectiveIntervalUnit,
       hourSlots: effectiveHourSlots,
       daysOfWeek: effectiveDaysOfWeek,
-      lastPublishedAt: existing.lastPublishedAt,
+      lastPublishedAt: existingQueue.lastPublishedAt,
       startDate: effectiveStartDate,
     },
     userTimezone,
   );
-  updateFields.nextRunAt = nextRunAt?.toJSDate() ?? null;
+  queuePatchFields.nextRunAt = nextRunAt?.toJSDate() ?? null;
 
   const [updated] = await db
     .update(queues)
-    .set(updateFields)
+    .set(queuePatchFields)
     .where(and(eq(queues.id, queueId), eq(queues.userId, userId)))
     .returning();
 
@@ -179,14 +179,20 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
     .where(eq(queues.userId, userId))
     .orderBy(queues.name);
 
-  const postCountRows = await db
-    .select({
-      queueId: posts.queueId,
-      postCount: drizzleCount(),
-    })
-    .from(posts)
-    .where(and(eq(posts.userId, userId), sql`${posts.queueId} IS NOT NULL`))
-    .groupBy(posts.queueId);
+  let postCountRows;
+  try {
+    postCountRows = await db
+      .select({
+        queueId: posts.queueId,
+        postCount: drizzleCount(),
+      })
+      .from(posts)
+      .where(and(eq(posts.userId, userId), sql`${posts.queueId} IS NOT NULL`))
+      .groupBy(posts.queueId);
+  } catch (err) {
+    logger.error({ err, userId }, 'Failed to load post counts');
+    throw new QueueServiceError('Unable to load queue statistics', 500);
+  }
 
   const postCountMap = new Map(
     postCountRows.map((row) => [row.queueId, Number(row.postCount)]),
@@ -265,7 +271,7 @@ export async function addPostToQueue(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [queue] = await tx
-      .select({ id: queues.id })
+      .select({ id: queues.id, profileId: queues.profileId })
       .from(queues)
       .where(and(eq(queues.id, queueId), eq(queues.userId, userId)));
 
@@ -274,12 +280,16 @@ export async function addPostToQueue(
     }
 
     const [post] = await tx
-      .select({ id: posts.id, status: posts.status, queueId: posts.queueId })
+      .select({ id: posts.id, status: posts.status, queueId: posts.queueId, profileId: posts.profileId })
       .from(posts)
       .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
     if (!post) {
       throw new QueueServiceError('Post not found', 404);
+    }
+
+    if (post.profileId !== queue.profileId) {
+      throw new QueueServiceError('Post profile does not match queue profile', 409);
     }
 
     if (post.queueId && post.queueId !== queueId) {
@@ -407,7 +417,9 @@ export async function movePostUp(
     }
 
     const currentPosition = targetPost.queuePosition;
-    if (currentPosition === null || currentPosition <= 1) return;
+    if (currentPosition === null || currentPosition <= 1) {
+      throw new QueueServiceError('Post is already at the boundary position', 409);
+    }
 
     const queuePosts = await tx
       .select({ id: posts.id, queuePosition: posts.queuePosition })
@@ -416,7 +428,9 @@ export async function movePostUp(
       .orderBy(posts.queuePosition);
 
     const targetIndex = queuePosts.findIndex((p) => p.id === postId);
-    if (targetIndex <= 0) return;
+    if (targetIndex <= 0) {
+      throw new QueueServiceError('Post is already at the boundary position', 409);
+    }
 
     const previousPost = queuePosts[targetIndex - 1];
     const previousPosition = previousPost.queuePosition;
@@ -465,7 +479,9 @@ export async function movePostDown(
       .orderBy(posts.queuePosition);
 
     const targetIndex = queuePosts.findIndex((p) => p.id === postId);
-    if (targetIndex < 0 || targetIndex >= queuePosts.length - 1) return;
+    if (targetIndex < 0 || targetIndex >= queuePosts.length - 1) {
+      throw new QueueServiceError('Post is already at the boundary position', 409);
+    }
 
     const nextPost = queuePosts[targetIndex + 1];
     const currentPosition = targetPost.queuePosition;

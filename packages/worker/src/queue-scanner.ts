@@ -36,6 +36,8 @@ import { DateTime } from 'luxon';
 import { randomUUID } from 'node:crypto';
 import type { WorkerDb } from './db.js';
 
+let lastNotificationError: number = 0;
+
 export const QUEUE_SCANNER_QUEUE_NAME = 'queue-scanner';
 export const QUEUE_SCAN_INTERVAL_MS = 60_000;
 
@@ -261,12 +263,16 @@ export async function evaluateQueues(
 
     // If no post found: emit queue-empty notification (outside tx — BullMQ calls must not be inside a DB tx)
     if (!nextPost) {
+      if (Date.now() - lastNotificationError < 60_000) {
+        continue;
+      }
       await notificationQueue.add(JOB_NAMES.queueEmptyNotification, {
         kind: 'queue_empty',
         queueId: queue.id,
         queueName: queue.name,
         at: new Date().toISOString(),
       }).catch((err: unknown) => {
+        lastNotificationError = Date.now();
         logger.error({ err, queueId: queue.id }, 'Failed to enqueue queue-empty notification');
       });
       continue;
@@ -296,6 +302,10 @@ export async function evaluateQueues(
     );
 
     enqueuedCount++;
+  }
+
+  if (enqueuedCount === 0) {
+    logger.debug({ activeCount: activeQueues.length }, 'No queues eligible for publish this tick');
   }
 
   return enqueuedCount;

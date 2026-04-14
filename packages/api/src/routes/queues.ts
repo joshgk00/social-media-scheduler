@@ -135,10 +135,15 @@ export function createQueuesRouter({ db }: QueuesDependencies) {
       res.status(400).json({ error: 'postId is required' });
       return;
     }
-    const validatedPostId = validateUuidParam(postId);
+    try {
+      validateUuidParam(postId);
+    } catch {
+      res.status(400).json({ error: 'Invalid postId format' });
+      return;
+    }
 
     try {
-      await addPostToQueue(db, req.session.userId!, queueId, validatedPostId);
+      await addPostToQueue(db, req.session.userId!, queueId, postId);
       res.status(201).json({ success: true });
     } catch (err: unknown) {
       if (err instanceof QueueServiceError) {
