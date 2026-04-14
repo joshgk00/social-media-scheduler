@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { DateTime } from 'luxon';
@@ -87,6 +87,14 @@ export default function NewPostPage() {
   const watchedNotes = form.watch('notes');
   const watchedHasSpinnableText = form.watch('hasSpinnableText');
   const watchedAutoDestructAfter = form.watch('autoDestructAfter');
+
+  const SPINNABLE_PATTERN = /\{[^{}|]+\|[^{}|]+\}/;
+  useEffect(() => {
+    const hasSpinSyntax = SPINNABLE_PATTERN.test(watchedText);
+    if (hasSpinSyntax && !watchedHasSpinnableText) {
+      form.setValue('hasSpinnableText', true);
+    }
+  }, [watchedText]); // eslint-disable-line react-hooks/exhaustive-deps -- only auto-enable, never auto-disable
 
   const effectiveProfileId = isQueueMode ? (queueData?.profileId ?? '') : watchedProfileId;
 

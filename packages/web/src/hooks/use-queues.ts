@@ -4,7 +4,6 @@ import type { CreateQueueInput, UpdateQueueInput } from '@sms/shared';
 
 interface QueueProfile {
   displayName: string;
-  handle: string;
   platform: string;
 }
 

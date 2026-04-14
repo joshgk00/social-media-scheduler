@@ -214,8 +214,9 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
     });
   }
 
-  return filteredQueues.map((q) => ({
+  return filteredQueues.map(({ profileName, network, ...q }) => ({
     ...q,
+    profile: profileName ? { displayName: profileName, platform: network } : undefined,
     postCount: postCountMap.get(q.id) ?? 0,
   }));
 }
