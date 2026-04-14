@@ -3,7 +3,7 @@ import { AppError, transitionPost, calculateNextRunAt } from '@sms/shared';
 import type { PostStatus, CreateQueueInput, UpdateQueueInput, QueueQueryInput } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
-import { queues, posts, socialProfiles } from '@sms/db';
+import { queues, posts, socialProfiles, users } from '@sms/db';
 
 const logger = createLogger('queue-service');
 
@@ -23,6 +23,12 @@ export async function createQueue(db: Db, userId: string, input: CreateQueueInpu
     throw new QueueServiceError('Profile not found', 404);
   }
 
+  const [userRow] = await db
+    .select({ timezone: users.timezone })
+    .from(users)
+    .where(eq(users.id, userId));
+  const userTimezone = userRow?.timezone ?? 'UTC';
+
   const nextRunAt = calculateNextRunAt(
     {
       intervalType: input.intervalType,
@@ -33,7 +39,7 @@ export async function createQueue(db: Db, userId: string, input: CreateQueueInpu
       lastPublishedAt: null,
       startDate: input.startDate ? new Date(input.startDate) : null,
     },
-    'UTC',
+    userTimezone,
   );
 
   const [queue] = await db.insert(queues).values({
@@ -101,6 +107,12 @@ export async function updateQueue(
     ? (input.startDate ? new Date(input.startDate) : null)
     : existing.startDate;
 
+  const [userRow] = await db
+    .select({ timezone: users.timezone })
+    .from(users)
+    .where(eq(users.id, userId));
+  const userTimezone = userRow?.timezone ?? 'UTC';
+
   const nextRunAt = calculateNextRunAt(
     {
       intervalType: effectiveIntervalType,
@@ -111,7 +123,7 @@ export async function updateQueue(
       lastPublishedAt: existing.lastPublishedAt,
       startDate: effectiveStartDate,
     },
-    'UTC',
+    userTimezone,
   );
   updateFields.nextRunAt = nextRunAt?.toJSDate() ?? null;
 
