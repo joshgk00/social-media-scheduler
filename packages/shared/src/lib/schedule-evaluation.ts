@@ -51,10 +51,11 @@ export function hasIntervalElapsed(
   return slotNow !== slotLast;
 }
 
+// TODO: seasonalRepeat=false (one-time window) not yet implemented.
+// Currently all seasonal windows repeat annually.
 export function isWithinSeasonalWindow(
   seasonalStart: string | null,
   seasonalEnd: string | null,
-  seasonalRepeat: boolean,
   now?: DateTime,
 ): boolean {
   if (seasonalStart === null || seasonalEnd === null) return true;

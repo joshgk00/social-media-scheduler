@@ -127,7 +127,6 @@ export async function evaluateQueues(
     if (!isWithinSeasonalWindow(
       queue.seasonalStart,
       queue.seasonalEnd,
-      queue.seasonalRepeat,
       currentNow,
     )) {
       continue;

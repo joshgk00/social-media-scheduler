@@ -128,42 +128,42 @@ describe('Schedule Evaluation Functions', () => {
 
   describe('isWithinSeasonalWindow', () => {
     it('returns true when both start and end are null (no restriction)', () => {
-      expect(isWithinSeasonalWindow(null, null, false)).toBe(true);
+      expect(isWithinSeasonalWindow(null, null)).toBe(true);
     });
 
     it('returns true when date is within a standard seasonal window', () => {
       const november = DateTime.fromISO('2026-11-15T12:00:00Z');
-      expect(isWithinSeasonalWindow('11-01', '12-31', false, november)).toBe(true);
+      expect(isWithinSeasonalWindow('11-01', '12-31', november)).toBe(true);
     });
 
     it('returns false when date is outside a standard seasonal window', () => {
       const march = DateTime.fromISO('2026-03-15T12:00:00Z');
-      expect(isWithinSeasonalWindow('11-01', '12-31', false, march)).toBe(false);
+      expect(isWithinSeasonalWindow('11-01', '12-31', march)).toBe(false);
     });
 
     it('handles cross-year seasonal window (Dec-Jan)', () => {
       const december = DateTime.fromISO('2026-12-15T12:00:00Z');
-      expect(isWithinSeasonalWindow('12-01', '01-31', false, december)).toBe(true);
+      expect(isWithinSeasonalWindow('12-01', '01-31', december)).toBe(true);
 
       const january = DateTime.fromISO('2026-01-15T12:00:00Z');
-      expect(isWithinSeasonalWindow('12-01', '01-31', false, january)).toBe(true);
+      expect(isWithinSeasonalWindow('12-01', '01-31', january)).toBe(true);
 
       const march = DateTime.fromISO('2026-03-15T12:00:00Z');
-      expect(isWithinSeasonalWindow('12-01', '01-31', false, march)).toBe(false);
+      expect(isWithinSeasonalWindow('12-01', '01-31', march)).toBe(false);
     });
 
     it('handles exact boundary dates', () => {
       const startDate = DateTime.fromISO('2026-06-01T12:00:00Z');
-      expect(isWithinSeasonalWindow('06-01', '08-31', false, startDate)).toBe(true);
+      expect(isWithinSeasonalWindow('06-01', '08-31', startDate)).toBe(true);
 
       const endDate = DateTime.fromISO('2026-08-31T12:00:00Z');
-      expect(isWithinSeasonalWindow('06-01', '08-31', false, endDate)).toBe(true);
+      expect(isWithinSeasonalWindow('06-01', '08-31', endDate)).toBe(true);
 
       const dayBefore = DateTime.fromISO('2026-05-31T12:00:00Z');
-      expect(isWithinSeasonalWindow('06-01', '08-31', false, dayBefore)).toBe(false);
+      expect(isWithinSeasonalWindow('06-01', '08-31', dayBefore)).toBe(false);
 
       const dayAfter = DateTime.fromISO('2026-09-01T12:00:00Z');
-      expect(isWithinSeasonalWindow('06-01', '08-31', false, dayAfter)).toBe(false);
+      expect(isWithinSeasonalWindow('06-01', '08-31', dayAfter)).toBe(false);
     });
   });
 
