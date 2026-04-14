@@ -42,7 +42,7 @@ interface QueuePostActionsMenuProps {
   onViewFullText: () => void;
 }
 
-const DELETABLE_QUEUE_STATES = ['queued', 'published'];
+const DELETABLE_QUEUE_STATES = ['queued'];
 
 export function QueuePostActionsMenu({
   post,
