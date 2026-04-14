@@ -1,3 +1,4 @@
+import { Clock } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { cn } from '../../lib/utils';
 
@@ -8,12 +9,33 @@ interface QueueStatusBadgeProps {
   seasonalEnd?: string | null;
 }
 
-export function QueueStatusBadge({
-  isPaused,
-  postCount,
-  seasonalStart,
-  seasonalEnd,
-}: QueueStatusBadgeProps) {
+function isInSeasonalPause(seasonalStart?: string | null, seasonalEnd?: string | null): boolean {
+  if (!seasonalStart || !seasonalEnd) return false;
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const today = `${month}-${day}`;
+
+  if (seasonalStart <= seasonalEnd) {
+    return today < seasonalStart || today > seasonalEnd;
+  }
+  // Cross-year: paused when today is in the gap (after end AND before start)
+  return today > seasonalEnd && today < seasonalStart;
+}
+
+export function QueueStatusBadge({ isPaused, postCount, seasonalStart, seasonalEnd }: QueueStatusBadgeProps) {
+  const isSeasonalPause = !isPaused && postCount > 0 && isInSeasonalPause(seasonalStart, seasonalEnd);
+
+  if (isSeasonalPause) {
+    return (
+      <Badge variant="secondary" className={cn('inline-flex items-center gap-1 text-xs font-semibold text-[--color-warning]')}>
+        <span className="h-1.5 w-1.5 rounded-full bg-[--color-warning]" aria-hidden="true" />
+        <Clock className="h-3 w-3" aria-hidden="true" />
+        Seasonal pause
+      </Badge>
+    );
+  }
+
   if (isPaused) {
     return (
       <Badge variant="secondary" className={cn('text-xs inline-flex items-center gap-1')}>
@@ -29,26 +51,6 @@ export function QueueStatusBadge({
         Empty
       </Badge>
     );
-  }
-
-  if (seasonalStart && seasonalEnd) {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentDay = now.getDate();
-    const currentMmDd = `${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
-
-    const isInSeason = seasonalStart <= seasonalEnd
-      ? currentMmDd >= seasonalStart && currentMmDd <= seasonalEnd
-      : currentMmDd >= seasonalStart || currentMmDd <= seasonalEnd;
-
-    if (!isInSeason) {
-      return (
-        <Badge variant="secondary" className={cn('text-xs inline-flex items-center gap-1')}>
-          <span className="h-1.5 w-1.5 rounded-full bg-[--color-warning]" />
-          Seasonal pause
-        </Badge>
-      );
-    }
   }
 
   return (
