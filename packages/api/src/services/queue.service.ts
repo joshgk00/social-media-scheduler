@@ -299,12 +299,8 @@ export async function addPostToQueue(
     };
 
     if (post.status === 'draft') {
-      try {
-        transitionPost(post.status as PostStatus, 'queued');
-        updateFields.status = 'queued';
-      } catch {
-        // If transition is invalid, keep current status
-      }
+      transitionPost(post.status as PostStatus, 'queued');
+      updateFields.status = 'queued';
     }
 
     await tx
