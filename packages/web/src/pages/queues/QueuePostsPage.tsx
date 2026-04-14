@@ -62,7 +62,7 @@ export default function QueuePostsPage() {
   } | null>(null);
 
   const isLoading = isQueueLoading || isPostsLoading;
-  const cursorPosition = queue?.cursorPosition ?? 1;
+  const cursorPosition = queue?.cursorPosition ?? 0;
   const isRecycling = queue?.isRecycling ?? false;
   const totalPosts = queuePosts?.length ?? 0;
 

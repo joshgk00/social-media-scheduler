@@ -33,7 +33,7 @@ export interface QueueListItem {
 }
 
 interface QueueDetail extends QueueListItem {
-  cursor: number;
+  cursorPosition: number;
 }
 
 interface QueueConfig {
