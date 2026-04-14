@@ -144,5 +144,8 @@ export function useAddToQueue(queueId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queue-posts', queueId] });
     },
+    onError: () => {
+      toast.error("Couldn't add post to queue. Try again.");
+    },
   });
 }
