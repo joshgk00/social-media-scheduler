@@ -23,8 +23,11 @@ function buildCtx(overrides: Partial<PublishContext> = {}): PublishContext {
 function seedHappyPath(db: MockWorkerDb) {
   const lockedPost = seedLockedPost();
   const profile = seedSocialProfile();
-  // Lock transaction: execute() returns the locked row, then select() returns the profile.
+  // Lock transaction: execute() returns the locked row, then two selects:
+  // 1. Media count query (MEDIA-05 gate) returns 0 pending
+  // 2. Profile select returns the social profile
   db.__pushExecute(() => [lockedPost]);
+  db.__pushSelect(() => [{ count: '0' }]);
   db.__pushSelect(() => [profile]);
   return { lockedPost, profile };
 }
@@ -209,9 +212,9 @@ describe('publishPost media-readiness gate (MEDIA-05)', () => {
     const lockedPost = seedLockedPost();
     const profile = seedSocialProfile();
     db.__pushExecute(() => [lockedPost]);
-    db.__pushSelect(() => [profile]);
-    // Media count query returns the specified count
+    // Media count query runs before profile load in the transaction
     db.__pushSelect(() => [{ count: String(pendingMediaCount) }]);
+    db.__pushSelect(() => [profile]);
     return { lockedPost, profile };
   }
 
