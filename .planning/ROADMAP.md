@@ -128,13 +128,14 @@ Plans:
   2. Video uploads trigger async ffmpeg transcoding via BullMQ job; upload returns immediately with `processing` status; posts with pending media are skipped by the publish worker
   3. Media storage works on both local Docker volume and S3-compatible backend (selectable via env var)
   4. Deleted post media is soft-deleted; weekly cleanup job permanently removes files older than 30 days; settings page shows total storage consumed
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
 - [x] 06-01-PLAN.md — StorageBackend interface + implementations, post_media schema extension, queue constants, media-limits, Docker infrastructure
 - [x] 06-02-PLAN.md — Media upload API (multer middleware, image thumbnailing, video upload with transcode enqueue, soft-delete, association)
 - [x] 06-03-PLAN.md — ffmpeg transcode worker, publish worker media-readiness gate
 - [x] 06-04-PLAN.md — Frontend media UI (drop zone, thumbnail grid, upload progress, transcoding status, post list indicators)
 - [x] 06-05-PLAN.md — Media cleanup worker, storage usage API + settings card, schema push
+- [ ] 06-06-PLAN.md — [GAP CLOSURE] Generate drizzle-kit migration SQL for Phase 6 schema changes
 **UI hint**: yes
 
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
@@ -241,7 +242,7 @@ Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could the
 | 3. Twitter Profile & Post Creation | 0/TBD | Not started | - |
 | 4. Publish Worker & Scheduled Posts | 6/6 | Complete    | 2026-04-10 |
 | 5. Queue Engine | 5/5 | Complete | 2026-04-15 |
-| 6. Media Handling | 0/5 | Planning complete | - |
+| 6. Media Handling | 0/6 | Gap closure planned | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
 | 9. Notifications & Settings | 0/TBD | Not started | - |
