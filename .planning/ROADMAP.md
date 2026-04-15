@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Authentication & User Account** - Login, sessions, 2FA, password management, user settings
 - [ ] **Phase 3: Twitter Profile & Post Creation** - Twitter OAuth connection, tweet creation forms, common post fields, post state machine, tags
 - [x] **Phase 4: Publish Worker & Scheduled Posts** - BullMQ worker service, publish pipeline with retry and idempotency, scheduled posts list, Twitter rate limit tracking (completed 2026-04-10)
-- [ ] **Phase 5: Queue Engine** - Queue CRUD, timezone-aware queue scheduling, queue post management, auto-destruct worker
+- [x] **Phase 5: Queue Engine** - Queue CRUD, timezone-aware queue scheduling, queue post management, auto-destruct worker (completed 2026-04-15)
 - [ ] **Phase 6: Media Handling** - Image upload and thumbnailing, video transcoding via ffmpeg, storage backend selection, media cleanup
 - [ ] **Phase 7: Multi-Platform Profiles & Token Lifecycle** - LinkedIn and Facebook OAuth connections, profile management UI, token health monitoring, auto-refresh
 - [ ] **Phase 8: LinkedIn & Facebook Post Creation** - LinkedIn share forms, Facebook post forms, LinkedIn and Facebook rate limit tracking
@@ -239,7 +239,7 @@ Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could the
 | 2. Authentication & User Account | 0/6 | Planning complete | - |
 | 3. Twitter Profile & Post Creation | 0/TBD | Not started | - |
 | 4. Publish Worker & Scheduled Posts | 6/6 | Complete    | 2026-04-10 |
-| 5. Queue Engine | 0/5 | Planning complete | - |
+| 5. Queue Engine | 5/5 | Complete | 2026-04-15 |
 | 6. Media Handling | 0/TBD | Not started | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |

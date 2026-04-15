@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 5 context gathered
+status: active
+stopped_at: Phase 5 complete, advancing to Phase 6
 last_updated: "2026-04-11T01:20:46.257Z"
 progress:
   total_phases: 11
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** Own the stack, own the data, own the credentials -- persistent queue automation that publishes without hand-holding, backed by your own Twitter Developer App, on hardware you control.
-**Current focus:** Phase 1
+**Current focus:** Phase 6
 
 ## Current Phase
 
-Phase 1 -- Infrastructure & Foundation
+Phase 6 -- Media Handling
 
-**Status:** Ready to plan
-**Goal:** A running Docker Compose stack with correct Redis configuration, HTTPS termination, database migrations, encryption infrastructure, and operational tooling
+**Status:** Not started
+**Goal:** User can upload images and videos to posts with automatic thumbnailing, async video transcoding, and configurable storage backend
 
 ## Roadmap Summary
 
@@ -45,7 +45,8 @@ Phase 1 -- Infrastructure & Foundation
 
 ## Completed Phases
 
-(None yet)
+- Phase 4: Publish Worker & Scheduled Posts (2026-04-10)
+- Phase 5: Queue Engine (2026-04-15)
 
 ## Performance Metrics
 
@@ -73,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-11T01:20:46.252Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-queue-engine/05-CONTEXT.md
+Last session: 2026-04-15T01:00:00Z
+Stopped at: Phase 5 complete, advancing to Phase 6
+Resume file: .planning/ROADMAP.md
