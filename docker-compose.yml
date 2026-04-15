@@ -28,6 +28,8 @@ services:
     build:
       context: .
       target: api-production
+    volumes:
+      - media_data:/app/data/media
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-scheduler}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-scheduler}
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
@@ -49,6 +51,8 @@ services:
     build:
       context: .
       target: worker-production
+    volumes:
+      - media_data:/app/data/media
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-scheduler}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-scheduler}
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
@@ -80,3 +84,4 @@ volumes:
   postgres_data:
   redis_data:
   web_dist:
+  media_data:

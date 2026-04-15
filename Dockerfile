@@ -5,7 +5,7 @@ RUN corepack enable
 
 # Development target (used by docker-compose.dev.yml)
 FROM base AS development
-RUN apk add --no-cache python3 make g++ linux-headers
+RUN apk add --no-cache python3 make g++ linux-headers ffmpeg
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/ packages/
