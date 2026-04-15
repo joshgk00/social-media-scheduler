@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 import type { Sql } from 'postgres';
 import type { Queue } from 'bullmq';
 import type { Db } from '@sms/db';
+import type { StorageBackend } from '@sms/shared/storage';
 
 import { correlationId } from './middleware/correlation-id.js';
 import { httpLogger } from './middleware/logger.js';
@@ -22,6 +23,7 @@ import { createPostsRouter } from './routes/posts.js';
 import { createTagsRouter } from './routes/tags.js';
 import { createQueuesRouter } from './routes/queues.js';
 import { createAdminRouter } from './routes/admin.js';
+import { createMediaRouter } from './routes/media.js';
 import type { PublishQueueService } from './services/publish-queue.service.js';
 interface AppDependencies {
   redis: Redis;
@@ -33,6 +35,8 @@ interface AppDependencies {
   // `index.ts` always supplies all three.
   publishQueueService?: PublishQueueService;
   notificationQueue?: Queue;
+  storage?: StorageBackend;
+  transcodeQueue?: Queue;
 }
 
 export function createApp({
@@ -42,6 +46,8 @@ export function createApp({
   sessionSecret,
   publishQueueService,
   notificationQueue,
+  storage,
+  transcodeQueue,
 }: AppDependencies) {
   const app = express();
 
@@ -77,7 +83,12 @@ export function createApp({
   app.use(createTagsRouter({ db }));
   app.use('/api/queues', createQueuesRouter({ db }));
 
+  if (storage && transcodeQueue) {
+    app.use('/api/media', createMediaRouter({ db, storage, transcodeQueue }));
+  }
+
   const mediaDir = process.env.MEDIA_DIR || './data/media';
+  app.use('/media', express.static(mediaDir));
   app.use('/avatars', express.static(path.join(mediaDir, 'avatars')));
 
   app.use(createHealthRouter({ redis, sql }));

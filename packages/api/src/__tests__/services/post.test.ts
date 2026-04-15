@@ -22,12 +22,17 @@ const mockPosts = makeTableStub('posts', [
 const mockTags = makeTableStub('tags', ['id', 'name', 'color', 'userId', 'createdAt', 'updatedAt']);
 const mockPostTags = makeTableStub('post_tags', ['postId', 'tagId']);
 const mockSocialProfiles = makeTableStub('social_profiles', ['id', 'userId']);
+const mockPostMedia = makeTableStub('post_media', [
+  'id', 'postId', 'filePath', 'fileName', 'mimeType', 'fileSize', 'width', 'height',
+  'thumbnailPath', 'sortOrder', 'transcodeStatus', 'transcodeError', 'deletedAt', 'createdAt',
+]);
 
 vi.mock('@sms/db', () => ({
   posts: mockPosts,
   tags: mockTags,
   postTags: mockPostTags,
   socialProfiles: mockSocialProfiles,
+  postMedia: mockPostMedia,
 }));
 
 const mockCreateLogger = vi.fn().mockReturnValue({
@@ -225,8 +230,15 @@ function createDeleteMockDb(options: {
     return chain;
   }
 
+  // softDeleteMediaForPost calls db.update(postMedia) before deletePost runs
+  const updateChain: Record<string, any> = {};
+  updateChain.set = vi.fn().mockReturnValue(updateChain);
+  updateChain.where = vi.fn().mockReturnValue(updateChain);
+  updateChain.then = (resolve: (v: unknown) => void) => resolve([]);
+
   const db: any = {
     delete: vi.fn().mockReturnValue(deleteChain),
+    update: vi.fn().mockReturnValue(updateChain),
     select: vi.fn().mockImplementation(() => {
       return makeSelectChain(existingPost ? [existingPost] : []);
     }),

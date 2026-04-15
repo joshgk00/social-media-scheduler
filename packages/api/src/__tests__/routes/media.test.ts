@@ -17,12 +17,18 @@ vi.mock('../../services/media.service.js', () => ({
   retryTranscode: (...args: unknown[]) => mockRetryTranscode(...args),
 }));
 
-// Mock multer to simulate file uploads without real disk I/O
+// Mock multer to simulate file uploads without real disk I/O.
+// Real multer populates req.body from non-file fields and req.file from the
+// file field. Our mock reads them from _mockFile and _mockBody injected
+// by the withUpload helper.
 vi.mock('../../middleware/media-upload.js', () => ({
   mediaUpload: {
     single: () => (req: any, _res: any, next: any) => {
       if (req._mockFile) {
         req.file = req._mockFile;
+      }
+      if (req._mockBody) {
+        req.body = { ...req.body, ...req._mockBody };
       }
       next();
     },
@@ -45,7 +51,6 @@ function createTestApp(authenticated = true) {
   const app = express();
   app.use(express.json());
 
-  // Session simulation middleware
   app.use((req: any, _res, next) => {
     if (authenticated) {
       req.session = { userId: 'test-user-id' };
@@ -84,14 +89,24 @@ function createTestApp(authenticated = true) {
 
   app.use('/api/media', router);
 
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    res.status(err.statusCode || 500).json({ error: err.message || 'Internal error' });
+  });
+
   return { app, mockDb, mockStorage, mockQueue };
 }
 
-// Middleware to inject mock file into request for upload tests
-function withMockFile(app: express.Express, file: Record<string, unknown>) {
+// Injects mock file and body fields into the request, simulating what real
+// multer does for multipart/form-data uploads.
+function withUpload(
+  app: express.Express,
+  file: Record<string, unknown>,
+  body: Record<string, string>,
+) {
   const wrappedApp = express();
   wrappedApp.use((req: any, _res, next) => {
     req._mockFile = file;
+    req._mockBody = body;
     next();
   });
   wrappedApp.use(app);
@@ -126,18 +141,23 @@ describe('media routes', () => {
         transcodeStatus: 'not_applicable',
       });
 
-      const wrappedApp = withMockFile(app, {
-        fieldname: 'file',
-        originalname: 'photo.jpg',
-        mimetype: 'image/jpeg',
-        size: 5000,
-        path: '/tmp/photo.jpg',
-      });
+      const wrappedApp = withUpload(
+        app,
+        {
+          fieldname: 'file',
+          originalname: 'photo.jpg',
+          mimetype: 'image/jpeg',
+          size: 5000,
+          path: '/tmp/photo.jpg',
+        },
+        {
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+          platform: 'twitter',
+        },
+      );
 
       const response = await request(wrappedApp)
-        .post('/api/media/upload')
-        .field('profileId', '550e8400-e29b-41d4-a716-446655440000')
-        .field('platform', 'twitter');
+        .post('/api/media/upload');
 
       expect(response.status).toBe(201);
       expect(response.body).toEqual(
@@ -161,18 +181,23 @@ describe('media routes', () => {
         transcodeStatus: 'pending',
       });
 
-      const wrappedApp = withMockFile(app, {
-        fieldname: 'file',
-        originalname: 'video.mp4',
-        mimetype: 'video/mp4',
-        size: 10_000_000,
-        path: '/tmp/video.mp4',
-      });
+      const wrappedApp = withUpload(
+        app,
+        {
+          fieldname: 'file',
+          originalname: 'video.mp4',
+          mimetype: 'video/mp4',
+          size: 10_000_000,
+          path: '/tmp/video.mp4',
+        },
+        {
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+          platform: 'twitter',
+        },
+      );
 
       const response = await request(wrappedApp)
-        .post('/api/media/upload')
-        .field('profileId', '550e8400-e29b-41d4-a716-446655440000')
-        .field('platform', 'twitter');
+        .post('/api/media/upload');
 
       expect(response.status).toBe(201);
       expect(response.body).toEqual(
@@ -187,19 +212,23 @@ describe('media routes', () => {
     it('with oversized file returns 400 with error message', async () => {
       const { app } = createTestApp();
 
-      // Twitter max image is 5MB
-      const wrappedApp = withMockFile(app, {
-        fieldname: 'file',
-        originalname: 'huge.jpg',
-        mimetype: 'image/jpeg',
-        size: 10 * 1024 * 1024, // 10MB, exceeds 5MB
-        path: '/tmp/huge.jpg',
-      });
+      const wrappedApp = withUpload(
+        app,
+        {
+          fieldname: 'file',
+          originalname: 'huge.jpg',
+          mimetype: 'image/jpeg',
+          size: 10 * 1024 * 1024, // 10MB exceeds Twitter 5MB limit
+          path: '/tmp/huge.jpg',
+        },
+        {
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+          platform: 'twitter',
+        },
+      );
 
       const response = await request(wrappedApp)
-        .post('/api/media/upload')
-        .field('profileId', '550e8400-e29b-41d4-a716-446655440000')
-        .field('platform', 'twitter');
+        .post('/api/media/upload');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toMatch(/exceeds.*limit/i);
@@ -208,18 +237,23 @@ describe('media routes', () => {
     it('with unsupported MIME type returns 400', async () => {
       const { app } = createTestApp();
 
-      const wrappedApp = withMockFile(app, {
-        fieldname: 'file',
-        originalname: 'file.exe',
-        mimetype: 'application/x-executable',
-        size: 1000,
-        path: '/tmp/file.exe',
-      });
+      const wrappedApp = withUpload(
+        app,
+        {
+          fieldname: 'file',
+          originalname: 'file.exe',
+          mimetype: 'application/x-executable',
+          size: 1000,
+          path: '/tmp/file.exe',
+        },
+        {
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+          platform: 'twitter',
+        },
+      );
 
       const response = await request(wrappedApp)
-        .post('/api/media/upload')
-        .field('profileId', '550e8400-e29b-41d4-a716-446655440000')
-        .field('platform', 'twitter');
+        .post('/api/media/upload');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toMatch(/not a supported file type/i);

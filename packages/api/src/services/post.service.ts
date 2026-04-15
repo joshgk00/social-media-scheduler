@@ -5,6 +5,8 @@ import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
 import { posts, postTags, tags, socialProfiles } from '@sms/db';
 
+import { softDeleteMediaForPost } from './media.service.js';
+
 const logger = createLogger('post-service');
 
 function escapeLikePattern(input: string): string {
@@ -252,6 +254,14 @@ export async function deletePost(
   userId: string,
   postId: string,
 ): Promise<boolean> {
+  // D-13: Soft-delete associated media before cascade-deleting the post row.
+  // The cascade on post_media.postId hard-deletes the DB rows, but setting
+  // deletedAt first ensures the 30-day cleanup pipeline processes the files.
+  const softDeletedMediaCount = await softDeleteMediaForPost(db, postId);
+  if (softDeletedMediaCount > 0) {
+    logger.info({ postId, softDeletedMediaCount }, 'Soft-deleted media for post deletion');
+  }
+
   const deletedRows = await db.delete(posts)
     .where(
       and(
