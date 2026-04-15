@@ -198,6 +198,67 @@ describe('publishPost lifecycle', () => {
   });
 });
 
+describe('publishPost media-readiness gate (MEDIA-05)', () => {
+  let db: MockWorkerDb;
+
+  beforeEach(() => {
+    db = createMockWorkerDb();
+  });
+
+  function seedHappyPathWithMedia(db: MockWorkerDb, pendingMediaCount: number) {
+    const lockedPost = seedLockedPost();
+    const profile = seedSocialProfile();
+    db.__pushExecute(() => [lockedPost]);
+    db.__pushSelect(() => [profile]);
+    // Media count query returns the specified count
+    db.__pushSelect(() => [{ count: String(pendingMediaCount) }]);
+    return { lockedPost, profile };
+  }
+
+  it('aborts with media_pending when post has media with transcode_status=pending', async () => {
+    seedHappyPathWithMedia(db, 1);
+    const ctx = buildCtx();
+
+    await expect(
+      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
+    ).rejects.toMatchObject({ reason: 'media_pending' });
+    expect(ctx.callTwitter).not.toHaveBeenCalled();
+  });
+
+  it('aborts with media_pending when post has media with transcode_status=processing', async () => {
+    seedHappyPathWithMedia(db, 2);
+    const ctx = buildCtx();
+
+    await expect(
+      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
+    ).rejects.toMatchObject({ reason: 'media_pending' });
+    expect(ctx.callTwitter).not.toHaveBeenCalled();
+  });
+
+  it('proceeds normally when all media have transcode_status=completed or not_applicable', async () => {
+    seedHappyPathWithMedia(db, 0);
+    const ctx = buildCtx();
+
+    const result = await publishPost(
+      db as unknown as Parameters<typeof publishPost>[0],
+      ctx,
+    );
+    expect(result.platformPostId).toBe('tw_test_777');
+    expect(ctx.callTwitter).toHaveBeenCalledTimes(1);
+  });
+
+  it('proceeds normally when post has no media rows', async () => {
+    seedHappyPathWithMedia(db, 0);
+    const ctx = buildCtx();
+
+    const result = await publishPost(
+      db as unknown as Parameters<typeof publishPost>[0],
+      ctx,
+    );
+    expect(result.platformPostId).toBe('tw_test_777');
+  });
+});
+
 describe('PostLifecycleAbort', () => {
   it('preserves the reason in both message and property', () => {
     const err = new PostLifecycleAbort('version_mismatch');
