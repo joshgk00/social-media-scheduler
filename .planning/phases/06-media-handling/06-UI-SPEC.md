@@ -1,7 +1,8 @@
 ---
 phase: 6
 slug: media-handling
-status: draft
+status: approved
+reviewed_at: 2026-04-15
 shadcn_initialized: true
 preset: zinc (shadcn default, Phase 2 scaffold)
 created: 2026-04-15
