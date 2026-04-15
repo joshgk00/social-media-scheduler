@@ -1,14 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
-import { createApp } from '../../app.js';
-import { createMockRedis } from '../helpers/mock-redis.js';
+import express from 'express';
 
-const mockGetUserById = vi.fn();
-
+// Mock auth service (settings.ts imports verifyPassword, hashPassword, etc.)
 vi.mock('../../services/auth.service.js', () => ({
   findUserByEmail: vi.fn(),
   verifyPassword: vi.fn(),
-  getUserById: (...args: unknown[]) => mockGetUserById(...args),
+  getUserById: vi.fn(),
   hashPassword: vi.fn(),
   userExists: vi.fn(),
   createUser: vi.fn(),
@@ -29,17 +27,14 @@ vi.mock('../../services/session.service.js', () => ({
   SESSION_PREFIX: 'sms:sess:',
 }));
 
-vi.mock('argon2', () => ({
-  default: {
-    verify: vi.fn(),
-    hash: vi.fn().mockResolvedValue('$argon2id$hashed'),
-    argon2id: 2,
+vi.mock('../../middleware/auth-guard.js', () => ({
+  requireAuth: (req: any, res: any, next: any) => {
+    if (!req.session?.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    next();
   },
-}));
-
-vi.mock('../../middleware/csrf.js', () => ({
-  doubleCsrfProtection: ((_req: any, _res: any, next: any) => next()) as any,
-  generateCsrfToken: () => 'test-csrf-token',
 }));
 
 vi.mock('sharp', () => ({
@@ -56,12 +51,7 @@ vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
-function createMockSql() {
-  return Object.assign(
-    () => Promise.resolve([{ '?column?': 1 }]),
-    { end: vi.fn() },
-  ) as any;
-}
+import { createSettingsRouter } from '../../routes/settings.js';
 
 function createMockDb(executeResult?: unknown[]) {
   const chainable = (terminal: unknown = []) => {
@@ -83,27 +73,43 @@ function createMockDb(executeResult?: unknown[]) {
   } as any;
 }
 
-function createTestApp(dbOverride?: any) {
-  const db = dbOverride ?? createMockDb();
+function createMockRedis() {
   return {
-    app: createApp({
-      redis: createMockRedis(),
-      sql: createMockSql(),
-      db,
-      sessionSecret: 'test-secret-that-is-long-enough-for-session',
-    }),
-    db,
-  };
+    scanStream: vi.fn().mockReturnValue({ [Symbol.asyncIterator]: async function* () {} }),
+  } as any;
+}
+
+function createTestApp(authenticated = true, dbOverride?: any) {
+  const app = express();
+  app.use(express.json());
+
+  app.use((req: any, _res: any, next: any) => {
+    if (authenticated) {
+      req.session = { userId: 'test-user-id', id: 'sess-1' };
+    } else {
+      req.session = {};
+    }
+    next();
+  });
+
+  const db = dbOverride ?? createMockDb();
+  const redis = createMockRedis();
+  app.use(createSettingsRouter({ db, redis }));
+
+  app.use((_req: any, res: any) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+
+  return { app, db };
 }
 
 describe('GET /api/settings/storage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.CSRF_SECRET = 'a'.repeat(64);
   });
 
   it('returns 401 without authenticated session', async () => {
-    const { app } = createTestApp();
+    const { app } = createTestApp(false);
     const res = await request(app).get('/api/settings/storage');
     expect(res.status).toBe(401);
   });
@@ -118,32 +124,9 @@ describe('GET /api/settings/storage', () => {
     }];
 
     const db = createMockDb(mockExecuteResult);
+    const { app } = createTestApp(true, db);
 
-    mockGetUserById.mockResolvedValue({
-      id: 'user-1',
-      email: 'test@example.com',
-      username: 'testuser',
-      firstName: 'Test',
-      lastName: 'User',
-      profileImagePath: null,
-      timezone: 'UTC',
-      dateFormat: 'YYYY-MM-DD',
-      entriesPerPage: 25,
-      passwordHash: '$argon2id$hashed',
-      totpEnabled: false,
-      totpSecret: null,
-    });
-
-    const { app } = createTestApp(db);
-
-    const agent = request.agent(app);
-    // Login to get a session
-    await agent.post('/api/auth/login').send({
-      email: 'test@example.com',
-      password: 'testpassword',
-    });
-
-    const res = await agent.get('/api/settings/storage');
+    const res = await request(app).get('/api/settings/storage');
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('totalSize');
@@ -151,6 +134,11 @@ describe('GET /api/settings/storage', () => {
     expect(res.body).toHaveProperty('videoSize');
     expect(res.body).toHaveProperty('imageCount');
     expect(res.body).toHaveProperty('videoCount');
+    expect(res.body.totalSize).toBe(1048576);
+    expect(res.body.imageSize).toBe(524288);
+    expect(res.body.videoSize).toBe(524288);
+    expect(res.body.imageCount).toBe(5);
+    expect(res.body.videoCount).toBe(2);
   });
 
   it('returns zeros when no media exists', async () => {
@@ -163,31 +151,9 @@ describe('GET /api/settings/storage', () => {
     }];
 
     const db = createMockDb(mockExecuteResult);
+    const { app } = createTestApp(true, db);
 
-    mockGetUserById.mockResolvedValue({
-      id: 'user-1',
-      email: 'test@example.com',
-      username: 'testuser',
-      firstName: 'Test',
-      lastName: 'User',
-      profileImagePath: null,
-      timezone: 'UTC',
-      dateFormat: 'YYYY-MM-DD',
-      entriesPerPage: 25,
-      passwordHash: '$argon2id$hashed',
-      totpEnabled: false,
-      totpSecret: null,
-    });
-
-    const { app } = createTestApp(db);
-
-    const agent = request.agent(app);
-    await agent.post('/api/auth/login').send({
-      email: 'test@example.com',
-      password: 'testpassword',
-    });
-
-    const res = await agent.get('/api/settings/storage');
+    const res = await request(app).get('/api/settings/storage');
 
     expect(res.status).toBe(200);
     expect(res.body.totalSize).toBe(0);
