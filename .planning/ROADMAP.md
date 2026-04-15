@@ -131,7 +131,7 @@ Plans:
 **Plans**: 5 plans
 Plans:
 - [x] 06-01-PLAN.md — StorageBackend interface + implementations, post_media schema extension, queue constants, media-limits, Docker infrastructure
-- [ ] 06-02-PLAN.md — Media upload API (multer middleware, image thumbnailing, video upload with transcode enqueue, soft-delete, association)
+- [x] 06-02-PLAN.md — Media upload API (multer middleware, image thumbnailing, video upload with transcode enqueue, soft-delete, association)
 - [ ] 06-03-PLAN.md — ffmpeg transcode worker, publish worker media-readiness gate
 - [ ] 06-04-PLAN.md — Frontend media UI (drop zone, thumbnail grid, upload progress, transcoding status, post list indicators)
 - [ ] 06-05-PLAN.md — Media cleanup worker, storage usage API + settings card, schema push
