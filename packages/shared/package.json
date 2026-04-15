@@ -20,6 +20,10 @@
     "./env": {
       "types": "./dist/env.d.ts",
       "import": "./dist/env.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js"
     }
   },
   "scripts": {
@@ -27,6 +31,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "~3.1030.0",
     "luxon": "~3.7.2",
     "pino": "~10.3.1",
     "twitter-api-v2": "~1.29.0",

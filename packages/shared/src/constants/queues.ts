@@ -11,6 +11,8 @@ export const QUEUE_NAMES = {
   publish: 'publish',
   notification: 'notification',
   autoDestruct: 'auto-destruct',
+  transcode: 'transcode',
+  mediaCleanup: 'media-cleanup',
 } as const;
 
 export const JOB_NAMES = {
@@ -23,6 +25,9 @@ export const JOB_NAMES = {
   rateLimitWarnNotification: 'rate-limit-warn',
   queueEmptyNotification: 'queue-empty',
   autoDestructFailedNotification: 'auto-destruct-failed',
+  transcodeVideo: 'transcode-video',
+  mediaCleanup: 'media-cleanup',
+  mediaCleanupScheduler: 'weekly-media-cleanup',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];

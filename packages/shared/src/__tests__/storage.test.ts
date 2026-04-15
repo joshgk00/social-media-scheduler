@@ -7,15 +7,19 @@ import { S3Storage } from '../storage/s3-storage.js';
 import { createStorageBackend } from '../storage/index.js';
 
 // Mock @aws-sdk/client-s3 before any imports that use it
+const sendMock = vi.fn();
+
 vi.mock('@aws-sdk/client-s3', () => {
-  const sendMock = vi.fn();
+  class MockS3Client {
+    send = sendMock;
+    destroy = vi.fn();
+  }
   return {
-    S3Client: vi.fn().mockImplementation(() => ({ send: sendMock, destroy: vi.fn() })),
-    PutObjectCommand: vi.fn().mockImplementation((params) => ({ ...params, _type: 'PutObject' })),
-    GetObjectCommand: vi.fn().mockImplementation((params) => ({ ...params, _type: 'GetObject' })),
-    DeleteObjectCommand: vi.fn().mockImplementation((params) => ({ ...params, _type: 'DeleteObject' })),
-    HeadObjectCommand: vi.fn().mockImplementation((params) => ({ ...params, _type: 'HeadObject' })),
-    __sendMock: sendMock,
+    S3Client: MockS3Client,
+    PutObjectCommand: class { constructor(public params: Record<string, unknown>) { Object.assign(this, params); } },
+    GetObjectCommand: class { constructor(public params: Record<string, unknown>) { Object.assign(this, params); } },
+    DeleteObjectCommand: class { constructor(public params: Record<string, unknown>) { Object.assign(this, params); } },
+    HeadObjectCommand: class { constructor(public params: Record<string, unknown>) { Object.assign(this, params); } },
   };
 });
 
@@ -88,11 +92,8 @@ describe('LocalStorage', () => {
 
 describe('S3Storage', () => {
   let storage: S3Storage;
-  let sendMock: ReturnType<typeof vi.fn>;
 
-  beforeEach(async () => {
-    const sdk = await import('@aws-sdk/client-s3');
-    sendMock = (sdk as unknown as { __sendMock: ReturnType<typeof vi.fn> }).__sendMock;
+  beforeEach(() => {
     sendMock.mockReset();
 
     storage = new S3Storage({
