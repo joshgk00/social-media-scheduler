@@ -130,7 +130,7 @@ Plans:
   4. Deleted post media is soft-deleted; weekly cleanup job permanently removes files older than 30 days; settings page shows total storage consumed
 **Plans**: 5 plans
 Plans:
-- [ ] 06-01-PLAN.md — StorageBackend interface + implementations, post_media schema extension, queue constants, media-limits, Docker infrastructure
+- [x] 06-01-PLAN.md — StorageBackend interface + implementations, post_media schema extension, queue constants, media-limits, Docker infrastructure
 - [ ] 06-02-PLAN.md — Media upload API (multer middleware, image thumbnailing, video upload with transcode enqueue, soft-delete, association)
 - [ ] 06-03-PLAN.md — ffmpeg transcode worker, publish worker media-readiness gate
 - [ ] 06-04-PLAN.md — Frontend media UI (drop zone, thumbnail grid, upload progress, transcoding status, post list indicators)
