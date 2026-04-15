@@ -2,6 +2,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { ProfileSection } from './components/ProfileSection';
 import { PreferencesSection } from './components/PreferencesSection';
 import { SecuritySection } from './components/SecuritySection';
+import { StorageUsageCard } from './components/StorageUsageCard';
 import { Skeleton } from '../../components/ui/skeleton';
 
 export default function SettingsPage() {
@@ -26,6 +27,7 @@ export default function SettingsPage() {
       <ProfileSection user={user} />
       <PreferencesSection user={user} />
       <SecuritySection user={user} />
+      <StorageUsageCard />
     </main>
   );
 }
