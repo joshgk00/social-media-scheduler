@@ -10,7 +10,7 @@ import {
   type Row,
 } from '@tanstack/react-table';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Plus, ChevronDown, ChevronRight, Search, AlertCircle } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Search, AlertCircle, Image, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { POST_STATUSES, DELETABLE_STATES, type PostStatus } from '@sms/shared';
 
@@ -208,8 +208,22 @@ export default function PostsPage() {
         const textPreview = row.original.text.length > 80
           ? `${row.original.text.slice(0, 80)}...`
           : row.original.text;
+        const mediaCount = (row.original as Post & { mediaCount?: number }).mediaCount ?? 0;
+        const hasTranscodingMedia = (row.original as Post & { hasTranscodingMedia?: boolean }).hasTranscodingMedia ?? false;
         return (
-          <span className="text-sm line-clamp-2">{textPreview}</span>
+          <div>
+            <span className="text-sm line-clamp-2">{textPreview}</span>
+            {mediaCount > 0 && (
+              <span className="inline-flex items-center gap-1 mt-1 text-xs text-muted-foreground" title={hasTranscodingMedia ? `${mediaCount} file(s), transcoding in progress` : `${mediaCount} file(s)`}>
+                {hasTranscodingMedia ? (
+                  <Loader2 className="h-3 w-3 animate-spin" aria-label="Media transcoding in progress" />
+                ) : (
+                  <Image className="h-3.5 w-3.5" />
+                )}
+                {mediaCount}
+              </span>
+            )}
+          </div>
         );
       },
     },
