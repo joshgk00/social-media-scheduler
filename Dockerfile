@@ -59,3 +59,10 @@ COPY --from=worker-deploy --chown=appuser:appgroup /prod/worker /app
 WORKDIR /app
 USER appuser
 CMD ["node", "dist/index.js"]
+
+# Web production image (nginx + built SPA assets)
+FROM nginx:1.27-alpine AS web-production
+RUN apk add --no-cache wget
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+COPY --from=build /app/packages/web/dist /usr/share/nginx/html
+EXPOSE 80
