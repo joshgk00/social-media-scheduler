@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Queue Engine** - Queue CRUD, timezone-aware queue scheduling, queue post management, auto-destruct worker (completed 2026-04-15)
 - [x] **Phase 6: Media Handling** - Image upload and thumbnailing, video transcoding via ffmpeg, storage backend selection, media cleanup (completed 2026-04-16)
 - [ ] **Phase 6.1: Production Deployment Wiring** - INSERTED — Wire media routes in API entry point, add SESSION_SECRET to Docker Compose, create web production build target
-- [ ] **Phase 6.2: Test & Build Stabilization** - INSERTED — Rebuild stale dist packages, fix mock-db regression, resolve 30 test failures
+- [ ] **Phase 6.2: Test & Build Stabilization + Migration Runner Hardening** - INSERTED — Rebuild stale dist packages, fix mock-db regression, resolve 30 test failures, harden migration runner (advisory lock, per-migration atomicity, test coverage) per 06.1-REVIEW.md H-01/H-02/M-01
 - [ ] **Phase 6.3: Queue Engine Bug Fixes** - INSERTED — Fix recycling race condition, stuck queue state, seasonal pause logic, silent failures, profile display
 - [ ] **Phase 7: Multi-Platform Profiles & Token Lifecycle** - LinkedIn and Facebook OAuth connections, profile management UI, token health monitoring, auto-refresh
 - [ ] **Phase 8: LinkedIn & Facebook Post Creation** - LinkedIn share forms, Facebook post forms, LinkedIn and Facebook rate limit tracking
@@ -158,16 +158,21 @@ Plans:
 - [x] 06.1-02-PLAN.md — Docker Compose SESSION_SECRET, web-production Dockerfile target, nginx proxy_pass + /assets/ cache
 - [x] 06.1-03-PLAN.md — Integration checkpoint + Phase 4 SUMMARY requirements_satisfied frontmatter
 
-### Phase 6.2: Test & Build Stabilization
-**INSERTED** — Gap closure from v1.0 milestone audit
-**Goal**: All packages compile and all tests pass — no stale dist artifacts or mock regressions
-**Depends on**: Phase 6
-**Requirements**: Affects test reliability for QUEUE-01 through QUEUE-06, WORKER-09
-**Gap Closure**: Stale dist builds (26 failures), mock-db .returning() regression (4 failures)
+### Phase 6.2: Test & Build Stabilization + Migration Runner Hardening
+**INSERTED** — Gap closure from v1.0 milestone audit + Phase 6.1 code-review follow-ups
+**Goal**: All packages compile and all tests pass — no stale dist artifacts, no mock regressions — and the database migration runner is safe for production redeploy (advisory-locked, per-migration atomic, covered by tests)
+**Depends on**: Phase 6.1
+**Requirements**: Affects test reliability for QUEUE-01 through QUEUE-06, WORKER-09; production deploy safety for INT-02 (multi-replica boot scenarios)
+**Gap Closure**:
+  - Stale dist builds (26 failures), mock-db .returning() regression (4 failures) — from v1.0 audit
+  - `packages/db/src/migrate.ts` H-01 (no advisory lock — concurrent migrator race), H-02 (per-migration atomicity lost — partial-migration crash loop), M-01 (zero test coverage) — from 06.1-REVIEW.md
 **Success Criteria** (what must be TRUE):
   1. `@sms/db` and `@sms/shared` dist directories are current with source; `pnpm build` succeeds in both packages
   2. `mock-db.ts` updateChain supports `.returning()` method
   3. Full test suite passes with zero failures across all packages
+  4. `runMigrations()` acquires a Postgres advisory lock (`pg_try_advisory_lock`) before reading the journal; second concurrent caller waits or exits cleanly (H-01)
+  5. Each pending migration runs inside a transaction; on failure, statements roll back and `__drizzle_migrations` stays unmodified — except duplicate-object SQLSTATE is still swallowed at statement level so drift is tolerated (H-02)
+  6. `packages/db/src/__tests__/migrate.test.ts` covers: fresh DB apply, idempotent re-run, orphan-schema baseline, duplicate-object tolerance, real error abort, concurrent-caller lock behavior — 100% branch coverage per repo security-critical standard (M-01)
 **Plans**: TBD
 
 ### Phase 6.3: Queue Engine Bug Fixes
@@ -292,7 +297,7 @@ Note: Phases 6.1-6.3 are gap closure phases inserted after v1.0 milestone audit.
 | 5. Queue Engine | 5/5 | Complete | 2026-04-15 |
 | 6. Media Handling | 6/6 | Complete | 2026-04-16 |
 | 6.1 Production Deployment Wiring | 0/TBD | Gap closure | - |
-| 6.2 Test & Build Stabilization | 0/TBD | Gap closure | - |
+| 6.2 Test & Build Stabilization + Migration Runner Hardening | 0/TBD | Gap closure | - |
 | 6.3 Queue Engine Bug Fixes | 0/TBD | Gap closure | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
