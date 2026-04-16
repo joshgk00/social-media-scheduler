@@ -156,7 +156,7 @@ Plans:
 Plans:
 - [x] 06.1-01-PLAN.md — Wire storage + transcodeQueue into API index.ts (mount media routes)
 - [x] 06.1-02-PLAN.md — Docker Compose SESSION_SECRET, web-production Dockerfile target, nginx proxy_pass + /assets/ cache
-- [ ] 06.1-03-PLAN.md — Integration checkpoint + Phase 4 SUMMARY requirements_satisfied frontmatter
+- [x] 06.1-03-PLAN.md — Integration checkpoint + Phase 4 SUMMARY requirements_satisfied frontmatter
 
 ### Phase 6.2: Test & Build Stabilization
 **INSERTED** — Gap closure from v1.0 milestone audit
