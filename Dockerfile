@@ -34,11 +34,11 @@ RUN pnpm -r build
 
 # Deploy API (production deps only)
 FROM build AS api-deploy
-RUN pnpm deploy --filter=@sms/api --prod /prod/api
+RUN pnpm deploy --legacy --filter=@sms/api --prod /prod/api
 
 # Deploy Worker (production deps only)
 FROM build AS worker-deploy
-RUN pnpm deploy --filter=@sms/worker --prod /prod/worker
+RUN pnpm deploy --legacy --filter=@sms/worker --prod /prod/worker
 
 # API production image
 FROM base AS api-production
