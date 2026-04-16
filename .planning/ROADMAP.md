@@ -154,8 +154,8 @@ Plans:
   4. Phase 4 plan SUMMARY frontmatter claims SCHED-01, SCHED-02, SCHED-03, LIMIT-04, LIMIT-05
 **Plans**: 3 plans
 Plans:
-- [ ] 06.1-01-PLAN.md — Wire storage + transcodeQueue into API index.ts (mount media routes)
-- [ ] 06.1-02-PLAN.md — Docker Compose SESSION_SECRET, web-production Dockerfile target, nginx proxy_pass + /assets/ cache
+- [x] 06.1-01-PLAN.md — Wire storage + transcodeQueue into API index.ts (mount media routes)
+- [x] 06.1-02-PLAN.md — Docker Compose SESSION_SECRET, web-production Dockerfile target, nginx proxy_pass + /assets/ cache
 - [ ] 06.1-03-PLAN.md — Integration checkpoint + Phase 4 SUMMARY requirements_satisfied frontmatter
 
 ### Phase 6.2: Test & Build Stabilization
