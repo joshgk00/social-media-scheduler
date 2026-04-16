@@ -152,7 +152,11 @@ Plans:
   2. `docker-compose.yml` api service includes `SESSION_SECRET` env var; API starts without crashing
   3. Web production Dockerfile target exists; `web_dist` volume is populated with built React assets; nginx serves the frontend
   4. Phase 4 plan SUMMARY frontmatter claims SCHED-01, SCHED-02, SCHED-03, LIMIT-04, LIMIT-05
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 06.1-01-PLAN.md — Wire storage + transcodeQueue into API index.ts (mount media routes)
+- [ ] 06.1-02-PLAN.md — Docker Compose SESSION_SECRET, web-production Dockerfile target, nginx proxy_pass + /assets/ cache
+- [ ] 06.1-03-PLAN.md — Integration checkpoint + Phase 4 SUMMARY requirements_satisfied frontmatter
 
 ### Phase 6.2: Test & Build Stabilization
 **INSERTED** — Gap closure from v1.0 milestone audit
