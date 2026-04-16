@@ -135,7 +135,7 @@ Plans:
 - [x] 06-03-PLAN.md — ffmpeg transcode worker, publish worker media-readiness gate
 - [x] 06-04-PLAN.md — Frontend media UI (drop zone, thumbnail grid, upload progress, transcoding status, post list indicators)
 - [x] 06-05-PLAN.md — Media cleanup worker, storage usage API + settings card, schema push
-- [ ] 06-06-PLAN.md — [GAP CLOSURE] Generate drizzle-kit migration SQL for Phase 6 schema changes
+- [x] 06-06-PLAN.md — [GAP CLOSURE] Generate drizzle-kit migration SQL for Phase 6 schema changes
 **UI hint**: yes
 
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
