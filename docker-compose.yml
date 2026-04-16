@@ -35,6 +35,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       CSRF_SECRET: ${CSRF_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
       NODE_ENV: production
     depends_on:
       postgres:
