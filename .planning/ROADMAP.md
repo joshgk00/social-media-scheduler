@@ -173,7 +173,11 @@ Plans:
   4. `runMigrations()` acquires a Postgres advisory lock (`pg_try_advisory_lock`) before reading the journal; second concurrent caller waits or exits cleanly (H-01)
   5. Each pending migration runs inside a transaction; on failure, statements roll back and `__drizzle_migrations` stays unmodified — except duplicate-object SQLSTATE is still swallowed at statement level so drift is tolerated (H-02)
   6. `packages/db/src/__tests__/migrate.test.ts` covers: fresh DB apply, idempotent re-run, orphan-schema baseline, duplicate-object tolerance, real error abort, concurrent-caller lock behavior — 100% branch coverage per repo security-critical standard (M-01)
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 06.2-01-PLAN.md — Pretest build guardrail + api mock-db .returning() fix + .env.example DATABASE_URL_TEST
+- [ ] 06.2-02-PLAN.md — migrate.ts hardening: sql.reserve() + advisory lock + per-migration transaction + narrowed duplicate codes
+- [ ] 06.2-03-PLAN.md — migrate.test.ts (6 D-08 scenarios) + test harness + vitest coverage config
 
 ### Phase 6.3: Queue Engine Bug Fixes
 **INSERTED** — Gap closure from v1.0 milestone audit
