@@ -17,7 +17,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Twitter Profile & Post Creation** - Twitter OAuth connection, tweet creation forms, common post fields, post state machine, tags
 - [x] **Phase 4: Publish Worker & Scheduled Posts** - BullMQ worker service, publish pipeline with retry and idempotency, scheduled posts list, Twitter rate limit tracking (completed 2026-04-10)
 - [x] **Phase 5: Queue Engine** - Queue CRUD, timezone-aware queue scheduling, queue post management, auto-destruct worker (completed 2026-04-15)
-- [ ] **Phase 6: Media Handling** - Image upload and thumbnailing, video transcoding via ffmpeg, storage backend selection, media cleanup
+- [x] **Phase 6: Media Handling** - Image upload and thumbnailing, video transcoding via ffmpeg, storage backend selection, media cleanup (completed 2026-04-16)
+- [ ] **Phase 6.1: Production Deployment Wiring** - INSERTED — Wire media routes in API entry point, add SESSION_SECRET to Docker Compose, create web production build target
+- [ ] **Phase 6.2: Test & Build Stabilization** - INSERTED — Rebuild stale dist packages, fix mock-db regression, resolve 30 test failures
+- [ ] **Phase 6.3: Queue Engine Bug Fixes** - INSERTED — Fix recycling race condition, stuck queue state, seasonal pause logic, silent failures, profile display
 - [ ] **Phase 7: Multi-Platform Profiles & Token Lifecycle** - LinkedIn and Facebook OAuth connections, profile management UI, token health monitoring, auto-refresh
 - [ ] **Phase 8: LinkedIn & Facebook Post Creation** - LinkedIn share forms, Facebook post forms, LinkedIn and Facebook rate limit tracking
 - [ ] **Phase 9: Notifications & Settings** - In-app notification bell, SMTP email notifications, notification preferences, email logs
@@ -138,6 +141,46 @@ Plans:
 - [x] 06-06-PLAN.md — [GAP CLOSURE] Generate drizzle-kit migration SQL for Phase 6 schema changes
 **UI hint**: yes
 
+### Phase 6.1: Production Deployment Wiring
+**INSERTED** — Gap closure from v1.0 milestone audit
+**Goal**: Production Docker Compose stack starts without crashing, media API routes are reachable, and frontend is served from built assets
+**Depends on**: Phase 6
+**Requirements**: Affected: MEDIA-01 through MEDIA-08 (INT-01), AUTH-01 through AUTH-07 (INT-02), SCHED-01, SCHED-02, SCHED-03, LIMIT-04, LIMIT-05 (documentation fix)
+**Gap Closure**: INT-01, INT-02, FLOW-01, FLOW-02
+**Success Criteria** (what must be TRUE):
+  1. `api/src/index.ts` creates storage backend and transcode queue; media router mounts and `/api/media/*` routes return non-404 responses
+  2. `docker-compose.yml` api service includes `SESSION_SECRET` env var; API starts without crashing
+  3. Web production Dockerfile target exists; `web_dist` volume is populated with built React assets; nginx serves the frontend
+  4. Phase 4 plan SUMMARY frontmatter claims SCHED-01, SCHED-02, SCHED-03, LIMIT-04, LIMIT-05
+**Plans**: TBD
+
+### Phase 6.2: Test & Build Stabilization
+**INSERTED** — Gap closure from v1.0 milestone audit
+**Goal**: All packages compile and all tests pass — no stale dist artifacts or mock regressions
+**Depends on**: Phase 6
+**Requirements**: Affects test reliability for QUEUE-01 through QUEUE-06, WORKER-09
+**Gap Closure**: Stale dist builds (26 failures), mock-db .returning() regression (4 failures)
+**Success Criteria** (what must be TRUE):
+  1. `@sms/db` and `@sms/shared` dist directories are current with source; `pnpm build` succeeds in both packages
+  2. `mock-db.ts` updateChain supports `.returning()` method
+  3. Full test suite passes with zero failures across all packages
+**Plans**: TBD
+
+### Phase 6.3: Queue Engine Bug Fixes
+**INSERTED** — Gap closure from v1.0 milestone audit
+**Goal**: Queue engine runtime bugs identified during audit are fixed — no race conditions, stuck states, or silent failures
+**Depends on**: Phase 6.2
+**Requirements**: Affects QUEUE-01 through QUEUE-06, WORKER-09
+**Gap Closure**: WR-01, WR-02, WR-04, WR-05, IN-02, IN-03
+**Success Criteria** (what must be TRUE):
+  1. Recycling bulk update and MIN(queue_position) select run in a single transaction (WR-01)
+  2. `removePostFromQueue` clears queued status and queueId atomically (WR-02)
+  3. QueueStatusBadge seasonal pause shows correctly for Nov-Jan windows year-round (WR-04)
+  4. `useRemoveFromQueue` shows error toast on failure (WR-05)
+  5. Queue list displays profile name instead of '-' (IN-02)
+  6. Queue scanner logger is created at module scope, not per tick (IN-03)
+**Plans**: TBD
+
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
 **Goal**: User can connect LinkedIn and Facebook profiles alongside Twitter, with token health monitoring and automatic refresh
 **Depends on**: Phase 4
@@ -232,8 +275,9 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 6.1 -> 6.2 -> 6.3 -> 7 -> 8 -> 9 -> 10 -> 11
 Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could theoretically overlap.
+Note: Phases 6.1-6.3 are gap closure phases inserted after v1.0 milestone audit. 6.3 depends on 6.2 (needs passing tests first).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -242,7 +286,10 @@ Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could the
 | 3. Twitter Profile & Post Creation | 0/TBD | Not started | - |
 | 4. Publish Worker & Scheduled Posts | 6/6 | Complete    | 2026-04-10 |
 | 5. Queue Engine | 5/5 | Complete | 2026-04-15 |
-| 6. Media Handling | 0/6 | Gap closure planned | - |
+| 6. Media Handling | 6/6 | Complete | 2026-04-16 |
+| 6.1 Production Deployment Wiring | 0/TBD | Gap closure | - |
+| 6.2 Test & Build Stabilization | 0/TBD | Gap closure | - |
+| 6.3 Queue Engine Bug Fixes | 0/TBD | Gap closure | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
 | 9. Notifications & Settings | 0/TBD | Not started | - |
