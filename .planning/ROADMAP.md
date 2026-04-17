@@ -175,7 +175,7 @@ Plans:
   6. `packages/db/src/__tests__/migrate.test.ts` covers: fresh DB apply, idempotent re-run, orphan-schema baseline, duplicate-object tolerance, real error abort, concurrent-caller lock behavior — 100% branch coverage per repo security-critical standard (M-01)
 **Plans**: 3 plans
 Plans:
-- [ ] 06.2-01-PLAN.md — Pretest build guardrail + api mock-db .returning() fix + .env.example DATABASE_URL_TEST
+- [x] 06.2-01-PLAN.md — Pretest build guardrail + api mock-db .returning() fix + .env.example DATABASE_URL_TEST
 - [ ] 06.2-02-PLAN.md — migrate.ts hardening: sql.reserve() + advisory lock + per-migration transaction + narrowed duplicate codes
 - [ ] 06.2-03-PLAN.md — migrate.test.ts (6 D-08 scenarios) + test harness + vitest coverage config
 
