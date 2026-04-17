@@ -176,8 +176,8 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 06.2-01-PLAN.md — Pretest build guardrail + api mock-db .returning() fix + .env.example DATABASE_URL_TEST
-- [ ] 06.2-02-PLAN.md — migrate.ts hardening: sql.reserve() + advisory lock + per-migration transaction + narrowed duplicate codes
-- [ ] 06.2-03-PLAN.md — migrate.test.ts (6 D-08 scenarios) + test harness + vitest coverage config
+- [x] 06.2-02-PLAN.md — migrate.ts hardening: sql.reserve() + advisory lock + per-migration transaction + narrowed duplicate codes
+- [x] 06.2-03-PLAN.md — migrate.test.ts (6 D-08 scenarios) + test harness + vitest coverage config
 
 ### Phase 6.3: Queue Engine Bug Fixes
 **INSERTED** — Gap closure from v1.0 milestone audit
