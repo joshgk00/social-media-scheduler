@@ -183,7 +183,7 @@ Plans:
 **INSERTED** — Gap closure from v1.0 milestone audit
 **Goal**: Queue engine runtime bugs identified during audit are fixed — no race conditions, stuck states, or silent failures
 **Depends on**: Phase 6.2
-**Requirements**: Affects QUEUE-01 through QUEUE-06, WORKER-09
+**Requirements**: Affects QUEUE-01, QUEUE-02, QUEUE-03, QUEUE-05, QUEUE-06, WORKER-09
 **Gap Closure**: WR-01, WR-02, WR-04, WR-05, IN-02, IN-03
 **Success Criteria** (what must be TRUE):
   1. Recycling bulk update and MIN(queue_position) select run in a single transaction (WR-01)
