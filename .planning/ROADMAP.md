@@ -210,7 +210,10 @@ Plans:
   2. POST `/api/posts` and PATCH `/api/posts/:id` call `associateMediaToPost(db, post.id, mediaIds)` after persisting the post
   3. After creating a post with media, `post_media.post_id` is non-NULL for associated media rows
   4. Publish worker skips posts with media in `pending` or `processing` transcode state (FLOW-C verified end-to-end)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 06.4-01-PLAN.md -- Wire associateMediaToPost into createPost/updatePost + unit tests
+- [ ] 06.4-02-PLAN.md -- Integration tests for POST/PATCH with mediaIds + full suite verification
 
 ### Phase 6.5: Bull-Board Nginx Proxy
 **INSERTED** — Gap closure from v1.0 milestone audit
