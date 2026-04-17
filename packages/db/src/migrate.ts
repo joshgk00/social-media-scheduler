@@ -55,11 +55,13 @@ interface Journal {
 interface MigrationLogger {
   info(msg: string, ctx?: Record<string, unknown>): void;
   warn(msg: string, ctx?: Record<string, unknown>): void;
+  error(msg: string, ctx?: Record<string, unknown>): void;
 }
 
 const defaultLogger: MigrationLogger = {
   info: (msg, ctx) => console.log(JSON.stringify({ level: 'info', msg, ...ctx })),
   warn: (msg, ctx) => console.warn(JSON.stringify({ level: 'warn', msg, ...ctx })),
+  error: (msg, ctx) => console.error(JSON.stringify({ level: 'error', msg, ...ctx })),
 };
 
 /**
@@ -109,7 +111,7 @@ export async function runMigrations(databaseUrl: string, logger: MigrationLogger
         try {
           await reserved.unsafe(`SELECT pg_advisory_unlock(${MIGRATION_LOCK_KEY}::bigint)`);
         } catch (unlockErr) {
-          logger.warn('Failed to release migration advisory lock; session close will release it', {
+          logger.error('Failed to release migration advisory lock; session close will release it', {
             error: (unlockErr as Error).message,
           });
         }

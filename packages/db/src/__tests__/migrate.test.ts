@@ -27,7 +27,7 @@ process.once('exit', () => {
 });
 
 interface CapturedLog {
-  level: 'info' | 'warn';
+  level: 'info' | 'warn' | 'error';
   msg: string;
   ctx: Record<string, unknown>;
 }
@@ -47,11 +47,14 @@ function makeOrderingLogger(prefix: string, order: string[]) {
     warn(msg: string, _ctx?: Record<string, unknown>) {
       order.push(`${prefix}:warn:${msg}`);
     },
+    error(msg: string, _ctx?: Record<string, unknown>) {
+      order.push(`${prefix}:error:${msg}`);
+    },
   };
 }
 
 function captureLogger(): {
-  logger: { info: (m: string, c?: Record<string, unknown>) => void; warn: (m: string, c?: Record<string, unknown>) => void };
+  logger: { info: (m: string, c?: Record<string, unknown>) => void; warn: (m: string, c?: Record<string, unknown>) => void; error: (m: string, c?: Record<string, unknown>) => void };
   entries: CapturedLog[];
 } {
   const entries: CapturedLog[] = [];
@@ -59,6 +62,7 @@ function captureLogger(): {
     logger: {
       info: (msg, ctx = {}) => entries.push({ level: 'info', msg, ctx }),
       warn: (msg, ctx = {}) => entries.push({ level: 'warn', msg, ctx }),
+      error: (msg, ctx = {}) => entries.push({ level: 'error', msg, ctx }),
     },
     entries,
   };
