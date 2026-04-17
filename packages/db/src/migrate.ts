@@ -165,13 +165,26 @@ async function applyMigration({ client, entry, sql, hash, logger }: ApplyMigrati
   // any partial DDL is rolled back, preventing the crash-loop scenario
   // from 06.1-REVIEW.md H-02. Duplicate-object codes (D-05) are still
   // tolerated at the statement level so orphan-schema baselines commit.
-  await client.begin(async (tx) => {
+  //
+  // ReservedSql does not expose .begin() — transactions on a reserved
+  // connection use manual BEGIN/COMMIT/ROLLBACK via .unsafe() so they
+  // share the same session (and therefore the same advisory lock).
+  // Use SAVEPOINT around each statement so a duplicate-object error can be
+  // swallowed while leaving the transaction open. Without SAVEPOINT, Postgres
+  // marks the transaction aborted on any error — even if Node.js catches it —
+  // and every subsequent statement fails with "current transaction is aborted".
+  await client.unsafe('BEGIN');
+  try {
     for (const statement of statements) {
+      await client.unsafe('SAVEPOINT stmt_sp');
       try {
-        await tx.unsafe(statement);
+        await client.unsafe(statement);
+        await client.unsafe('RELEASE SAVEPOINT stmt_sp');
       } catch (err) {
         const pgCode = (err as { code?: string }).code;
         if (pgCode && DUPLICATE_OBJECT_CODES.has(pgCode)) {
+          await client.unsafe('ROLLBACK TO SAVEPOINT stmt_sp');
+          await client.unsafe('RELEASE SAVEPOINT stmt_sp');
           skipped += 1;
           logger.warn('Migration statement skipped — object already present', {
             migration: entry.tag,
@@ -180,15 +193,22 @@ async function applyMigration({ client, entry, sql, hash, logger }: ApplyMigrati
           });
           continue;
         }
-        throw err; // Aborts the transaction.
+        // Non-duplicate error: roll back to savepoint so ROLLBACK below works.
+        await client.unsafe('ROLLBACK TO SAVEPOINT stmt_sp').catch(() => {});
+        throw err; // Caught in the outer catch; transaction is rolled back.
       }
     }
 
-    await tx`
-      INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
-      VALUES (${hash}, ${entry.when})
-    `;
-  });
+    await client.unsafe(
+      `INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('${hash}', ${entry.when})`,
+    );
+    await client.unsafe('COMMIT');
+  } catch (err) {
+    await client.unsafe('ROLLBACK').catch(() => {
+      // Best-effort rollback; original error is re-thrown below.
+    });
+    throw err;
+  }
 
   logger.info('Migration applied', {
     migration: entry.tag,
