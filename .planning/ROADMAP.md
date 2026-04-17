@@ -194,8 +194,8 @@ Plans:
   6. Queue scanner logger is created at module scope, not per tick (IN-03)
 **Plans**: 2 plans
 Plans:
-- [ ] 06.3-01-PLAN.md — Worker fixes: cursor advance into transaction (WR-01) + module-scope logger (IN-03)
-- [ ] 06.3-02-PLAN.md — Frontend seasonal badge tests (WR-04) + verification of already-fixed WR-02, WR-05, IN-02
+- [x] 06.3-01-PLAN.md — Worker fixes: cursor advance into transaction (WR-01) + module-scope logger (IN-03)
+- [x] 06.3-02-PLAN.md — Frontend seasonal badge tests (WR-04) + verification of already-fixed WR-02, WR-05, IN-02
 
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
 **Goal**: User can connect LinkedIn and Facebook profiles alongside Twitter, with token health monitoring and automatic refresh
