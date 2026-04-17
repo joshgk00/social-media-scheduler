@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
 import { mkdtemp, writeFile, readFile, mkdir, rm } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -18,6 +19,12 @@ const __dirnameTs = dirname(__filename);
 const TEST_URL = getTestDatabaseUrl();
 const testClient = makeTestClient();
 const REAL_MIGRATIONS_DIR = join(__dirnameTs, '../../drizzle');
+
+// Safety net: if the test runner hard-kills the worker or an unhandled error
+// bypasses afterAll, ensure the shared client connection is closed.
+process.once('exit', () => {
+  testClient.end({ timeout: 0 }).catch(() => {});
+});
 
 interface CapturedLog {
   level: 'info' | 'warn';
@@ -99,12 +106,10 @@ let exitHandlerRegistered = false;
 
 function restoreAllBackups(): void {
   // Synchronous-only — must be usable in process exit handler.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const fs = require('node:fs');
   while (STAGED_BACKUPS.length > 0) {
     const backup = STAGED_BACKUPS.pop()!;
     try {
-      fs.writeFileSync(backup.path, backup.originalContent);
+      writeFileSync(backup.path, backup.originalContent);
     } catch {
       // Best-effort; nothing more we can do from inside an exit handler.
     }
