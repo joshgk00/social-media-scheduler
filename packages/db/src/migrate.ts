@@ -30,6 +30,14 @@ const DUPLICATE_OBJECT_CODES = new Set([
   '42701',
 ]);
 
+/**
+ * Postgres advisory lock key for the migration runner. Frozen forever —
+ * changing this value would allow a rolling deploy's old and new containers
+ * to migrate in parallel, which is exactly the race this lock prevents.
+ * Grep-audited 2026-04-16: no other pg_advisory_lock call site in this repo.
+ */
+const MIGRATION_LOCK_KEY = 7523098462398n;
+
 interface JournalEntry {
   idx: number;
   version: string;
@@ -69,28 +77,52 @@ export async function runMigrations(databaseUrl: string, logger: MigrationLogger
   const migrationsFolder = resolve(__dirname, '../drizzle');
   const client = postgres(databaseUrl, { max: 1 });
   try {
-    await ensureMigrationsTable(client);
+    // Pin a single backend PID for the entire migration run. `max: 1` alone
+    // does NOT guarantee same-connection semantics across queries (the driver
+    // can drop and reconnect); session-scoped advisory locks die with the
+    // session, so the lock and the migration apply MUST share one connection.
+    const reserved = await client.reserve();
+    try {
+      await ensureMigrationsTable(reserved);
+      // Blocking acquire (D-01). A second concurrent caller waits here until
+      // the first caller's finally block runs pg_advisory_unlock.
+      await reserved.unsafe(`SELECT pg_advisory_lock(${MIGRATION_LOCK_KEY}::bigint)`);
+      try {
+        const journal = await readJournal(migrationsFolder);
+        const applied = await readAppliedHashes(reserved);
 
-    const journal = await readJournal(migrationsFolder);
-    const applied = await readAppliedHashes(client);
+        for (const entry of journal.entries) {
+          const sqlPath = join(migrationsFolder, `${entry.tag}.sql`);
+          const sql = await readFile(sqlPath, 'utf-8');
+          const hash = createHash('sha256').update(sql).digest('hex');
 
-    for (const entry of journal.entries) {
-      const sqlPath = join(migrationsFolder, `${entry.tag}.sql`);
-      const sql = await readFile(sqlPath, 'utf-8');
-      const hash = createHash('sha256').update(sql).digest('hex');
+          if (applied.has(hash)) {
+            continue;
+          }
 
-      if (applied.has(hash)) {
-        continue;
+          await applyMigration({ client: reserved, entry, sql, hash, logger });
+        }
+      } finally {
+        // Release the lock BEFORE releasing the reservation, so the unlock
+        // runs on the same session that owns the lock. Failure here is
+        // logged but doesn't mask the original error (if any).
+        try {
+          await reserved.unsafe(`SELECT pg_advisory_unlock(${MIGRATION_LOCK_KEY}::bigint)`);
+        } catch (unlockErr) {
+          logger.warn('Failed to release migration advisory lock; session close will release it', {
+            error: (unlockErr as Error).message,
+          });
+        }
       }
-
-      await applyMigration({ client, entry, sql, hash, logger });
+    } finally {
+      await reserved.release();
     }
   } finally {
     await client.end();
   }
 }
 
-async function ensureMigrationsTable(client: Sql): Promise<void> {
+async function ensureMigrationsTable(client: Sql | ReservedSql): Promise<void> {
   // Match drizzle's tracking table schema so future calls to drizzle's
   // native migrate() would also find these records.
   await client.unsafe('CREATE SCHEMA IF NOT EXISTS "drizzle"');
@@ -109,7 +141,7 @@ async function readJournal(migrationsFolder: string): Promise<Journal> {
   return JSON.parse(raw) as Journal;
 }
 
-async function readAppliedHashes(client: Sql): Promise<Set<string>> {
+async function readAppliedHashes(client: Sql | ReservedSql): Promise<Set<string>> {
   const rows = await client<{ hash: string }[]>`
     SELECT hash FROM "drizzle"."__drizzle_migrations"
   `;
@@ -117,7 +149,7 @@ async function readAppliedHashes(client: Sql): Promise<Set<string>> {
 }
 
 interface ApplyMigrationArgs {
-  client: Sql;
+  client: ReservedSql;
   entry: JournalEntry;
   sql: string;
   hash: string;
@@ -128,28 +160,35 @@ async function applyMigration({ client, entry, sql, hash, logger }: ApplyMigrati
   const statements = splitStatements(sql);
   let skipped = 0;
 
-  for (const statement of statements) {
-    try {
-      await client.unsafe(statement);
-    } catch (err) {
-      const pgCode = (err as { code?: string }).code;
-      if (pgCode && DUPLICATE_OBJECT_CODES.has(pgCode)) {
-        skipped += 1;
-        logger.warn('Migration statement skipped — object already present', {
-          migration: entry.tag,
-          pgCode,
-          statementPreview: statement.slice(0, 120).replace(/\s+/g, ' ').trim(),
-        });
-        continue;
+  // Per-migration atomic transaction (D-04). Non-duplicate errors rethrow
+  // and abort the transaction — __drizzle_migrations stays unmodified and
+  // any partial DDL is rolled back, preventing the crash-loop scenario
+  // from 06.1-REVIEW.md H-02. Duplicate-object codes (D-05) are still
+  // tolerated at the statement level so orphan-schema baselines commit.
+  await client.begin(async (tx) => {
+    for (const statement of statements) {
+      try {
+        await tx.unsafe(statement);
+      } catch (err) {
+        const pgCode = (err as { code?: string }).code;
+        if (pgCode && DUPLICATE_OBJECT_CODES.has(pgCode)) {
+          skipped += 1;
+          logger.warn('Migration statement skipped — object already present', {
+            migration: entry.tag,
+            pgCode,
+            statementPreview: statement.slice(0, 120).replace(/\s+/g, ' ').trim(),
+          });
+          continue;
+        }
+        throw err; // Aborts the transaction.
       }
-      throw err;
     }
-  }
 
-  await client`
-    INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
-    VALUES (${hash}, ${entry.when})
-  `;
+    await tx`
+      INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
+      VALUES (${hash}, ${entry.when})
+    `;
+  });
 
   logger.info('Migration applied', {
     migration: entry.tag,
