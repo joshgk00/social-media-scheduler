@@ -2,33 +2,32 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import postgres, { type Sql } from 'postgres';
+import postgres, { type Sql, type ReservedSql } from 'postgres';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Postgres SQLSTATE codes that indicate an object already exists. When a
- * migration statement fails with one of these, the runner logs a warning and
- * continues — the declarative end state is already satisfied.
+ * Postgres SQLSTATE codes tolerated at statement level inside a migration
+ * transaction. Narrowed (D-06) to the four codes that arise from
+ * drizzle-emitted DDL; any other error rethrows and aborts the transaction.
  *
- * - 42P07 duplicate_table
- * - 42P06 duplicate_schema
- * - 42710 duplicate_object (covers CONSTRAINT, TYPE, EXTENSION, TRIGGER)
- * - 42701 duplicate_column
- * - 42P03 duplicate_cursor
- * - 42P04 duplicate_database
- * - 42P05 duplicate_prepared_statement
- * - 42723 duplicate_function
+ * - 42P07 duplicate_table (CREATE TABLE, CREATE INDEX)
+ * - 42P06 duplicate_schema (CREATE SCHEMA)
+ * - 42710 duplicate_object (CONSTRAINT, TYPE, TRIGGER, EXTENSION)
+ * - 42701 duplicate_column (ADD COLUMN)
+ *
+ * Explicitly NOT tolerated:
+ * - 42P03 duplicate_cursor (migrations don't declare cursors)
+ * - 42P04 duplicate_database (migrations don't CREATE DATABASE)
+ * - 42P05 duplicate_prepared_statement (migrations don't prepare statements)
+ * - 42723 duplicate_function (not emitted by drizzle-kit today; add back
+ *   with a test if a future schema pattern requires it)
  */
 const DUPLICATE_OBJECT_CODES = new Set([
   '42P07',
   '42P06',
   '42710',
   '42701',
-  '42P03',
-  '42P04',
-  '42P05',
-  '42723',
 ]);
 
 interface JournalEntry {
