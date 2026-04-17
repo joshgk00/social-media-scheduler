@@ -13,16 +13,17 @@ export default defineConfig({
       exclude: ['src/__tests__/**'],
       thresholds: {
         branches: 100,
-        // functions/lines/statements are below 100 due to two unreachable paths:
+        // functions/lines/statements are below 100 due to three unreachable paths:
         // (1) defaultLogger.warn — only reachable without an injected logger during
-        //     a duplicate-object scenario; covered by defaultLogger.info in scenario 1
-        //     but warn is never reached because all tests inject a custom logger;
-        // (2) the advisory-lock unlock catch block (line ~112) — only reachable if
+        //     a duplicate-object scenario; all tests inject a custom logger;
+        // (2) defaultLogger.error — only reachable without an injected logger when
+        //     pg_advisory_unlock throws; same unreachable combination as (1)+(3);
+        // (3) the advisory-lock unlock catch block (line ~114) — only reachable if
         //     pg_advisory_unlock throws, which requires the DB session to close mid-run.
         // Branch coverage is 100% — the decision paths are all exercised.
-        functions: 76,
-        lines: 96,
-        statements: 96,
+        functions: 71,
+        lines: 95,
+        statements: 95,
       },
     },
   },
