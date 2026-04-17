@@ -21,6 +21,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 6.1: Production Deployment Wiring** - INSERTED — Wire media routes in API entry point, add SESSION_SECRET to Docker Compose, create web production build target
 - [ ] **Phase 6.2: Test & Build Stabilization + Migration Runner Hardening** - INSERTED — Rebuild stale dist packages, fix mock-db regression, resolve 30 test failures, harden migration runner (advisory lock, per-migration atomicity, test coverage) per 06.1-REVIEW.md H-01/H-02/M-01
 - [ ] **Phase 6.3: Queue Engine Bug Fixes** - INSERTED — Fix recycling race condition, stuck queue state, seasonal pause logic, silent failures, profile display
+- [ ] **Phase 6.4: Wire Media-Post Association** - INSERTED — Wire associateMediaToPost into post create/update routes, close MEDIA-05 and FLOW-C
+- [ ] **Phase 6.5: Bull-Board Nginx Proxy** - INSERTED — Add nginx proxy for /admin/queues Bull-Board dashboard
 - [ ] **Phase 7: Multi-Platform Profiles & Token Lifecycle** - LinkedIn and Facebook OAuth connections, profile management UI, token health monitoring, auto-refresh
 - [ ] **Phase 8: LinkedIn & Facebook Post Creation** - LinkedIn share forms, Facebook post forms, LinkedIn and Facebook rate limit tracking
 - [ ] **Phase 9: Notifications & Settings** - In-app notification bell, SMTP email notifications, notification preferences, email logs
@@ -197,6 +199,30 @@ Plans:
 - [x] 06.3-01-PLAN.md — Worker fixes: cursor advance into transaction (WR-01) + module-scope logger (IN-03)
 - [x] 06.3-02-PLAN.md — Frontend seasonal badge tests (WR-04) + verification of already-fixed WR-02, WR-05, IN-02
 
+### Phase 6.4: Wire Media-Post Association
+**INSERTED** — Gap closure from v1.0 milestone audit
+**Goal**: Wire `associateMediaToPost` into post creation/update routes so `post_media.post_id` is set and the publish worker's media-readiness gate actually fires
+**Depends on**: Phase 6.3
+**Requirements**: MEDIA-05
+**Gap Closure**: MEDIA-05 (unsatisfied), Integration gap (media.service → routes/posts.ts), FLOW-C (broken at "attach to post")
+**Success Criteria** (what must be TRUE):
+  1. `CreatePostInput` and `UpdatePostInput` in `post.service.ts` include `mediaIds?: string[]`
+  2. POST `/api/posts` and PATCH `/api/posts/:id` call `associateMediaToPost(db, post.id, mediaIds)` after persisting the post
+  3. After creating a post with media, `post_media.post_id` is non-NULL for associated media rows
+  4. Publish worker skips posts with media in `pending` or `processing` transcode state (FLOW-C verified end-to-end)
+**Plans**: TBD
+
+### Phase 6.5: Bull-Board Nginx Proxy
+**INSERTED** — Gap closure from v1.0 milestone audit
+**Goal**: Bull-Board admin dashboard at `/admin/queues` is accessible through nginx in production
+**Depends on**: Phase 6.3
+**Requirements**: None (operational visibility)
+**Gap Closure**: Integration gap (app.ts `/admin/queues` → nginx.conf)
+**Success Criteria** (what must be TRUE):
+  1. nginx.conf includes `location /admin/` block proxying to `api_backend`
+  2. `/admin/queues` loads the Bull-Board dashboard through nginx (not the SPA catch-all `index.html`)
+**Plans**: TBD
+
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
 **Goal**: User can connect LinkedIn and Facebook profiles alongside Twitter, with token health monitoring and automatic refresh
 **Depends on**: Phase 4
@@ -291,9 +317,9 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 6.1 -> 6.2 -> 6.3 -> 7 -> 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 6.1 -> 6.2 -> 6.3 -> 6.4 -> 6.5 -> 7 -> 8 -> 9 -> 10 -> 11
 Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could theoretically overlap.
-Note: Phases 6.1-6.3 are gap closure phases inserted after v1.0 milestone audit. 6.3 depends on 6.2 (needs passing tests first).
+Note: Phases 6.1-6.5 are gap closure phases inserted after v1.0 milestone audit. 6.4 and 6.5 both depend on 6.3; they are independent of each other.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -306,6 +332,8 @@ Note: Phases 6.1-6.3 are gap closure phases inserted after v1.0 milestone audit.
 | 6.1 Production Deployment Wiring | 0/TBD | Gap closure | - |
 | 6.2 Test & Build Stabilization + Migration Runner Hardening | 0/TBD | Gap closure | - |
 | 6.3 Queue Engine Bug Fixes | 0/TBD | Gap closure | - |
+| 6.4 Wire Media-Post Association | 0/TBD | Gap closure | - |
+| 6.5 Bull-Board Nginx Proxy | 0/TBD | Gap closure | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
 | 9. Notifications & Settings | 0/TBD | Not started | - |
