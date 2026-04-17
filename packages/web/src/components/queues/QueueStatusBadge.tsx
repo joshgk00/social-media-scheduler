@@ -9,6 +9,9 @@ interface QueueStatusBadgeProps {
   seasonalEnd?: string | null;
 }
 
+// WR-04 verified: exclusive operators (<, >) are correct here because this function
+// checks if today is OUTSIDE the active window. Boundary dates are active (not paused),
+// matching the backend's inclusive >= / <= in isWithinSeasonalWindow.
 function isInSeasonalPause(seasonalStart?: string | null, seasonalEnd?: string | null): boolean {
   if (!seasonalStart || !seasonalEnd) return false;
   const now = new Date();
