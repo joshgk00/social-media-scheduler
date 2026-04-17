@@ -10,9 +10,11 @@
 //   4. Hour window
 //   5. Interval elapsed
 //
-// Pitfall 2 prevention: BullMQ enqueue happens BEFORE cursor advance.
-// If Redis fails, cursor stays put and the post retries next tick.
-// BullMQ jobId dedup (buildPublishJobId) prevents double-publish.
+// WR-01 fix: cursor advance happens INSIDE the db.transaction alongside
+// post selection. BullMQ enqueue happens AFTER the transaction commits.
+// If BullMQ fails, the post stays queued and retries on the next cycle
+// when cursor wraps. BullMQ jobId dedup (buildPublishJobId) prevents
+// double-publish.
 //
 // Pitfall 6: cursor advancement uses queue_position > cursorPosition,
 // not = cursorPosition+1, to handle gaps from deleted posts.
@@ -37,6 +39,8 @@ import { createLogger } from '@sms/shared/logger';
 import { DateTime } from 'luxon';
 import { randomUUID } from 'node:crypto';
 import type { WorkerDb } from './db.js';
+
+const logger = createLogger('queue-scanner');
 
 export const QUEUE_SCANNER_QUEUE_NAME = 'queue-scanner';
 export const QUEUE_SCAN_INTERVAL_MS = 60_000;
@@ -84,7 +88,6 @@ export async function evaluateQueues(
   now?: DateTime,
   notificationThrottle: Map<string, number> = new Map(),
 ): Promise<number> {
-  const logger = createLogger('queue-scanner');
   const currentNow = now ?? DateTime.utc();
   let enqueuedCount = 0;
 
@@ -162,8 +165,8 @@ export async function evaluateQueues(
         continue;
       }
 
-      // Select next post and handle recycling in a transaction (no cursor advance yet)
-      const nextQueuedPost = await db.transaction(async (tx): Promise<QueuedPostRow | null> => {
+      // Select next post, handle recycling, and advance cursor atomically (WR-01)
+      const txResult = await db.transaction(async (tx): Promise<{ post: QueuedPostRow; newCursorPosition: number } | null> => {
         // Find next queued post: queue_position > cursor (Pitfall 6: gap-safe)
         const nextPosts = await tx
           .select({
@@ -229,11 +232,40 @@ export async function evaluateQueues(
           }
         }
 
-        return candidate;
+        if (!candidate) {
+          return null;
+        }
+
+        // Advance cursor inside the transaction (WR-01: atomic with post selection)
+        await tx
+          .update(queues)
+          .set({
+            cursorPosition: candidate.queuePosition,
+            nextRunAt: (() => {
+              const next = calculateNextRunAt(
+                {
+                  intervalType: queue.intervalType,
+                  intervalValue: queue.intervalValue,
+                  intervalUnit: queue.intervalUnit,
+                  hourSlots: queue.hourSlots,
+                  daysOfWeek: queue.daysOfWeek,
+                  lastPublishedAt: queue.lastPublishedAt,
+                  startDate: queue.startDate,
+                },
+                userTimezone,
+                currentNow,
+              );
+              return next ? new Date(next.toMillis()) : new Date(currentNow.plus({ minutes: 5 }).toMillis());
+            })(),
+            updatedAt: new Date(),
+          })
+          .where(eq(queues.id, queue.id));
+
+        return { post: candidate, newCursorPosition: candidate.queuePosition };
       });
 
       // If no post found: emit queue-empty notification (outside tx -- BullMQ calls must not be inside a DB tx)
-      if (!nextQueuedPost) {
+      if (!txResult) {
         const lastError = notificationThrottle.get(queue.id) ?? 0;
         if (Date.now() - lastError < 60_000) {
           continue;
@@ -250,6 +282,8 @@ export async function evaluateQueues(
         continue;
       }
 
+      const nextQueuedPost = txResult.post;
+
       // Resolve spinnable text at enqueue time (D-05)
       const resolvedText = nextQueuedPost.hasSpinnableText
         ? resolveSpinnableText(nextQueuedPost.text)
@@ -258,7 +292,7 @@ export async function evaluateQueues(
       const correlationId = randomUUID();
       const jobId = buildPublishJobId(nextQueuedPost.id, nextQueuedPost.postVersion);
 
-      // Enqueue to publish queue BEFORE advancing cursor (BullMQ jobId dedup prevents double-publish)
+      // Enqueue to publish queue AFTER cursor advance (BullMQ jobId dedup prevents double-publish)
       await publishQueue.add(
         JOB_NAMES.publishPost,
         {
@@ -272,31 +306,6 @@ export async function evaluateQueues(
           jobId,
         },
       );
-
-      // Advance cursor only after successful enqueue
-      await db
-        .update(queues)
-        .set({
-          cursorPosition: nextQueuedPost.queuePosition,
-          nextRunAt: (() => {
-            const next = calculateNextRunAt(
-              {
-                intervalType: queue.intervalType,
-                intervalValue: queue.intervalValue,
-                intervalUnit: queue.intervalUnit,
-                hourSlots: queue.hourSlots,
-                daysOfWeek: queue.daysOfWeek,
-                lastPublishedAt: queue.lastPublishedAt,
-                startDate: queue.startDate,
-              },
-              userTimezone,
-              currentNow,
-            );
-            return next ? new Date(next.toMillis()) : new Date(currentNow.plus({ minutes: 5 }).toMillis());
-          })(),
-          updatedAt: new Date(),
-        })
-        .where(eq(queues.id, queue.id));
 
       enqueuedCount++;
     } catch (queueErr) {
@@ -318,7 +327,6 @@ export async function startQueueScanner(
   publishQueue: Queue,
   notificationQueue: Queue,
 ): Promise<StartQueueScannerResult> {
-  const logger = createLogger('queue-scanner');
   const notificationThrottle = new Map<string, number>();
 
   const queueScannerQueue = new Queue(QUEUE_SCANNER_QUEUE_NAME, {
