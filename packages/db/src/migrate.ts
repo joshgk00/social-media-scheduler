@@ -200,7 +200,8 @@ async function applyMigration({ client, entry, sql, hash, logger }: ApplyMigrati
     }
 
     await client.unsafe(
-      `INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('${hash}', ${entry.when})`,
+      `INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ($1, $2)`,
+      [hash, entry.when],
     );
     await client.unsafe('COMMIT');
   } catch (err) {
