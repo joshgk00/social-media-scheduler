@@ -78,6 +78,14 @@ vi.mock('@sms/shared/logger', () => ({
   createLogger: (...args: unknown[]) => mockCreateLogger(...args),
 }));
 
+const mockSoftDeleteMediaForPost = vi.fn().mockResolvedValue(0);
+const mockAssociateMediaToPost = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../../services/media.service.js', () => ({
+  softDeleteMediaForPost: (...args: unknown[]) => mockSoftDeleteMediaForPost(...args),
+  associateMediaToPost: (...args: unknown[]) => mockAssociateMediaToPost(...args),
+}));
+
 function createPostUpdateMockDb(options: {
   updateResult?: unknown[];
   existingPost?: { id: string; status: string; postVersion: number } | null;
@@ -327,6 +335,8 @@ describe('post.service', () => {
       warn: vi.fn(),
       debug: vi.fn(),
     });
+    mockSoftDeleteMediaForPost.mockClear();
+    mockAssociateMediaToPost.mockClear();
 
     const mod = await import('../../services/post.service.js');
     createPost = mod.createPost;
@@ -425,6 +435,46 @@ describe('post.service', () => {
 
       // insert called twice: once for the post, once for postTags
       expect(db.insert).toHaveBeenCalledTimes(2);
+    });
+
+    it('calls associateMediaToPost when mediaIds provided', async () => {
+      const db = createPostCreateMockDb();
+
+      await createPost(db, 'user-1', {
+        profileId: 'profile-1',
+        text: 'Hello',
+        mediaIds: ['media-1', 'media-2'],
+      });
+
+      expect(mockAssociateMediaToPost).toHaveBeenCalledTimes(1);
+      expect(mockAssociateMediaToPost).toHaveBeenCalledWith(
+        expect.anything(),
+        'post-1',
+        ['media-1', 'media-2'],
+      );
+    });
+
+    it('does NOT call associateMediaToPost when no mediaIds', async () => {
+      const db = createPostCreateMockDb();
+
+      await createPost(db, 'user-1', {
+        profileId: 'profile-1',
+        text: 'Hello',
+      });
+
+      expect(mockAssociateMediaToPost).not.toHaveBeenCalled();
+    });
+
+    it('does NOT call associateMediaToPost when mediaIds is empty array', async () => {
+      const db = createPostCreateMockDb();
+
+      await createPost(db, 'user-1', {
+        profileId: 'profile-1',
+        text: 'Hello',
+        mediaIds: [],
+      });
+
+      expect(mockAssociateMediaToPost).not.toHaveBeenCalled();
     });
 
     it('stores thread text with [[tweet]] separators when isThread is true', async () => {
@@ -566,6 +616,53 @@ describe('post.service', () => {
       const setCall = db._updateChain.set.mock.calls[0][0];
       expect(setCall.text).toBe('new text');
       expect(setCall.notes).toBe('a note');
+    });
+
+    it('clears old associations and calls associateMediaToPost when mediaIds provided', async () => {
+      const db = createPostUpdateMockDb({
+        updateResult: [{ id: 'post-1' }],
+        existingPost: { id: 'post-1', status: 'draft', postVersion: 1, scheduledAt: null },
+      });
+
+      await updatePost(db, 'user-1', 'post-1', { postVersion: 1, mediaIds: ['media-3'] });
+
+      // update called twice: once for the post row, once for clearing media associations
+      expect(db.update).toHaveBeenCalledTimes(2);
+      const clearCall = db._updateChain.set.mock.calls.find(
+        (call: unknown[]) => (call[0] as Record<string, unknown>).postId === null,
+      );
+      expect(clearCall).toBeDefined();
+      expect(mockAssociateMediaToPost).toHaveBeenCalledWith(
+        expect.anything(),
+        'post-1',
+        ['media-3'],
+      );
+    });
+
+    it('clears associations when mediaIds is empty array', async () => {
+      const db = createPostUpdateMockDb({
+        updateResult: [{ id: 'post-1' }],
+        existingPost: { id: 'post-1', status: 'draft', postVersion: 1, scheduledAt: null },
+      });
+
+      await updatePost(db, 'user-1', 'post-1', { postVersion: 1, mediaIds: [] });
+
+      // update called twice: once for the post row, once for clearing media associations
+      expect(db.update).toHaveBeenCalledTimes(2);
+      expect(mockAssociateMediaToPost).not.toHaveBeenCalled();
+    });
+
+    it('does NOT touch media when mediaIds is undefined (not provided)', async () => {
+      const db = createPostUpdateMockDb({
+        updateResult: [{ id: 'post-1' }],
+        existingPost: { id: 'post-1', status: 'draft', postVersion: 1, scheduledAt: null },
+      });
+
+      await updatePost(db, 'user-1', 'post-1', { postVersion: 1 });
+
+      // update called only once: for the post row itself
+      expect(db.update).toHaveBeenCalledTimes(1);
+      expect(mockAssociateMediaToPost).not.toHaveBeenCalled();
     });
 
     it('increments postVersion on successful update', async () => {
