@@ -213,7 +213,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 06.4-01-PLAN.md -- Wire associateMediaToPost into createPost/updatePost + unit tests
-- [ ] 06.4-02-PLAN.md -- Integration tests for POST/PATCH with mediaIds + full suite verification
+- [x] 06.4-02-PLAN.md -- Integration tests for POST/PATCH with mediaIds + full suite verification
 
 ### Phase 6.5: Bull-Board Nginx Proxy
 **INSERTED** — Gap closure from v1.0 milestone audit
