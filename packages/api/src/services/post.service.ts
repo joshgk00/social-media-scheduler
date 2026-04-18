@@ -3,9 +3,9 @@ import { AppError, EDITABLE_STATES, DELETABLE_STATES, transitionPost } from '@sm
 import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
-import { posts, postTags, tags, socialProfiles } from '@sms/db';
+import { posts, postTags, tags, socialProfiles, postMedia } from '@sms/db';
 
-import { softDeleteMediaForPost } from './media.service.js';
+import { softDeleteMediaForPost, associateMediaToPost } from './media.service.js';
 
 const logger = createLogger('post-service');
 
@@ -23,6 +23,7 @@ interface CreatePostInput {
   autoDestructAfter?: string | null;
   notes?: string | null;
   tagIds?: string[];
+  mediaIds?: string[];
 }
 
 interface UpdatePostInput {
@@ -34,6 +35,7 @@ interface UpdatePostInput {
   autoDestructAfter?: string | null;
   notes?: string | null;
   tagIds?: string[];
+  mediaIds?: string[];
   postVersion: number;
 }
 
@@ -100,6 +102,10 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
       await tx.insert(postTags).values(
         tagIds.map((tagId) => ({ postId: insertedPost.id, tagId })),
       );
+    }
+
+    if (input.mediaIds && input.mediaIds.length > 0) {
+      await associateMediaToPost(tx, insertedPost.id, input.mediaIds);
     }
 
     return insertedPost;
@@ -240,6 +246,17 @@ export async function updatePost(
         await tx.insert(postTags).values(
           input.tagIds.map((tagId) => ({ postId, tagId })),
         );
+      }
+    }
+
+    if (input.mediaIds !== undefined) {
+      await tx
+        .update(postMedia)
+        .set({ postId: null })
+        .where(eq(postMedia.postId, postId));
+
+      if (input.mediaIds.length > 0) {
+        await associateMediaToPost(tx, postId, input.mediaIds);
       }
     }
   });
