@@ -526,4 +526,79 @@ describe('posts API integration', () => {
       expect(res.body.error).toContain('already connected');
     });
   });
+
+  describe('media association', () => {
+    const MEDIA_ID_1 = '00000000-0000-0000-0000-000000000001';
+    const MEDIA_ID_2 = '00000000-0000-0000-0000-000000000002';
+    const MEDIA_ID_3 = '00000000-0000-0000-0000-000000000003';
+
+    it('POST /api/posts passes mediaIds to createPost service', async () => {
+      mockCreatePost.mockResolvedValueOnce(SAMPLE_POST);
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .post('/api/posts')
+        .send({
+          profileId: PROFILE_ID,
+          text: 'Post with media',
+          mediaIds: [MEDIA_ID_1, MEDIA_ID_2],
+        });
+
+      expect(res.status).toBe(201);
+      expect(mockCreatePost).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(String),
+        expect.objectContaining({ mediaIds: [MEDIA_ID_1, MEDIA_ID_2] }),
+      );
+    });
+
+    it('POST /api/posts without mediaIds passes undefined mediaIds to createPost', async () => {
+      mockCreatePost.mockResolvedValueOnce(SAMPLE_POST);
+      const agent = await authenticatedAgent();
+
+      await agent
+        .post('/api/posts')
+        .send({ profileId: PROFILE_ID, text: 'Post without media' });
+
+      expect(mockCreatePost).toHaveBeenCalledTimes(1);
+      const [, , postInput] = mockCreatePost.mock.calls[0];
+      expect(postInput.mediaIds).toBeUndefined();
+    });
+
+    it('PATCH /api/posts/:id passes mediaIds to updatePost service', async () => {
+      const updatedPost = { ...SAMPLE_POST, postVersion: 2 };
+      mockUpdatePost.mockResolvedValueOnce(updatedPost);
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/posts/${POST_ID}`)
+        .send({ postVersion: 1, mediaIds: [MEDIA_ID_3] });
+
+      expect(res.status).toBe(200);
+      expect(mockUpdatePost).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(String),
+        POST_ID,
+        expect.objectContaining({ mediaIds: [MEDIA_ID_3] }),
+      );
+    });
+
+    it('PATCH /api/posts/:id with empty mediaIds passes empty array to updatePost', async () => {
+      const updatedPost = { ...SAMPLE_POST, postVersion: 2 };
+      mockUpdatePost.mockResolvedValueOnce(updatedPost);
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/posts/${POST_ID}`)
+        .send({ postVersion: 1, mediaIds: [] });
+
+      expect(res.status).toBe(200);
+      expect(mockUpdatePost).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(String),
+        POST_ID,
+        expect.objectContaining({ mediaIds: [] }),
+      );
+    });
+  });
 });
