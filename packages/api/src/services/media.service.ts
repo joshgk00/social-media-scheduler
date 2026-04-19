@@ -228,11 +228,10 @@ export async function softDeleteMediaForPost(
   const updatedRows = await db
     .update(postMedia)
     .set({ deletedAt: new Date() })
-    .where(and(eq(postMedia.postId, postId), isNull(postMedia.deletedAt)));
+    .where(and(eq(postMedia.postId, postId), isNull(postMedia.deletedAt)))
+    .returning({ id: postMedia.id });
 
-  // Drizzle returns the updated rows array or a result with rowCount
-  const count = Array.isArray(updatedRows) ? updatedRows.length : 0;
-  return count;
+  return updatedRows.length;
 }
 
 export async function retryTranscode(
