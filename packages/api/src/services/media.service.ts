@@ -285,12 +285,10 @@ export async function associateMediaToPost(
   postId: string,
   mediaIds: string[],
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    for (let i = 0; i < mediaIds.length; i++) {
-      await tx
-        .update(postMedia)
-        .set({ postId, sortOrder: i })
-        .where(and(eq(postMedia.id, mediaIds[i]), isNull(postMedia.postId)));
-    }
-  });
+  for (let i = 0; i < mediaIds.length; i++) {
+    await db
+      .update(postMedia)
+      .set({ postId, sortOrder: i })
+      .where(and(eq(postMedia.id, mediaIds[i]), isNull(postMedia.postId)));
+  }
 }
