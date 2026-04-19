@@ -1,4 +1,4 @@
-import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount } from 'drizzle-orm';
+import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount, isNull } from 'drizzle-orm';
 import { AppError, EDITABLE_STATES, DELETABLE_STATES, transitionPost } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
@@ -335,7 +335,21 @@ export async function getPostById(db: Db, userId: string, postId: string) {
     .innerJoin(tags, eq(postTags.tagId, tags.id))
     .where(eq(postTags.postId, post.id));
 
-  return { ...post, tags: postTagRows };
+  const mediaRows = await db
+    .select({
+      id: postMedia.id,
+      fileName: postMedia.fileName,
+      mimeType: postMedia.mimeType,
+      fileSize: postMedia.fileSize,
+      thumbnailPath: postMedia.thumbnailPath,
+      sortOrder: postMedia.sortOrder,
+      transcodeStatus: postMedia.transcodeStatus,
+    })
+    .from(postMedia)
+    .where(and(eq(postMedia.postId, post.id), isNull(postMedia.deletedAt)))
+    .orderBy(postMedia.sortOrder);
+
+  return { ...post, tags: postTagRows, media: mediaRows };
 }
 
 export async function getPosts(db: Db, userId: string, query: PostQuery) {
