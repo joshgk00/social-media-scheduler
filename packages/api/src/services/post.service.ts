@@ -271,43 +271,46 @@ export async function deletePost(
   userId: string,
   postId: string,
 ): Promise<boolean> {
-  // D-13: Soft-delete associated media before cascade-deleting the post row.
-  // The cascade on post_media.postId hard-deletes the DB rows, but setting
-  // deletedAt first ensures the 30-day cleanup pipeline processes the files.
-  const softDeletedMediaCount = await softDeleteMediaForPost(db, postId);
-  if (softDeletedMediaCount > 0) {
-    logger.info({ postId, softDeletedMediaCount }, 'Soft-deleted media for post deletion');
-  }
-
-  const deletedRows = await db.delete(posts)
-    .where(
-      and(
-        eq(posts.id, postId),
-        eq(posts.userId, userId),
-        inArray(posts.status, [...DELETABLE_STATES]),
-      ),
-    )
-    .returning({ id: posts.id });
-
-  if (deletedRows.length === 0) {
-    const existingPost = await db
-      .select({ id: posts.id, status: posts.status })
-      .from(posts)
-      .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
-
-    if (existingPost.length === 0) {
-      throw new PostServiceError('Post not found', 404);
+  return db.transaction(async (tx) => {
+    // D-13: Soft-delete associated media before cascade-deleting the post row.
+    // The cascade on post_media.postId hard-deletes the DB rows, but setting
+    // deletedAt first ensures the 30-day cleanup pipeline processes the files.
+    // Both operations share a transaction so a failure in either rolls back the other.
+    const softDeletedMediaCount = await softDeleteMediaForPost(tx, postId);
+    if (softDeletedMediaCount > 0) {
+      logger.info({ postId, softDeletedMediaCount }, 'Soft-deleted media for post deletion');
     }
 
-    throw new PostServiceError(
-      'This post cannot be deleted in its current state.',
-      409,
-    );
-  }
+    const deletedRows = await tx.delete(posts)
+      .where(
+        and(
+          eq(posts.id, postId),
+          eq(posts.userId, userId),
+          inArray(posts.status, [...DELETABLE_STATES]),
+        ),
+      )
+      .returning({ id: posts.id });
 
-  logger.info({ postId, userId }, 'Post deleted');
+    if (deletedRows.length === 0) {
+      const existingPost = await tx
+        .select({ id: posts.id, status: posts.status })
+        .from(posts)
+        .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
-  return true;
+      if (existingPost.length === 0) {
+        throw new PostServiceError('Post not found', 404);
+      }
+
+      throw new PostServiceError(
+        'This post cannot be deleted in its current state.',
+        409,
+      );
+    }
+
+    logger.info({ postId, userId }, 'Post deleted');
+
+    return true;
+  });
 }
 
 // All columns returned intentionally -- the edit page needs every field.
