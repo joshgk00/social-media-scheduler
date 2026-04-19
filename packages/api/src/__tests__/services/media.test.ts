@@ -307,7 +307,8 @@ describe('media.service', () => {
     it('soft-deletes ALL media rows for a given postId', async () => {
       const updateChain: any = {
         set: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue([{ id: 'media-1' }, { id: 'media-2' }]),
+        where: vi.fn().mockReturnThis(),
+        returning: vi.fn().mockResolvedValue([{ id: 'media-1' }, { id: 'media-2' }]),
       };
       mockDb.update.mockReturnValue(updateChain);
 
@@ -379,13 +380,12 @@ describe('media.service', () => {
   });
 
   describe('associateMediaToPost', () => {
-    it('wraps updates in a transaction and sets postId + sortOrder', async () => {
+    it('sets postId + sortOrder for each media id', async () => {
       const mediaIds = ['media-1', 'media-2', 'media-3'];
 
       await associateMediaToPost(mockDb, 'post-id-1', mediaIds);
 
-      expect(mockDb.transaction).toHaveBeenCalled();
-      // Should have called update for each media id
+      // Should have called update for each media id directly (no inner transaction)
       expect(mockDb.update).toHaveBeenCalledTimes(3);
     });
 

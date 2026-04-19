@@ -238,10 +238,11 @@ function createDeleteMockDb(options: {
     return chain;
   }
 
-  // softDeleteMediaForPost calls db.update(postMedia) before deletePost runs
+  // softDeleteMediaForPost calls db.update(postMedia).set().where().returning({ id }) before deletePost runs
   const updateChain: Record<string, any> = {};
   updateChain.set = vi.fn().mockReturnValue(updateChain);
   updateChain.where = vi.fn().mockReturnValue(updateChain);
+  updateChain.returning = vi.fn().mockReturnValue(updateChain);
   updateChain.then = (resolve: (v: unknown) => void) => resolve([]);
 
   const db: any = {
@@ -251,6 +252,8 @@ function createDeleteMockDb(options: {
       return makeSelectChain(existingPost ? [existingPost] : []);
     }),
   };
+  // deletePost wraps soft-delete + hard-delete in a transaction for atomicity
+  db.transaction = vi.fn().mockImplementation((callback: (tx: any) => any) => callback(db));
   return db;
 }
 
