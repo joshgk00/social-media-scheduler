@@ -88,11 +88,13 @@ vi.mock('../../services/media.service.js', () => ({
 
 function createPostUpdateMockDb(options: {
   updateResult?: unknown[];
-  existingPost?: { id: string; status: string; postVersion: number } | null;
+  existingPost?: { id: string; status: string; postVersion: number; scheduledAt?: null } | null;
+  postForGetById?: Record<string, unknown> | null;
 }) {
   const updateResult = options.updateResult ?? [];
   const existingPost = options.existingPost;
   const lookupResult = existingPost ? [existingPost] : [];
+  const postForGetById = options.postForGetById ?? null;
 
   const updateChain: Record<string, any> = {};
   updateChain.set = vi.fn().mockReturnValue(updateChain);
@@ -113,15 +115,18 @@ function createPostUpdateMockDb(options: {
     chain.from = vi.fn().mockReturnValue(chain);
     chain.where = vi.fn().mockReturnValue(chain);
     chain.innerJoin = vi.fn().mockReturnValue(chain);
+    chain.orderBy = vi.fn().mockReturnValue(chain);
+    chain.limit = vi.fn().mockReturnValue(chain);
     chain.then = (resolve: (v: unknown) => void) => resolve(result);
     return chain;
   }
 
   const selectFn = vi.fn().mockImplementation(() => {
     selectCallIndex++;
-    if (selectCallIndex === 1) {
-      return makeSelectChain(lookupResult);
-    }
+    if (selectCallIndex === 1) return makeSelectChain(lookupResult);
+    // index 2: getPostById post row (after transaction commits)
+    if (selectCallIndex === 2) return makeSelectChain(postForGetById ? [postForGetById] : []);
+    // index 3+: tags and media for getPostById — empty arrays are correct defaults
     return makeSelectChain([]);
   });
 
@@ -329,6 +334,7 @@ describe('post.service', () => {
   let getPosts: typeof import('../../services/post.service.js').getPosts;
   let checkConflicts: typeof import('../../services/post.service.js').checkConflicts;
   let PostServiceError: typeof import('../../services/post.service.js').PostServiceError;
+  let getPostById: typeof import('../../services/post.service.js').getPostById;
 
   beforeEach(async () => {
     mockCreateLogger.mockClear();
@@ -348,6 +354,7 @@ describe('post.service', () => {
     getPosts = mod.getPosts;
     checkConflicts = mod.checkConflicts;
     PostServiceError = mod.PostServiceError;
+    getPostById = mod.getPostById;
   });
 
   describe('createPost', () => {
@@ -862,6 +869,108 @@ describe('post.service', () => {
       );
 
       expect(result).toEqual([]);
+    });
+  });
+
+  // UAT Test 3: GET /api/posts/:id returns media array (WR-01)
+  describe('getPostById', () => {
+    function createGetPostByIdMockDb(options: {
+      postRow?: Record<string, unknown> | null;
+      tagRows?: unknown[];
+      mediaRows?: unknown[];
+    } = {}) {
+      const postRow = options.postRow !== undefined ? options.postRow : { id: 'post-1', userId: 'user-1', profileId: 'profile-1', text: 'Hello', status: 'draft' };
+      const tagRows = options.tagRows ?? [];
+      const mediaRows = options.mediaRows ?? [];
+      let callIndex = 0;
+      function makeChain(result: unknown[]) {
+        const c: Record<string, any> = {};
+        ['from','where','innerJoin','orderBy'].forEach(m => { c[m] = vi.fn().mockReturnValue(c); });
+        c.then = (resolve: (v: unknown) => void) => resolve(result);
+        return c;
+      }
+      return {
+        select: vi.fn().mockImplementation(() => {
+          callIndex++;
+          if (callIndex === 1) return makeChain(postRow ? [postRow] : []);
+          if (callIndex === 2) return makeChain(tagRows);
+          return makeChain(mediaRows);
+        }),
+      };
+    }
+
+    it('returns post with media: [] when no media attached (Test 3)', async () => {
+      const db = createGetPostByIdMockDb();
+      const result = await getPostById(db as any, 'user-1', 'post-1');
+      expect(result).not.toBeNull();
+      expect(result).toHaveProperty('media');
+      expect(Array.isArray(result?.media)).toBe(true);
+      expect(result?.media).toHaveLength(0);
+    });
+
+    it('returns post with populated media when rows exist (Test 3)', async () => {
+      const mediaRows = [
+        { id: 'm-1', fileName: 'photo.jpg', mimeType: 'image/jpeg', fileSize: 1024, thumbnailPath: null, sortOrder: 0, transcodeStatus: 'none' },
+      ];
+      const db = createGetPostByIdMockDb({ mediaRows });
+      const result = await getPostById(db as any, 'user-1', 'post-1');
+      expect(result?.media).toHaveLength(1);
+      expect(result?.media[0]).toHaveProperty('fileName', 'photo.jpg');
+    });
+
+    it('returns null when post not found (Test 3)', async () => {
+      const db = createGetPostByIdMockDb({ postRow: null });
+      const result = await getPostById(db as any, 'user-1', 'missing');
+      expect(result).toBeNull();
+    });
+  });
+
+  // UAT Test 4 & 5: updatePost returns media; no-mediaIds leaves associations untouched
+  describe('updatePost media response', () => {
+    const existingPost = { id: 'post-1', status: 'draft', postVersion: 1, scheduledAt: null };
+    const postRow = { id: 'post-1', userId: 'user-1', profileId: 'profile-1', text: 'updated', status: 'draft', postVersion: 2 };
+
+    it('returns post with media field after update (Test 4)', async () => {
+      const db = createPostUpdateMockDb({
+        updateResult: [{ id: 'post-1' }],
+        existingPost,
+        postForGetById: postRow,
+      });
+      const result = await updatePost(db, 'user-1', 'post-1', { postVersion: 1 });
+      expect(result).toHaveProperty('media');
+      expect(Array.isArray(result?.media)).toBe(true);
+    });
+
+    it('does NOT dissociate media when mediaIds is undefined (Test 5)', async () => {
+      const db = createPostUpdateMockDb({
+        updateResult: [{ id: 'post-1' }],
+        existingPost,
+        postForGetById: postRow,
+      });
+      await updatePost(db, 'user-1', 'post-1', { postVersion: 1 });
+      // update called once only for the post row; postMedia dissociation (SET postId=null) must not happen
+      expect(db.update).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // UAT Test 6: deletePost calls softDeleteMediaForPost atomically inside transaction
+  describe('deletePost atomicity', () => {
+    it('calls softDeleteMediaForPost before hard-deleting the post (Test 6)', async () => {
+      const db = createDeleteMockDb({ deleteResult: [{ id: 'post-1' }] });
+      await deletePost(db, 'user-1', 'post-1');
+      // softDeleteMediaForPost must have been called with the same tx handle and correct postId
+      expect(mockSoftDeleteMediaForPost).toHaveBeenCalledTimes(1);
+      expect(mockSoftDeleteMediaForPost).toHaveBeenCalledWith(db, 'post-1');
+      // hard-delete of the post row also ran
+      expect(db.delete).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT hard-delete post when soft-delete throws (atomicity rollback, Test 6)', async () => {
+      mockSoftDeleteMediaForPost.mockRejectedValueOnce(new Error('db error'));
+      const db = createDeleteMockDb({ deleteResult: [{ id: 'post-1' }] });
+      await expect(deletePost(db, 'user-1', 'post-1')).rejects.toThrow('db error');
+      // hard-delete must not have been called — transaction rolled back
+      expect(db.delete).not.toHaveBeenCalled();
     });
   });
 });
