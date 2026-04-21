@@ -503,6 +503,19 @@ describe('post.service', () => {
       expect(valuesCall.text).toBe(threadText);
       expect(valuesCall.isThread).toBe(true);
     });
+
+    it('returns a media field in the response (getPostById includes media after WR-01)', async () => {
+      const db = createPostCreateMockDb();
+
+      const result = await createPost(db, 'user-1', {
+        profileId: 'profile-1',
+        text: 'Post with no media',
+      });
+
+      // media must be present and be an array (empty when no media associated)
+      expect(result).toHaveProperty('media');
+      expect(Array.isArray(result?.media)).toBe(true);
+    });
   });
 
   describe('updatePost', () => {
