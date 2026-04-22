@@ -225,7 +225,9 @@ Plans:
   1. nginx.conf includes `location /media/` block proxying to `api_backend`; uploaded thumbnails and media files return the actual file (not index.html) through the published nginx port
   2. docker-compose.yml nginx service mounts the `media_data` volume so express.static can serve files
   3. nginx.conf includes `location /admin/` block proxying to `api_backend`; `/admin/queues` loads the Bull-Board dashboard through nginx (not the SPA catch-all)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 06.5-01-PLAN.md -- Add /media/ and /admin/ proxy blocks to nginx.conf and nginx.dev.conf
 
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
 **Goal**: User can connect LinkedIn and Facebook profiles alongside Twitter, with token health monitoring and automatic refresh
@@ -337,7 +339,7 @@ Note: Phases 6.1-6.5 are gap closure phases inserted after v1.0 milestone audit.
 | 6.2 Test & Build Stabilization + Migration Runner Hardening | 0/TBD | Gap closure | - |
 | 6.3 Queue Engine Bug Fixes | 0/TBD | Gap closure | - |
 | 6.4 Wire Media-Post Association | 0/TBD | Gap closure | - |
-| 6.5 Nginx Proxy Completion | 0/TBD | Gap closure | - |
+| 6.5 Nginx Proxy Completion | 0/1 | Planning complete | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
 | 9. Notifications & Settings | 0/TBD | Not started | - |
