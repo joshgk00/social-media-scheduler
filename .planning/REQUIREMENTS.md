@@ -325,7 +325,7 @@
 | MEDIA-03 | Phase 6 | Pending |
 | MEDIA-04 | Phase 6 | Pending |
 | MEDIA-05 | Phase 6.4 | Pending |
-| MEDIA-06 | Phase 6 | Pending |
+| MEDIA-06 | Phase 6.5 | Pending |
 | MEDIA-07 | Phase 6 | Pending |
 | MEDIA-08 | Phase 6 | Pending |
 | MEDIA-09 | Phase 6 | Pending |

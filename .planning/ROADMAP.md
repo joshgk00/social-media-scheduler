@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 6.2: Test & Build Stabilization + Migration Runner Hardening** - INSERTED — Rebuild stale dist packages, fix mock-db regression, resolve 30 test failures, harden migration runner (advisory lock, per-migration atomicity, test coverage) per 06.1-REVIEW.md H-01/H-02/M-01
 - [ ] **Phase 6.3: Queue Engine Bug Fixes** - INSERTED — Fix recycling race condition, stuck queue state, seasonal pause logic, silent failures, profile display
 - [ ] **Phase 6.4: Wire Media-Post Association** - INSERTED — Wire associateMediaToPost into post create/update routes, close MEDIA-05 and FLOW-C
-- [ ] **Phase 6.5: Bull-Board Nginx Proxy** - INSERTED — Add nginx proxy for /admin/queues Bull-Board dashboard
+- [ ] **Phase 6.5: Nginx Proxy Completion** - INSERTED — Add nginx proxy for /media/ and /admin/queues, mount media_data volume on nginx container
 - [ ] **Phase 7: Multi-Platform Profiles & Token Lifecycle** - LinkedIn and Facebook OAuth connections, profile management UI, token health monitoring, auto-refresh
 - [ ] **Phase 8: LinkedIn & Facebook Post Creation** - LinkedIn share forms, Facebook post forms, LinkedIn and Facebook rate limit tracking
 - [ ] **Phase 9: Notifications & Settings** - In-app notification bell, SMTP email notifications, notification preferences, email logs
@@ -215,15 +215,16 @@ Plans:
 - [x] 06.4-01-PLAN.md -- Wire associateMediaToPost into createPost/updatePost + unit tests
 - [x] 06.4-02-PLAN.md -- Integration tests for POST/PATCH with mediaIds + full suite verification
 
-### Phase 6.5: Bull-Board Nginx Proxy
-**INSERTED** — Gap closure from v1.0 milestone audit
-**Goal**: Bull-Board admin dashboard at `/admin/queues` is accessible through nginx in production
-**Depends on**: Phase 6.3
-**Requirements**: None (operational visibility)
-**Gap Closure**: Integration gap (app.ts `/admin/queues` → nginx.conf)
+### Phase 6.5: Nginx Proxy Completion
+**INSERTED** — Gap closure from v1.0 re-audit (2026-04-21)
+**Goal**: All API-served paths (`/media/`, `/admin/`) are reachable through nginx in production — uploaded media files render correctly and Bull-Board dashboard loads
+**Depends on**: Phase 6.4
+**Requirements**: MEDIA-06 (partial → satisfied), MEDIA-01 (degrades without proxy)
+**Gap Closure**: MEDIA-06 partial, Integration /media/ proxy + volume mount, Integration /admin/ proxy, FLOW-E (Bull-Board)
 **Success Criteria** (what must be TRUE):
-  1. nginx.conf includes `location /admin/` block proxying to `api_backend`
-  2. `/admin/queues` loads the Bull-Board dashboard through nginx (not the SPA catch-all `index.html`)
+  1. nginx.conf includes `location /media/` block proxying to `api_backend`; uploaded thumbnails and media files return the actual file (not index.html) through the published nginx port
+  2. docker-compose.yml nginx service mounts the `media_data` volume so express.static can serve files
+  3. nginx.conf includes `location /admin/` block proxying to `api_backend`; `/admin/queues` loads the Bull-Board dashboard through nginx (not the SPA catch-all)
 **Plans**: TBD
 
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
@@ -336,7 +337,7 @@ Note: Phases 6.1-6.5 are gap closure phases inserted after v1.0 milestone audit.
 | 6.2 Test & Build Stabilization + Migration Runner Hardening | 0/TBD | Gap closure | - |
 | 6.3 Queue Engine Bug Fixes | 0/TBD | Gap closure | - |
 | 6.4 Wire Media-Post Association | 0/TBD | Gap closure | - |
-| 6.5 Bull-Board Nginx Proxy | 0/TBD | Gap closure | - |
+| 6.5 Nginx Proxy Completion | 0/TBD | Gap closure | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
 | 9. Notifications & Settings | 0/TBD | Not started | - |
