@@ -227,7 +227,7 @@ Plans:
   3. nginx.conf includes `location /admin/` block proxying to `api_backend`; `/admin/queues` loads the Bull-Board dashboard through nginx (not the SPA catch-all)
 **Plans**: 1 plan
 Plans:
-- [ ] 06.5-01-PLAN.md -- Add /media/ and /admin/ proxy blocks to nginx.conf and nginx.dev.conf
+- [x] 06.5-01-PLAN.md -- Add /media/ and /admin/ proxy blocks to nginx.conf and nginx.dev.conf
 
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
 **Goal**: User can connect LinkedIn and Facebook profiles alongside Twitter, with token health monitoring and automatic refresh
