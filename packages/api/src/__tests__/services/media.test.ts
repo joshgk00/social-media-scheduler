@@ -292,7 +292,7 @@ describe('media.service', () => {
       };
       mockDb.update.mockReturnValue(updateChain);
 
-      await softDeleteMedia(mockDb, mockStorage, 'media-1');
+      await softDeleteMedia(mockDb, 'media-1');
 
       expect(mockDb.update).toHaveBeenCalled();
       const setCall = updateChain.set.mock.calls[0][0];

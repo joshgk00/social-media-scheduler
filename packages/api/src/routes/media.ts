@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import type { Queue } from 'bullmq';
 import { PLATFORM_MEDIA_LIMITS } from '@sms/shared';
-import { createLogger } from '@sms/shared/logger';
 import type { StorageBackend } from '@sms/shared/storage';
 import type { Db } from '@sms/db';
 
@@ -15,8 +14,6 @@ import {
 import { mediaUpload } from '../middleware/media-upload.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { validateUuidParam } from '../middleware/validation.js';
-
-const logger = createLogger('media-routes');
 
 const VALID_PLATFORMS = new Set(Object.keys(PLATFORM_MEDIA_LIMITS));
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,22 +128,13 @@ export function createMediaRouter({ db, storage, transcodeQueue }: MediaRouterDe
 
   router.post('/:id/retry', requireAuth, async (req, res) => {
     const mediaId = validateUuidParam(req.params.id as string);
-
-    try {
-      const result = await retryTranscode(db, transcodeQueue, mediaId);
-      res.json(result);
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'statusCode' in err && (err as any).statusCode === 404) {
-        res.status(404).json({ error: 'Media not found or not in failed state' });
-        return;
-      }
-      throw err;
-    }
+    const result = await retryTranscode(db, transcodeQueue, mediaId);
+    res.json(result);
   });
 
   router.delete('/:id', requireAuth, async (req, res) => {
     const mediaId = validateUuidParam(req.params.id as string);
-    await softDeleteMedia(db, storage, mediaId);
+    await softDeleteMedia(db, mediaId);
     res.status(204).send();
   });
 

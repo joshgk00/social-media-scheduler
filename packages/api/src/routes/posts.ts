@@ -134,12 +134,12 @@ export function createPostsRouter({
         if (budget.wouldExceed) {
           // 409 block path. Mutually exclusive with the warn-notification
           // enqueue below — a blocked post never fires a warn notification.
-          const body: BudgetExceededBody = {
+          const budgetExceededResponse: BudgetExceededBody = {
             code: 'twitter_budget_exceeded',
             budget: budget.budget,
             currentCount: budget.currentUsage,
           };
-          res.status(409).json(body);
+          res.status(409).json(budgetExceededResponse);
           return;
         }
 
@@ -274,12 +274,12 @@ export function createPostsRouter({
           });
 
           if (budget.wouldExceed) {
-            const body: BudgetExceededBody = {
+            const budgetExceededResponse: BudgetExceededBody = {
               code: 'twitter_budget_exceeded',
               budget: budget.budget,
               currentCount: budget.currentUsage,
             };
-            res.status(409).json(body);
+            res.status(409).json(budgetExceededResponse);
             return;
           }
 
@@ -390,7 +390,7 @@ export function createPostsRouter({
         // source of truth (POST_STATE_TRANSITIONS).
         transitionPost(existingPost.status as PostStatus, 'scheduled');
 
-        const [row] = await tx
+        const [updatedPostRow] = await tx
           .update(posts)
           .set({
             status: 'scheduled',
@@ -402,7 +402,7 @@ export function createPostsRouter({
           .where(and(eq(posts.id, postId), eq(posts.userId, userId)))
           .returning();
 
-        return row;
+        return updatedPostRow;
       });
 
       if (publishQueueService) {

@@ -4,13 +4,21 @@ import { createReadStream } from 'node:fs';
 import sharp from 'sharp';
 import { eq, and, isNull } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
-import { PLATFORM_MEDIA_LIMITS, JOB_NAMES } from '@sms/shared';
+import { PLATFORM_MEDIA_LIMITS, JOB_NAMES, AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { StorageBackend } from '@sms/shared/storage';
 import type { Db } from '@sms/db';
 import { postMedia } from '@sms/db';
 
 const logger = createLogger('media-service');
+
+// Subclass exists so structured logs show 'MediaServiceError' instead of 'AppError'.
+// All behavior comes from AppError; the subclass adds no fields or methods.
+export class MediaServiceError extends AppError {
+  constructor(message: string, statusCode: number) {
+    super(message, statusCode);
+  }
+}
 
 const IMAGE_MIME_PREFIXES = ['image/'];
 const FORMAT_TO_EXT: Record<string, string> = {
@@ -125,8 +133,8 @@ export async function processImageUpload(params: ProcessImageParams) {
   } finally {
     try {
       await unlink(tempFilePath);
-    } catch {
-      // Temp file cleanup is best-effort
+    } catch (err) {
+      logger.debug({ err, tempFilePath }, 'Temp file cleanup failed');
     }
   }
 }
@@ -187,8 +195,8 @@ export async function processVideoUpload(params: ProcessVideoParams) {
   } finally {
     try {
       await unlink(tempFilePath);
-    } catch {
-      // Temp file cleanup is best-effort
+    } catch (err) {
+      logger.debug({ err, tempFilePath }, 'Temp file cleanup failed');
     }
   }
 }
@@ -201,7 +209,7 @@ export async function getMediaStatus(db: Db, mediaId: string) {
       transcodeError: postMedia.transcodeError,
     })
     .from(postMedia)
-    .where(eq(postMedia.id, mediaId));
+    .where(and(eq(postMedia.id, mediaId), isNull(postMedia.deletedAt)));
 
   if (rows.length === 0) {
     return null;
@@ -212,7 +220,6 @@ export async function getMediaStatus(db: Db, mediaId: string) {
 
 export async function softDeleteMedia(
   db: Db,
-  _storage: StorageBackend,
   mediaId: string,
 ): Promise<void> {
   await db
@@ -247,12 +254,10 @@ export async function retryTranscode(
       filePath: postMedia.filePath,
     })
     .from(postMedia)
-    .where(eq(postMedia.id, mediaId));
+    .where(and(eq(postMedia.id, mediaId), isNull(postMedia.deletedAt)));
 
   if (rows.length === 0 || rows[0].transcodeStatus !== 'failed') {
-    const err = new Error('Media not found or not in failed state');
-    (err as any).statusCode = 404;
-    throw err;
+    throw new MediaServiceError('Media not found or not in failed state', 404);
   }
 
   const mediaRow = rows[0];
@@ -285,10 +290,11 @@ export async function associateMediaToPost(
   postId: string,
   mediaIds: string[],
 ): Promise<void> {
-  for (let i = 0; i < mediaIds.length; i++) {
+  for (let sortOrder = 0; sortOrder < mediaIds.length; sortOrder++) {
+    const mediaId = mediaIds[sortOrder];
     await db
       .update(postMedia)
-      .set({ postId, sortOrder: i })
-      .where(and(eq(postMedia.id, mediaIds[i]), isNull(postMedia.postId)));
+      .set({ postId, sortOrder })
+      .where(and(eq(postMedia.id, mediaId), isNull(postMedia.postId)));
   }
 }
