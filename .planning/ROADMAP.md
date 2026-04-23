@@ -16,8 +16,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Authentication & User Account** - Login, sessions, 2FA, password management, user settings
 - [ ] **Phase 3: Twitter Profile & Post Creation** - Twitter OAuth connection, tweet creation forms, common post fields, post state machine, tags
 - [x] **Phase 4: Publish Worker & Scheduled Posts** - BullMQ worker service, publish pipeline with retry and idempotency, scheduled posts list, Twitter rate limit tracking (completed 2026-04-10)
-- [ ] **Phase 5: Queue Engine** - Queue CRUD, timezone-aware queue scheduling, queue post management, auto-destruct worker
-- [ ] **Phase 6: Media Handling** - Image upload and thumbnailing, video transcoding via ffmpeg, storage backend selection, media cleanup
+- [x] **Phase 5: Queue Engine** - Queue CRUD, timezone-aware queue scheduling, queue post management, auto-destruct worker (completed 2026-04-15)
+- [x] **Phase 6: Media Handling** - Image upload and thumbnailing, video transcoding via ffmpeg, storage backend selection, media cleanup (completed 2026-04-16)
+- [ ] **Phase 6.1: Production Deployment Wiring** - INSERTED — Wire media routes in API entry point, add SESSION_SECRET to Docker Compose, create web production build target
+- [ ] **Phase 6.2: Test & Build Stabilization + Migration Runner Hardening** - INSERTED — Rebuild stale dist packages, fix mock-db regression, resolve 30 test failures, harden migration runner (advisory lock, per-migration atomicity, test coverage) per 06.1-REVIEW.md H-01/H-02/M-01
+- [ ] **Phase 6.3: Queue Engine Bug Fixes** - INSERTED — Fix recycling race condition, stuck queue state, seasonal pause logic, silent failures, profile display
+- [ ] **Phase 6.4: Wire Media-Post Association** - INSERTED — Wire associateMediaToPost into post create/update routes, close MEDIA-05 and FLOW-C
+- [ ] **Phase 6.5: Nginx Proxy Completion** - INSERTED — Add nginx proxy for /media/ and /admin/queues, mount media_data volume on nginx container
 - [ ] **Phase 7: Multi-Platform Profiles & Token Lifecycle** - LinkedIn and Facebook OAuth connections, profile management UI, token health monitoring, auto-refresh
 - [ ] **Phase 8: LinkedIn & Facebook Post Creation** - LinkedIn share forms, Facebook post forms, LinkedIn and Facebook rate limit tracking
 - [ ] **Phase 9: Notifications & Settings** - In-app notification bell, SMTP email notifications, notification preferences, email logs
@@ -128,13 +133,101 @@ Plans:
   2. Video uploads trigger async ffmpeg transcoding via BullMQ job; upload returns immediately with `processing` status; posts with pending media are skipped by the publish worker
   3. Media storage works on both local Docker volume and S3-compatible backend (selectable via env var)
   4. Deleted post media is soft-deleted; weekly cleanup job permanently removes files older than 30 days; settings page shows total storage consumed
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [x] 06-01-PLAN.md — StorageBackend interface + implementations, post_media schema extension, queue constants, media-limits, Docker infrastructure
+- [x] 06-02-PLAN.md — Media upload API (multer middleware, image thumbnailing, video upload with transcode enqueue, soft-delete, association)
+- [x] 06-03-PLAN.md — ffmpeg transcode worker, publish worker media-readiness gate
+- [x] 06-04-PLAN.md — Frontend media UI (drop zone, thumbnail grid, upload progress, transcoding status, post list indicators)
+- [x] 06-05-PLAN.md — Media cleanup worker, storage usage API + settings card, schema push
+- [x] 06-06-PLAN.md — [GAP CLOSURE] Generate drizzle-kit migration SQL for Phase 6 schema changes
+**UI hint**: yes
+
+### Phase 6.1: Production Deployment Wiring
+**INSERTED** — Gap closure from v1.0 milestone audit
+**Goal**: Production Docker Compose stack starts without crashing, media API routes are reachable, and frontend is served from built assets
+**Depends on**: Phase 6
+**Requirements**: Affected: MEDIA-01 through MEDIA-08 (INT-01), AUTH-01 through AUTH-07 (INT-02), SCHED-01, SCHED-02, SCHED-03, LIMIT-04, LIMIT-05 (documentation fix)
+**Gap Closure**: INT-01, INT-02, FLOW-01, FLOW-02
+**Success Criteria** (what must be TRUE):
+  1. `api/src/index.ts` creates storage backend and transcode queue; media router mounts and `/api/media/*` routes return non-404 responses
+  2. `docker-compose.yml` api service includes `SESSION_SECRET` env var; API starts without crashing
+  3. Web production Dockerfile target exists; `web_dist` volume is populated with built React assets; nginx serves the frontend
+  4. Phase 4 plan SUMMARY frontmatter claims SCHED-01, SCHED-02, SCHED-03, LIMIT-04, LIMIT-05
+**Plans**: 3 plans
+Plans:
+- [x] 06.1-01-PLAN.md — Wire storage + transcodeQueue into API index.ts (mount media routes)
+- [x] 06.1-02-PLAN.md — Docker Compose SESSION_SECRET, web-production Dockerfile target, nginx proxy_pass + /assets/ cache
+- [x] 06.1-03-PLAN.md — Integration checkpoint + Phase 4 SUMMARY requirements_satisfied frontmatter
+
+### Phase 6.2: Test & Build Stabilization + Migration Runner Hardening
+**INSERTED** — Gap closure from v1.0 milestone audit + Phase 6.1 code-review follow-ups
+**Goal**: All packages compile and all tests pass — no stale dist artifacts, no mock regressions — and the database migration runner is safe for production redeploy (advisory-locked, per-migration atomic, covered by tests)
+**Depends on**: Phase 6.1
+**Requirements**: Affects test reliability for QUEUE-01 through QUEUE-06, WORKER-09; production deploy safety for INT-02 (multi-replica boot scenarios)
+**Gap Closure**:
+  - Stale dist builds (26 failures), mock-db .returning() regression (4 failures) — from v1.0 audit
+  - `packages/db/src/migrate.ts` H-01 (no advisory lock — concurrent migrator race), H-02 (per-migration atomicity lost — partial-migration crash loop), M-01 (zero test coverage) — from 06.1-REVIEW.md
+**Success Criteria** (what must be TRUE):
+  1. `@sms/db` and `@sms/shared` dist directories are current with source; `pnpm build` succeeds in both packages
+  2. `mock-db.ts` updateChain supports `.returning()` method
+  3. Full test suite passes with zero failures across all packages
+  4. `runMigrations()` acquires a Postgres advisory lock (`pg_try_advisory_lock`) before reading the journal; second concurrent caller waits or exits cleanly (H-01)
+  5. Each pending migration runs inside a transaction; on failure, statements roll back and `__drizzle_migrations` stays unmodified — except duplicate-object SQLSTATE is still swallowed at statement level so drift is tolerated (H-02)
+  6. `packages/db/src/__tests__/migrate.test.ts` covers: fresh DB apply, idempotent re-run, orphan-schema baseline, duplicate-object tolerance, real error abort, concurrent-caller lock behavior — 100% branch coverage per repo security-critical standard (M-01)
+**Plans**: 3 plans
+Plans:
+- [x] 06.2-01-PLAN.md — Pretest build guardrail + api mock-db .returning() fix + .env.example DATABASE_URL_TEST
+- [x] 06.2-02-PLAN.md — migrate.ts hardening: sql.reserve() + advisory lock + per-migration transaction + narrowed duplicate codes
+- [x] 06.2-03-PLAN.md — migrate.test.ts (6 D-08 scenarios) + test harness + vitest coverage config
+
+### Phase 6.3: Queue Engine Bug Fixes
+**INSERTED** — Gap closure from v1.0 milestone audit
+**Goal**: Queue engine runtime bugs identified during audit are fixed — no race conditions, stuck states, or silent failures
+**Depends on**: Phase 6.2
+**Requirements**: Affects QUEUE-01, QUEUE-02, QUEUE-03, QUEUE-05, QUEUE-06, WORKER-09
+**Gap Closure**: WR-01, WR-02, WR-04, WR-05, IN-02, IN-03
+**Success Criteria** (what must be TRUE):
+  1. Recycling bulk update and MIN(queue_position) select run in a single transaction (WR-01)
+  2. `removePostFromQueue` clears queued status and queueId atomically (WR-02)
+  3. QueueStatusBadge seasonal pause shows correctly for Nov-Jan windows year-round (WR-04)
+  4. `useRemoveFromQueue` shows error toast on failure (WR-05)
+  5. Queue list displays profile name instead of '-' (IN-02)
+  6. Queue scanner logger is created at module scope, not per tick (IN-03)
+**Plans**: 2 plans
+Plans:
+- [x] 06.3-01-PLAN.md — Worker fixes: cursor advance into transaction (WR-01) + module-scope logger (IN-03)
+- [x] 06.3-02-PLAN.md — Frontend seasonal badge tests (WR-04) + verification of already-fixed WR-02, WR-05, IN-02
+
+### Phase 6.4: Wire Media-Post Association
+**INSERTED** — Gap closure from v1.0 milestone audit
+**Goal**: Wire `associateMediaToPost` into post creation/update routes so `post_media.post_id` is set and the publish worker's media-readiness gate actually fires
+**Depends on**: Phase 6.3
+**Requirements**: MEDIA-05
+**Gap Closure**: MEDIA-05 (unsatisfied), Integration gap (media.service → routes/posts.ts), FLOW-C (broken at "attach to post")
+**Success Criteria** (what must be TRUE):
+  1. `CreatePostInput` and `UpdatePostInput` in `post.service.ts` include `mediaIds?: string[]`
+  2. POST `/api/posts` and PATCH `/api/posts/:id` call `associateMediaToPost(db, post.id, mediaIds)` after persisting the post
+  3. After creating a post with media, `post_media.post_id` is non-NULL for associated media rows
+  4. Publish worker skips posts with media in `pending` or `processing` transcode state (FLOW-C verified end-to-end)
+**Plans**: 2 plans
+Plans:
+- [x] 06.4-01-PLAN.md -- Wire associateMediaToPost into createPost/updatePost + unit tests
+- [x] 06.4-02-PLAN.md -- Integration tests for POST/PATCH with mediaIds + full suite verification
+
+### Phase 6.5: Nginx Proxy Completion
+**INSERTED** — Gap closure from v1.0 re-audit (2026-04-21)
+**Goal**: All API-served paths (`/media/`, `/admin/`) are reachable through nginx in production — uploaded media files render correctly and Bull-Board dashboard loads
+**Depends on**: Phase 6.4
+**Requirements**: MEDIA-06 (partial → satisfied), MEDIA-01 (degrades without proxy)
+**Gap Closure**: MEDIA-06 partial, Integration /media/ proxy + volume mount, Integration /admin/ proxy, FLOW-E (Bull-Board)
+**Success Criteria** (what must be TRUE):
+  1. nginx.conf includes `location /media/` block proxying to `api_backend`; uploaded thumbnails and media files return the actual file (not index.html) through the published nginx port
+  2. nginx `/media/` requests proxy to Express (`api_backend`), which serves files from the `media_data` volume mounted on the api service — nginx does not mount the volume directly, preserving Express path validation and the consistent proxy pattern
+  3. nginx.conf includes `location /admin/` block proxying to `api_backend`; `/admin/queues` loads the Bull-Board dashboard through nginx (not the SPA catch-all)
+**Plans**: 1 plan
+Plans:
+- [x] 06.5-01-PLAN.md -- Add /media/ and /admin/ proxy blocks to nginx.conf and nginx.dev.conf
 
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
 **Goal**: User can connect LinkedIn and Facebook profiles alongside Twitter, with token health monitoring and automatic refresh
@@ -230,8 +323,9 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 6.1 -> 6.2 -> 6.3 -> 6.4 -> 6.5 -> 7 -> 8 -> 9 -> 10 -> 11
 Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could theoretically overlap.
+Note: Phases 6.1-6.5 are gap closure phases inserted after v1.0 milestone audit. 6.4 and 6.5 both depend on 6.3; they are independent of each other.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -239,8 +333,13 @@ Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could the
 | 2. Authentication & User Account | 0/6 | Planning complete | - |
 | 3. Twitter Profile & Post Creation | 0/TBD | Not started | - |
 | 4. Publish Worker & Scheduled Posts | 6/6 | Complete    | 2026-04-10 |
-| 5. Queue Engine | 0/5 | Planning complete | - |
-| 6. Media Handling | 0/TBD | Not started | - |
+| 5. Queue Engine | 5/5 | Complete | 2026-04-15 |
+| 6. Media Handling | 6/6 | Complete | 2026-04-16 |
+| 6.1 Production Deployment Wiring | 0/TBD | Gap closure | - |
+| 6.2 Test & Build Stabilization + Migration Runner Hardening | 0/TBD | Gap closure | - |
+| 6.3 Queue Engine Bug Fixes | 0/TBD | Gap closure | - |
+| 6.4 Wire Media-Post Association | 0/TBD | Gap closure | - |
+| 6.5 Nginx Proxy Completion | 0/1 | Planning complete | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
 | 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
 | 9. Notifications & Settings | 0/TBD | Not started | - |

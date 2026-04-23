@@ -5,7 +5,7 @@ RUN corepack enable
 
 # Development target (used by docker-compose.dev.yml)
 FROM base AS development
-RUN apk add --no-cache python3 make g++ linux-headers
+RUN apk add --no-cache python3 make g++ linux-headers ffmpeg
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/ packages/
@@ -34,11 +34,11 @@ RUN pnpm -r build
 
 # Deploy API (production deps only)
 FROM build AS api-deploy
-RUN pnpm deploy --filter=@sms/api --prod /prod/api
+RUN pnpm deploy --legacy --filter=@sms/api --prod /prod/api
 
 # Deploy Worker (production deps only)
 FROM build AS worker-deploy
-RUN pnpm deploy --filter=@sms/worker --prod /prod/worker
+RUN pnpm deploy --legacy --filter=@sms/worker --prod /prod/worker
 
 # API production image
 FROM base AS api-production
@@ -59,3 +59,10 @@ COPY --from=worker-deploy --chown=appuser:appgroup /prod/worker /app
 WORKDIR /app
 USER appuser
 CMD ["node", "dist/index.js"]
+
+# Web production image (nginx + built SPA assets)
+FROM nginx:1.27-alpine AS web-production
+RUN apk add --no-cache wget
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+COPY --from=build /app/packages/web/dist /usr/share/nginx/html
+EXPOSE 80

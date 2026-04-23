@@ -4,6 +4,7 @@
 //   3. The Phase 4 scanner (reconciliation loop that re-enqueues due posts)
 //   4. The Phase 5 queue scanner (evaluates active queues on 60s tick)
 //   5. The Phase 5 auto-destruct worker (delayed deletion of published posts)
+//   6. The Phase 6 transcode worker (async video transcoding via ffmpeg)
 //
 // All construction happens inside `main()` so env vars are read at runtime
 // and no module-level side effects leak into tests (CLAUDE.md convention).
@@ -17,9 +18,12 @@ import { Queue } from 'bullmq';
 import { createLogger } from '@sms/shared/logger';
 import { requireEnv } from '@sms/shared/env';
 import { QUEUE_NAMES } from '@sms/shared';
+import { createStorageBackend } from '@sms/shared/storage';
 import { startHeartbeat, stopHeartbeat } from './heartbeat.js';
 import { createWorkerDb } from './db.js';
 import { createPublishWorker } from './publish-worker.js';
+import { createTranscodeWorker } from './transcode-worker.js';
+import { createMediaCleanupWorker, startMediaCleanupScheduler } from './media-cleanup-worker.js';
 import { startScanner } from './scanner.js';
 import { startQueueScanner } from './queue-scanner.js';
 import { createAutoDestructWorker } from './auto-destruct-worker.js';
@@ -71,8 +75,14 @@ async function main() {
     notificationQueue,
   });
 
+  const storage = createStorageBackend();
+  const transcodeWorker = createTranscodeWorker({ redis, db, storage });
+
+  const { cleanupQueue } = await startMediaCleanupScheduler(redis);
+  const mediaCleanupWorker = createMediaCleanupWorker({ redis, db, storage });
+
   logger.info(
-    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker active',
+    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker + transcode worker + media cleanup worker active',
   );
 
   const closeWithTimeout = async (
@@ -110,6 +120,8 @@ async function main() {
     // Close order: workers first (stop accepting jobs, drain in-flight),
     // then queues (stop new enqueues), then DB, then Redis. Each in its
     // own try/catch so one failure does not skip the rest.
+    await closeWithTimeout('mediaCleanupWorker', () => mediaCleanupWorker.close());
+    await closeWithTimeout('transcodeWorker', () => transcodeWorker.close());
     await closeWithTimeout('autoDestructWorker', () => autoDestructWorker.close());
     await closeWithTimeout('queueScannerWorker', () => queueScannerWorker.close());
     await closeWithTimeout('publishWorker', () => publishWorker.close());
@@ -118,6 +130,7 @@ async function main() {
     await closeWithTimeout('queueScannerQueue', () => queueScannerQueue.close());
     await closeWithTimeout('publishQueue', () => publishQueue.close());
     await closeWithTimeout('scannerQueue', () => scannerQueue.close());
+    await closeWithTimeout('cleanupQueue', () => cleanupQueue.close());
     await closeWithTimeout('notificationQueue', () => notificationQueue.close());
     await closeWithTimeout('pgClient', () => pgClient.end({ timeout: 5 }));
 

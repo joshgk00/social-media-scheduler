@@ -15,8 +15,8 @@ vi.mock('@sms/shared', async (importOriginal) => {
   };
 });
 
-vi.mock('@sms/shared/logger', () => ({
-  createLogger: () => ({
+const { mockCreateLogger } = vi.hoisted(() => {
+  const mockCreateLogger = vi.fn().mockReturnValue({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
@@ -27,7 +27,12 @@ vi.mock('@sms/shared/logger', () => ({
       error: vi.fn(),
       debug: vi.fn(),
     }),
-  }),
+  });
+  return { mockCreateLogger };
+});
+
+vi.mock('@sms/shared/logger', () => ({
+  createLogger: mockCreateLogger,
 }));
 
 import {
@@ -70,38 +75,51 @@ function createMockDb(overrides: {
   nextPost?: MockDbRow | null;
   publishedPosts?: MockDbRow[];
   minQueuedPosition?: MockDbRow | null;
+  expectRecycling?: boolean;
 }): WorkerDb {
   const {
     activeQueues = [],
     nextPost = null,
     publishedPosts = [],
     minQueuedPosition = null,
+    expectRecycling = false,
   } = overrides;
 
   const transactionFn = vi.fn().mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => {
     let txSelectIndex = 0;
+    let txUpdateIndex = 0;
 
-    // tx.select() — used inside the transaction for post queries
+    // tx.select() -- used inside the transaction for post queries
     const txSelect = vi.fn().mockImplementation(() => {
       txSelectIndex++;
       if (txSelectIndex === 1) {
-        // Next queued post (queue_position > cursor)
         return thenableChain(nextPost ? [nextPost] : []);
       }
       if (txSelectIndex === 2) {
-        // Min queued position after recycling
         return thenableChain(minQueuedPosition ? [minQueuedPosition] : []);
       }
       return thenableChain([]);
     });
 
-    // tx.update() — used for recycling (published -> queued) with .returning()
-    const txUpdateReturning = vi.fn().mockResolvedValue(
-      publishedPosts.map(p => ({ id: (p as MockDbRow).id })),
-    );
-    const txUpdateWhere = vi.fn().mockReturnValue({ returning: txUpdateReturning });
-    const txUpdateSet = vi.fn().mockReturnValue({ where: txUpdateWhere });
-    const txUpdate = vi.fn().mockReturnValue({ set: txUpdateSet });
+    // tx.update() -- supports both recycling and cursor advance chains
+    const txUpdate = vi.fn().mockImplementation(() => {
+      txUpdateIndex++;
+
+      if (expectRecycling && txUpdateIndex === 1) {
+        // Recycling chain: .set().where().returning()
+        const txUpdateReturning = vi.fn().mockResolvedValue(
+          publishedPosts.map(p => ({ id: (p as MockDbRow).id })),
+        );
+        const txUpdateWhere = vi.fn().mockReturnValue({ returning: txUpdateReturning });
+        const txUpdateSet = vi.fn().mockReturnValue({ where: txUpdateWhere });
+        return { set: txUpdateSet };
+      }
+
+      // Cursor advance chain: .set().where() (no .returning())
+      const cursorWhere = vi.fn().mockResolvedValue(undefined);
+      const cursorSet = vi.fn().mockReturnValue({ where: cursorWhere });
+      return { set: cursorSet };
+    });
 
     const tx = { select: txSelect, update: txUpdate };
     return callback(tx);
@@ -328,6 +346,7 @@ describe('Queue Scanner', () => {
         nextPost: null, // No queued post at cursor > 99
         publishedPosts: [{ id: 'pub-1' }],
         minQueuedPosition: recycledPost,
+        expectRecycling: true,
       });
 
       const enqueued = await evaluateQueues(db, publishQueue, notificationQueue, NOW);
@@ -349,12 +368,14 @@ describe('Queue Scanner', () => {
         nextPost: null,
         publishedPosts: [{ id: 'pub-1' }, { id: 'pub-2' }],
         minQueuedPosition: recycledPost,
+        expectRecycling: true,
       });
 
       await evaluateQueues(db, publishQueue, notificationQueue, NOW);
 
-      // db.update is called for published->queued transition
-      expect(db.update).toHaveBeenCalled();
+      // WR-01: recycling and cursor advance both happen inside the transaction
+      expect(db.update).not.toHaveBeenCalled();
+      expect(db.transaction).toHaveBeenCalled();
     });
 
     it('prevents double-enqueue via nextRunAt update in transaction', async () => {
@@ -408,6 +429,61 @@ describe('Queue Scanner', () => {
       // which is queue_position > cursor. Verified by successful enqueue of
       // post at position 5 despite cursor being at 2 (not cursor+1=3).
       expect(publishQueue.add).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('WR-01: cursor advance transaction boundary', () => {
+    it('advances cursor inside the transaction, not via top-level db.update', async () => {
+      const publishQueue = createMockQueue();
+      const notificationQueue = createMockQueue();
+      const post = makePost();
+      const db = createMockDb({
+        activeQueues: [makeQueue()],
+        nextPost: post,
+      });
+
+      await evaluateQueues(db, publishQueue, notificationQueue, NOW);
+
+      expect(db.update).not.toHaveBeenCalled();
+      expect(db.transaction).toHaveBeenCalled();
+      expect(publishQueue.add).toHaveBeenCalledOnce();
+    });
+
+    it('advances cursor inside transaction during recycling', async () => {
+      const publishQueue = createMockQueue();
+      const notificationQueue = createMockQueue();
+      const recycledPost = makePost({ id: 'recycled-1', queuePosition: 1 });
+      const db = createMockDb({
+        activeQueues: [makeQueue({ isRecycling: true, cursorPosition: 999 })],
+        nextPost: null,
+        publishedPosts: [{ id: 'p1' }],
+        minQueuedPosition: recycledPost,
+        expectRecycling: true,
+      });
+
+      await evaluateQueues(db, publishQueue, notificationQueue, NOW);
+
+      expect(db.update).not.toHaveBeenCalled();
+      expect(publishQueue.add).toHaveBeenCalledWith(
+        'publish-post',
+        expect.objectContaining({ postId: 'recycled-1' }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('IN-03: module-scope logger', () => {
+    it('does not call createLogger inside evaluateQueues', async () => {
+      mockCreateLogger.mockClear();
+
+      const publishQueue = createMockQueue();
+      const notificationQueue = createMockQueue();
+      const db = createMockDb({ activeQueues: [] });
+
+      await evaluateQueues(db, publishQueue, notificationQueue, NOW);
+      await evaluateQueues(db, publishQueue, notificationQueue, NOW);
+
+      expect(mockCreateLogger).not.toHaveBeenCalled();
     });
   });
 });

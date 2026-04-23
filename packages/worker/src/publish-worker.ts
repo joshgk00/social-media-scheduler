@@ -124,7 +124,8 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
           err.reason === 'version_mismatch' ||
           err.reason === 'budget_exhausted' ||
           err.reason === 'not_scheduled' ||
-          err.reason === 'thread_unsupported'
+          err.reason === 'thread_unsupported' ||
+          err.reason === 'media_pending'
         ) {
           logger.info(
             { reason: err.reason },

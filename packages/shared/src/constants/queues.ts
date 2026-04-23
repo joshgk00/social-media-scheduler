@@ -1,16 +1,12 @@
 // BullMQ queue and job name constants. Imported by both @sms/api and
 // @sms/worker so that queue names stay in lockstep — the source of truth.
-//
-// Phase 4 intentionally ships only `publish` and `notification`. Other queues
-// from REQUIREMENTS.md WORKER-02 (`transcode`, `token-refresh`, `auto-destruct`,
-// `media-cleanup`, `bulk`) are owned by their respective phases and MUST NOT
-// be added here until their phase lands — creating unused queues pollutes the
-// Bull-Board dashboard and the Redis keyspace (D-04).
 
 export const QUEUE_NAMES = {
   publish: 'publish',
   notification: 'notification',
   autoDestruct: 'auto-destruct',
+  transcode: 'transcode',
+  mediaCleanup: 'media-cleanup',
 } as const;
 
 export const JOB_NAMES = {
@@ -23,6 +19,9 @@ export const JOB_NAMES = {
   rateLimitWarnNotification: 'rate-limit-warn',
   queueEmptyNotification: 'queue-empty',
   autoDestructFailedNotification: 'auto-destruct-failed',
+  transcodeVideo: 'transcode-video',
+  mediaCleanup: 'media-cleanup',
+  mediaCleanupScheduler: 'weekly-media-cleanup',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];

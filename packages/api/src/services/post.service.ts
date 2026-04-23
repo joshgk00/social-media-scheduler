@@ -1,9 +1,11 @@
-import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount } from 'drizzle-orm';
+import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount, isNull } from 'drizzle-orm';
 import { AppError, EDITABLE_STATES, DELETABLE_STATES, transitionPost } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
-import { posts, postTags, tags, socialProfiles } from '@sms/db';
+import { posts, postTags, tags, socialProfiles, postMedia } from '@sms/db';
+
+import { softDeleteMediaForPost, associateMediaToPost } from './media.service.js';
 
 const logger = createLogger('post-service');
 
@@ -21,6 +23,7 @@ interface CreatePostInput {
   autoDestructAfter?: string | null;
   notes?: string | null;
   tagIds?: string[];
+  mediaIds?: string[];
 }
 
 interface UpdatePostInput {
@@ -32,6 +35,7 @@ interface UpdatePostInput {
   autoDestructAfter?: string | null;
   notes?: string | null;
   tagIds?: string[];
+  mediaIds?: string[];
   postVersion: number;
 }
 
@@ -98,6 +102,10 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
       await tx.insert(postTags).values(
         tagIds.map((tagId) => ({ postId: insertedPost.id, tagId })),
       );
+    }
+
+    if (input.mediaIds && input.mediaIds.length > 0) {
+      await associateMediaToPost(tx, insertedPost.id, input.mediaIds);
     }
 
     return insertedPost;
@@ -240,6 +248,17 @@ export async function updatePost(
         );
       }
     }
+
+    if (input.mediaIds !== undefined) {
+      await tx
+        .update(postMedia)
+        .set({ postId: null })
+        .where(eq(postMedia.postId, postId));
+
+      if (input.mediaIds.length > 0) {
+        await associateMediaToPost(tx, postId, input.mediaIds);
+      }
+    }
   });
 
   logger.info({ postId, userId }, 'Post updated');
@@ -252,35 +271,46 @@ export async function deletePost(
   userId: string,
   postId: string,
 ): Promise<boolean> {
-  const deletedRows = await db.delete(posts)
-    .where(
-      and(
-        eq(posts.id, postId),
-        eq(posts.userId, userId),
-        inArray(posts.status, [...DELETABLE_STATES]),
-      ),
-    )
-    .returning({ id: posts.id });
-
-  if (deletedRows.length === 0) {
-    const existingPost = await db
-      .select({ id: posts.id, status: posts.status })
-      .from(posts)
-      .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
-
-    if (existingPost.length === 0) {
-      throw new PostServiceError('Post not found', 404);
+  return db.transaction(async (tx) => {
+    // D-13: Soft-delete associated media before deleting the post row.
+    // The SET NULL FK on post_media.postId nulls post_id when the post is deleted,
+    // but deletedAt persists so the weekly cleanup worker finds and removes storage files.
+    // Both operations share a transaction so a failure in either rolls back the other.
+    const softDeletedMediaCount = await softDeleteMediaForPost(tx, postId);
+    if (softDeletedMediaCount > 0) {
+      logger.info({ postId, softDeletedMediaCount }, 'Soft-deleted media for post deletion');
     }
 
-    throw new PostServiceError(
-      'This post cannot be deleted in its current state.',
-      409,
-    );
-  }
+    const deletedRows = await tx.delete(posts)
+      .where(
+        and(
+          eq(posts.id, postId),
+          eq(posts.userId, userId),
+          inArray(posts.status, [...DELETABLE_STATES]),
+        ),
+      )
+      .returning({ id: posts.id });
 
-  logger.info({ postId, userId }, 'Post deleted');
+    if (deletedRows.length === 0) {
+      const existingPost = await tx
+        .select({ id: posts.id, status: posts.status })
+        .from(posts)
+        .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
-  return true;
+      if (existingPost.length === 0) {
+        throw new PostServiceError('Post not found', 404);
+      }
+
+      throw new PostServiceError(
+        'This post cannot be deleted in its current state.',
+        409,
+      );
+    }
+
+    logger.info({ postId, userId }, 'Post deleted');
+
+    return true;
+  });
 }
 
 // All columns returned intentionally -- the edit page needs every field.
@@ -308,7 +338,21 @@ export async function getPostById(db: Db, userId: string, postId: string) {
     .innerJoin(tags, eq(postTags.tagId, tags.id))
     .where(eq(postTags.postId, post.id));
 
-  return { ...post, tags: postTagRows };
+  const mediaRows = await db
+    .select({
+      id: postMedia.id,
+      fileName: postMedia.fileName,
+      mimeType: postMedia.mimeType,
+      fileSize: postMedia.fileSize,
+      thumbnailPath: postMedia.thumbnailPath,
+      sortOrder: postMedia.sortOrder,
+      transcodeStatus: postMedia.transcodeStatus,
+    })
+    .from(postMedia)
+    .where(and(eq(postMedia.postId, post.id), isNull(postMedia.deletedAt)))
+    .orderBy(postMedia.sortOrder);
+
+  return { ...post, tags: postTagRows, media: mediaRows };
 }
 
 export async function getPosts(db: Db, userId: string, query: PostQuery) {

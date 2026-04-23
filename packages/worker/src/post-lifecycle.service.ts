@@ -24,8 +24,8 @@
 // we persist the classification BEFORE the classifier-driven
 // UnrecoverableError replaces the error object.
 
-import { sql, eq, and } from 'drizzle-orm';
-import { posts, postAttempts, socialProfiles } from '@sms/db';
+import { sql, eq, and, isNull, inArray } from 'drizzle-orm';
+import { posts, postAttempts, socialProfiles, postMedia } from '@sms/db';
 import { classifyTwitterError, type ClassifiedError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { WorkerDb } from './db.js';
@@ -37,7 +37,8 @@ export type LifecycleAbortReason =
   | 'already_published'
   | 'not_scheduled'
   | 'budget_exhausted'
-  | 'thread_unsupported';
+  | 'thread_unsupported'
+  | 'media_pending';
 
 export class PostLifecycleAbort extends Error {
   constructor(public readonly reason: LifecycleAbortReason) {
@@ -166,6 +167,26 @@ export async function publishPost(
       if (budget.wouldExceed) {
         lifecycleLogger.warn('Budget exhausted at runtime — leaving post scheduled');
         throw new PostLifecycleAbort('budget_exhausted');
+      }
+
+      // MEDIA-05: Skip posts with media still being transcoded (T-06-11).
+      const pendingMedia = await tx
+        .select({ count: sql<string>`COUNT(*)::text` })
+        .from(postMedia)
+        .where(
+          and(
+            eq(postMedia.postId, ctx.postId),
+            isNull(postMedia.deletedAt),
+            inArray(postMedia.transcodeStatus, ['pending', 'processing']),
+          ),
+        );
+      const pendingMediaCount = parseInt(pendingMedia[0]?.count ?? '0', 10);
+      if (pendingMediaCount > 0) {
+        lifecycleLogger.info(
+          { postId: ctx.postId, pendingMediaCount },
+          'Skipping publish -- media still transcoding',
+        );
+        throw new PostLifecycleAbort('media_pending');
       }
 
       // Load the full profile row — the twitter publish service needs the

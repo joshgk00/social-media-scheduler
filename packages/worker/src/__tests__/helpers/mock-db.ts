@@ -65,7 +65,13 @@ export function createMockWorkerDb(): MockWorkerDb {
 
   const updateChain = () => {
     const result: Record<string, unknown> = {};
-    const whereFn = vi.fn().mockResolvedValue(undefined);
+    const returningFn = vi.fn().mockResolvedValue([{ id: 'mock-updated-id' }]);
+    const whereFn = vi.fn().mockImplementation(() => {
+      // Return a thenable that also supports .returning()
+      const whereResult = Promise.resolve(undefined) as Promise<undefined> & { returning: typeof returningFn };
+      whereResult.returning = returningFn;
+      return whereResult;
+    });
     const setFn = vi.fn().mockImplementation((patch: Record<string, unknown>) => {
       updates.push({ set: patch });
       return { where: whereFn };

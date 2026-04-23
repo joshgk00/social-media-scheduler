@@ -9,7 +9,7 @@ async function fetchCsrfToken(): Promise<string> {
   return token;
 }
 
-async function getCsrfToken(): Promise<string> {
+export async function getCsrfToken(): Promise<string> {
   if (csrfToken) return csrfToken;
   return fetchCsrfToken();
 }

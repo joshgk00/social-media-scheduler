@@ -3,7 +3,7 @@ import path, { resolve } from 'path';
 import { unlink, mkdir } from 'node:fs/promises';
 import multer from 'multer';
 import sharp from 'sharp';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   profileUpdateSchema,
   preferencesUpdateSchema,
@@ -280,6 +280,28 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
   router.post('/api/settings/sessions/logout-others', requireAuth, async (req, res) => {
     const deleted = await invalidateOtherSessions(redis, req.sessionID);
     res.json({ success: true, deleted });
+  });
+
+  router.get('/api/settings/storage', requireAuth, async (req, res) => {
+    const usageRows = await db.execute(sql`
+      SELECT
+        COALESCE(SUM(file_size), 0)::bigint AS total_size,
+        COALESCE(SUM(CASE WHEN mime_type LIKE 'image/%' THEN file_size ELSE 0 END), 0)::bigint AS image_size,
+        COALESCE(SUM(CASE WHEN mime_type LIKE 'video/%' THEN file_size ELSE 0 END), 0)::bigint AS video_size,
+        COALESCE(COUNT(*) FILTER (WHERE mime_type LIKE 'image/%'), 0)::int AS image_count,
+        COALESCE(COUNT(*) FILTER (WHERE mime_type LIKE 'video/%'), 0)::int AS video_count
+      FROM post_media
+      WHERE deleted_at IS NULL
+    `);
+
+    const row = usageRows[0] as Record<string, unknown> | undefined;
+    res.json({
+      totalSize: Number(row?.total_size ?? 0),
+      imageSize: Number(row?.image_size ?? 0),
+      videoSize: Number(row?.video_size ?? 0),
+      imageCount: Number(row?.image_count ?? 0),
+      videoCount: Number(row?.video_count ?? 0),
+    });
   });
 
   router.post('/api/settings/profile/image', requireAuth, (req, res, next) => {

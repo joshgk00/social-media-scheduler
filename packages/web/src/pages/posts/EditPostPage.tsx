@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { DateTime } from 'luxon';
 import { toast } from 'sonner';
-import { ImageIcon } from 'lucide-react';
-import { EDITABLE_STATES, type PostStatus } from '@sms/shared';
+import { EDITABLE_STATES, PLATFORM_MEDIA_LIMITS, type PostStatus } from '@sms/shared';
 import { useAuth } from '../../hooks/use-auth';
 import { useProfiles } from '../../hooks/use-profiles';
 import { useTags } from '../../hooks/use-tags';
 import { usePost, useUpdatePost, useCheckConflicts } from '../../hooks/use-posts';
+import { useMediaUpload } from '../../hooks/use-media-upload';
+import { useDeleteMedia, useRetryTranscode } from '../../hooks/use-media';
 import { utcToLocalInput, localInputToUtc } from '../../lib/timezone';
 import { serializeThread, deserializeThread, type TweetSegment } from '../../lib/thread';
 import { ThreadEditor } from '../../components/posts/ThreadEditor';
@@ -21,12 +22,21 @@ import { ScheduleConflictBanner } from '../../components/posts/ScheduleConflictB
 import { TagManagementDialog } from '../../components/posts/TagManagementDialog';
 import { RateLimitBanner } from '../../components/posts/RateLimitBanner';
 import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
+import { MediaDropZone } from '../../components/posts/MediaDropZone';
+import { MediaThumbnailGrid } from '../../components/posts/MediaThumbnailGrid';
+import type { MediaItem } from '../../components/posts/MediaThumbnail';
 import { Textarea } from '../../components/ui/textarea';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Switch } from '../../components/ui/switch';
 import { Button } from '../../components/ui/button';
 import { Skeleton } from '../../components/ui/skeleton';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../../components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -63,6 +73,11 @@ export default function EditPostPage() {
   const [isFormInitialized, setIsFormInitialized] = useState(false);
   const [isRateLimitDialogOpen, setIsRateLimitDialogOpen] = useState(false);
 
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const { upload, uploadingFiles, isUploading } = useMediaUpload();
+  const deleteMediaMutation = useDeleteMedia();
+  const retryTranscodeMutation = useRetryTranscode();
+
   const form = useForm<EditFormValues>({
     defaultValues: {
       profileId: '',
@@ -93,6 +108,25 @@ export default function EditPostPage() {
         setTweets([{ id: crypto.randomUUID(), text: '' }]);
       }
       setIsFormInitialized(true);
+
+      const postWithMedia = post as unknown as { media?: Array<{
+        id: string;
+        fileName: string;
+        mimeType: string;
+        thumbnailUrl: string | null;
+        transcodeStatus: string;
+        transcodeError: string | null;
+      }> };
+      if (postWithMedia.media && Array.isArray(postWithMedia.media)) {
+        setMediaItems(postWithMedia.media.map((m) => ({
+          id: m.id,
+          fileName: m.fileName,
+          mimeType: m.mimeType,
+          thumbnailUrl: m.thumbnailUrl,
+          transcodeStatus: m.transcodeStatus as MediaItem['transcodeStatus'],
+          transcodeError: m.transcodeError,
+        })));
+      }
     }
   }, [post, isFormInitialized, form]);
 
@@ -103,6 +137,97 @@ export default function EditPostPage() {
   const watchedNotes = form.watch('notes');
   const watchedHasSpinnableText = form.watch('hasSpinnableText');
   const watchedAutoDestructAfter = form.watch('autoDestructAfter');
+
+  const selectedProfilePlatform = (() => {
+    const profile = profiles?.find((p) => p.id === watchedProfileId);
+    return profile?.platform ?? null;
+  })();
+
+  const platformLimits = selectedProfilePlatform
+    ? PLATFORM_MEDIA_LIMITS[selectedProfilePlatform]
+    : null;
+
+  const maxFilesForPlatform = (() => {
+    if (!platformLimits) return 4;
+    const hasVideo = mediaItems.some((m) => m.mimeType.startsWith('video/'));
+    return hasVideo ? platformLimits.maxVideos : platformLimits.maxImages;
+  })();
+
+  const hasTranscodingMedia = mediaItems.some(
+    (m) => m.transcodeStatus === 'pending' || m.transcodeStatus === 'processing',
+  );
+  const hasFailedMedia = mediaItems.some(
+    (m) => m.transcodeStatus === 'failed',
+  );
+  const isMediaBlocking = hasTranscodingMedia || hasFailedMedia;
+
+  const handleFilesSelected = useCallback(
+    async (files: File[]) => {
+      if (!selectedProfilePlatform || !watchedProfileId) return;
+      for (const file of files) {
+        try {
+          const response = await upload(file, watchedProfileId, selectedProfilePlatform);
+          setMediaItems((prev) => [
+            ...prev,
+            {
+              id: response.id,
+              fileName: response.fileName,
+              mimeType: response.mimeType,
+              thumbnailUrl: response.thumbnailUrl,
+              transcodeStatus: response.transcodeStatus,
+              transcodeError: null,
+            },
+          ]);
+          toast.success('File uploaded.');
+        } catch (uploadError) {
+          const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed';
+          toast.error(`Upload failed: ${errorMessage}`);
+        }
+      }
+    },
+    [watchedProfileId, selectedProfilePlatform, upload],
+  );
+
+  function handleRemoveMedia(mediaId: string) {
+    deleteMediaMutation.mutate(mediaId, {
+      onSuccess: () => {
+        setMediaItems((prev) => prev.filter((m) => m.id !== mediaId));
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : 'Failed to remove media.');
+      },
+    });
+  }
+
+  function handleReorderMedia(newOrder: string[]) {
+    setMediaItems((prev) => {
+      const itemMap = new Map(prev.map((m) => [m.id, m]));
+      return newOrder.map((id) => itemMap.get(id)).filter((m): m is MediaItem => m !== undefined);
+    });
+  }
+
+  function handleRetryTranscode(mediaId: string) {
+    retryTranscodeMutation.mutate(mediaId, {
+      onSuccess: () => {
+        setMediaItems((prev) =>
+          prev.map((m) =>
+            m.id === mediaId
+              ? { ...m, transcodeStatus: 'pending' as const, transcodeError: null }
+              : m,
+          ),
+        );
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : 'Retry failed.');
+      },
+    });
+  }
+
+  function getSubmitDisabledReason(): string | null {
+    if (hasTranscodingMedia) return 'Video is still transcoding.';
+    if (hasFailedMedia) return 'Fix or remove failed media before submitting.';
+    return null;
+  }
 
   const excludePostId = postId;
   const { data: conflicts } = useCheckConflicts(
@@ -295,6 +420,8 @@ export default function EditPostPage() {
       }
     }
 
+    if (action !== 'draft' && isMediaBlocking) return;
+
     updatePostMutation.mutate(
       {
         postId: postId!,
@@ -307,6 +434,7 @@ export default function EditPostPage() {
           autoDestructAfter: form.getValues('autoDestructAfter'),
           notes: form.getValues('notes') || null,
           tagIds: form.getValues('tagIds'),
+          mediaIds: mediaItems.map((m) => m.id),
         },
         postVersion: post!.postVersion,
       },
@@ -403,13 +531,25 @@ export default function EditPostPage() {
             </div>
           )}
 
-          {/* Media upload placeholder -- Phase 6 */}
-          {/* TODO: Phase 6 implements actual media upload */}
-          <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center text-muted-foreground">
-            <ImageIcon className="h-8 w-8 mb-2" />
-            <p className="text-sm">Drop files or click to upload</p>
-            <p className="text-xs mt-1">Images, GIFs, or video</p>
-          </div>
+          {/* Media upload */}
+          <MediaDropZone
+            platform={selectedProfilePlatform}
+            existingMediaCount={mediaItems.length}
+            maxFiles={maxFilesForPlatform}
+            onFilesSelected={handleFilesSelected}
+            disabled={updatePostMutation.isPending}
+            hasVideo={mediaItems.some((m) => m.mimeType.startsWith('video/'))}
+          />
+          {mediaItems.length > 0 && (
+            <MediaThumbnailGrid
+              mediaItems={mediaItems}
+              uploadingFiles={uploadingFiles}
+              onRemove={handleRemoveMedia}
+              onReorder={handleReorderMedia}
+              onRetryTranscode={handleRetryTranscode}
+              readOnly={false}
+            />
+          )}
 
           {/* Schedule datetime picker */}
           <div className="space-y-2">
@@ -473,12 +613,41 @@ export default function EditPostPage() {
           />
 
           {/* SplitButton -- Update as primary, Save as Draft in dropdown, no Publish Now */}
-          <SplitButton
-            onSchedule={() => handleSubmit('schedule')}
-            onDraft={() => handleSubmit('draft')}
-            isLoading={updatePostMutation.isPending}
-            disabled={updatePostMutation.isPending}
-          />
+          {(() => {
+            const disabledReason = getSubmitDisabledReason();
+            const scheduleDisabled = updatePostMutation.isPending || isUploading || !!disabledReason;
+
+            const submitContent = (
+              <SplitButton
+                onSchedule={() => handleSubmit('schedule')}
+                onDraft={() => handleSubmit('draft')}
+                isLoading={updatePostMutation.isPending}
+                disabled={scheduleDisabled}
+              />
+            );
+
+            if (disabledReason) {
+              return (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span aria-describedby="submit-disabled-reason">
+                        {submitContent}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{disabledReason}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <span id="submit-disabled-reason" className="sr-only">
+                    {disabledReason}
+                  </span>
+                </TooltipProvider>
+              );
+            }
+
+            return submitContent;
+          })()}
         </div>
 
         {/* Right column: live preview */}

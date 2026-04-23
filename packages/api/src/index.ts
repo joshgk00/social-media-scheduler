@@ -11,6 +11,7 @@ import { Queue } from 'bullmq';
 import { QUEUE_NAMES } from '@sms/shared';
 import { runMigrations, createDbClient } from '@sms/db';
 import { requireEnv } from '@sms/shared/env';
+import { createStorageBackend } from '@sms/shared/storage';
 import { logger } from './middleware/logger.js';
 import { createApp } from './app.js';
 import { createPublishQueueService } from './services/publish-queue.service.js';
@@ -41,6 +42,15 @@ async function main() {
     },
   });
 
+  const storage = createStorageBackend();
+  const transcodeQueue = new Queue(QUEUE_NAMES.transcode, {
+    connection: redis,
+    defaultJobOptions: {
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 500 },
+    },
+  });
+
   const app = createApp({
     redis,
     sql,
@@ -48,6 +58,8 @@ async function main() {
     sessionSecret: SESSION_SECRET,
     publishQueueService,
     notificationQueue,
+    storage,
+    transcodeQueue,
   });
   const port = parseInt(process.env.PORT || '3000', 10);
 
@@ -59,6 +71,7 @@ async function main() {
     logger.info('Shutting down...');
     try { await publishQueueService.publishQueue.close(); } catch (err) { logger.error({ err }, 'Publish queue shutdown error'); }
     try { await notificationQueue.close(); } catch (err) { logger.error({ err }, 'Notification queue shutdown error'); }
+    try { await transcodeQueue.close(); } catch (err) { logger.error({ err }, 'Transcode queue shutdown error'); }
     try { await redis.quit(); } catch (err) { logger.error({ err }, 'Redis shutdown error'); }
     try { await sql.end(); } catch (err) { logger.error({ err }, 'Database shutdown error'); }
     process.exit(0);

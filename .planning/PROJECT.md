@@ -12,7 +12,11 @@ Own the stack, own the data, own the credentials — persistent queue automation
 
 ### Validated
 
-(None yet — ship to validate)
+**Media** — Validated in Phase 6: Media Handling (2026-04-16), extended in Phase 6.4 (2026-04-19), proxy wiring completed in Phase 6.5 (2026-04-22)
+- [x] Media uploads (images, GIF, video) are stored on local filesystem (Docker volume) or S3-compatible backend
+- [x] Images are thumbnailed; videos are transcoded asynchronously via ffmpeg and block publishing until complete
+- [x] MEDIA-05: `post_media.post_id` is set when posts are created or updated with media — publish worker media-readiness gate fires correctly (FLOW-C wired end-to-end)
+- [x] MEDIA-06: uploaded media files are reachable through nginx at `/media/{key}` via proxy to Express (not swallowed by SPA catch-all); Bull-Board dashboard reachable at `/admin/queues`
 
 ### Active
 
@@ -58,9 +62,9 @@ Own the stack, own the data, own the credentials — persistent queue automation
 - [ ] `{option1|option2}` syntax is resolved at publish time by randomly selecting one variant
 - [ ] Queue posts list shows "view spinnable variants" action
 
-**Media**
-- [ ] Media uploads (images, GIF, video) are stored on local filesystem (Docker volume) or S3-compatible backend
-- [ ] Images are thumbnailed; videos are transcoded asynchronously via ffmpeg and block publishing until complete
+**Media** — Moved to Validated (Phase 6)
+- [x] Media uploads (images, GIF, video) are stored on local filesystem (Docker volume) or S3-compatible backend
+- [x] Images are thumbnailed; videos are transcoded asynchronously via ffmpeg and block publishing until complete
 
 **Tags**
 - [ ] User can create, rename, and delete tags; apply multiple tags to posts for filtering
@@ -159,4 +163,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-07 after initialization*
+*Last updated: 2026-04-22 after Phase 06.5: Nginx Proxy Completion*

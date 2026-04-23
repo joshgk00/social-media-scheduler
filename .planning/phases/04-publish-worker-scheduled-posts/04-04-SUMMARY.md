@@ -3,6 +3,9 @@ phase: 04
 plan: 4
 subsystem: api
 tags: [api, routes, rate-limit, bull-board, limit-02, sched-03, sched-04, worker-07]
+requirements_satisfied:
+  - SCHED-03
+  - LIMIT-04
 requires:
   - 04-01 (posts, post_attempts, social_profiles rate-limit columns)
   - 04-02 (rateLimitWarnNotification job constant, rateLimitUpdateSchema, publishQueueService, checkTwitterBudgetWithDb)
