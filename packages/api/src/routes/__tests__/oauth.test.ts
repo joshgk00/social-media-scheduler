@@ -336,7 +336,10 @@ describe('oauth router', () => {
       expect(res.body.error).toBe('mismatched_account');
       expect(res.body.existingHandle).toBe('old-handle');
       expect(res.body.incomingHandle).toBe('new-handle');
-      expect(res.body.tempToken).toBe('tok-2');
+      // Mismatch returns a re-issued tempToken (original was consumed) so the
+      // frontend can call /finalize-as-new without going back through the IdP.
+      expect(typeof res.body.tempToken).toBe('string');
+      expect(res.body.tempToken.length).toBeGreaterThan(0);
     });
   });
 

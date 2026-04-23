@@ -19,6 +19,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createRecoveryRouter } from './routes/recovery.js';
 import { createSettingsRouter } from './routes/settings.js';
 import { createProfilesRouter } from './routes/profiles.js';
+import { createOAuthRouter } from './routes/oauth.js';
 import { createPostsRouter } from './routes/posts.js';
 import { createTagsRouter } from './routes/tags.js';
 import { createQueuesRouter } from './routes/queues.js';
@@ -79,6 +80,7 @@ export function createApp({
   app.use(createSettingsRouter({ db, redis }));
 
   app.use(createProfilesRouter({ db }));
+  app.use(createOAuthRouter({ db, redis }));
   app.use(createPostsRouter({ db, publishQueueService, notificationQueue }));
   app.use(createTagsRouter({ db }));
   app.use('/api/queues', createQueuesRouter({ db }));
