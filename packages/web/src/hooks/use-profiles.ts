@@ -1,16 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client';
-import type { CreateProfileInput } from '@sms/shared';
+import type { CreateProfileInput, UpdateProfileMetadata, TokenStatus } from '@sms/shared';
 
-interface SocialProfile {
+export type Platform = 'twitter' | 'linkedin' | 'facebook';
+
+export interface DeletePreview {
+  drafts: number;
+  scheduled: number;
+  queueMemberships: number;
+  tagsLosingLastUse: number;
+  inFlight: number;
+}
+
+export interface SocialProfile {
   id: string;
-  platform: string;
+  platform: Platform;
   platformUserId: string;
+  platformAccountId: string | null;
   displayName: string;
   handle: string;
   avatarUrl: string | null;
   connectedAt: string;
   lastPublishedAt: string | null;
+  tokenStatus: TokenStatus;
+  tokenExpiresAt: string | null;
+  tokenHealthCheckedAt: string | null;
+  notes: string | null;
+  nextScheduledAt: string | null;
+  monthlyTweetBudget: number;
+  warnThresholdPercent: number;
 }
 
 export function useProfiles() {
@@ -43,4 +61,38 @@ export function useDeleteProfile() {
   });
 }
 
-export type { SocialProfile };
+export function useUpdateProfileMetadata() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      profileId,
+      body,
+    }: {
+      profileId: string;
+      body: UpdateProfileMetadata;
+    }) => apiClient.patch<SocialProfile>(`/api/profiles/${profileId}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    },
+  });
+}
+
+export function useDeletePreview(profileId: string | null) {
+  return useQuery({
+    queryKey: ['profile-delete-preview', profileId],
+    queryFn: () =>
+      apiClient.get<DeletePreview>(`/api/profiles/${profileId}/delete-preview`),
+    enabled: !!profileId,
+    staleTime: 0,
+  });
+}
+
+// Navigate to the OAuth start URL with a `reconnect` query so the server can
+// verify the returning account matches the existing profile row (D-25).
+export function useReconnectProfile() {
+  return (profileId: string, platform: Platform) => {
+    window.location.assign(
+      `/api/oauth/start/${platform}?reconnect=${profileId}&returnTo=/profiles`,
+    );
+  };
+}
