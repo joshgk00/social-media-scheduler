@@ -10,7 +10,7 @@ export const createPostSchema = z.object({
   autoDestructAfter: z.string().regex(/^\d+\s+(minutes?|hours?|days?|weeks?)$/, 'Must be a duration like "30 minutes", "24 hours", or "7 days"').max(50).nullable().optional(),
   notes: z.string().max(10000).nullable().optional(),
   tagIds: z.array(z.string().uuid()).default([]),
-  mediaIds: z.array(z.string().uuid()).optional(),
+  mediaIds: z.array(z.string().uuid()).default([]),
 }).refine(
   (data) => {
     if (data.status === 'scheduled' && !data.scheduledAt) {

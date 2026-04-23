@@ -202,7 +202,7 @@ export default function EditPostPage() {
   function handleReorderMedia(newOrder: string[]) {
     setMediaItems((prev) => {
       const itemMap = new Map(prev.map((m) => [m.id, m]));
-      return newOrder.map((id) => itemMap.get(id)!).filter(Boolean);
+      return newOrder.map((id) => itemMap.get(id)).filter((m): m is MediaItem => m !== undefined);
     });
   }
 

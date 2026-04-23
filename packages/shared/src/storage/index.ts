@@ -8,6 +8,8 @@ export { S3Storage } from './s3-storage.js';
 export type { S3StorageConfig } from './s3-storage.js';
 export type { StorageBackend } from './storage-backend.js';
 
+const SUPPORTED_BACKENDS = ['local', 's3'] as const;
+
 export function createStorageBackend(): StorageBackend {
   const backend = process.env.MEDIA_STORAGE_BACKEND || 'local';
 
@@ -18,6 +20,12 @@ export function createStorageBackend(): StorageBackend {
       accessKey: requireEnv('S3_ACCESS_KEY'),
       secretKey: requireEnv('S3_SECRET_KEY'),
     });
+  }
+
+  if (backend !== 'local') {
+    throw new Error(
+      `Unsupported MEDIA_STORAGE_BACKEND: "${backend}". Valid values: ${SUPPORTED_BACKENDS.join(', ')}`,
+    );
   }
 
   const mediaDir = process.env.MEDIA_DIR || './data/media';

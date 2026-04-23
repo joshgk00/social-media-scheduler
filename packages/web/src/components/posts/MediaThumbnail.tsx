@@ -69,7 +69,7 @@ export function MediaThumbnail({
       aria-label={`${media.fileName}, ${getStatusLabel(media, isUploading)}`}
     >
       {/* Image or video placeholder */}
-      {isVideo && !media.thumbnailUrl ? (
+      {(isVideo || !media.thumbnailUrl) && !media.thumbnailUrl ? (
         <div className="w-full h-full flex flex-col items-center justify-center">
           <Film className="h-8 w-8 text-muted-foreground" />
           <span className="text-xs text-muted-foreground mt-1 truncate max-w-full px-2">
@@ -78,7 +78,7 @@ export function MediaThumbnail({
         </div>
       ) : (
         <img
-          src={media.thumbnailUrl ?? ''}
+          src={media.thumbnailUrl}
           alt={media.fileName}
           className="object-cover w-full h-full"
         />

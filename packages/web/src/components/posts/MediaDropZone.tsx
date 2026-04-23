@@ -167,7 +167,7 @@ export function MediaDropZone({
 
       let hasInvalid = false;
       for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === 'file' && allTypes.length > 0 && !allTypes.includes(items[i].type)) {
+        if (items[i].kind === 'file' && allTypes.length > 0 && items[i].type !== '' && !allTypes.includes(items[i].type)) {
           hasInvalid = true;
           break;
         }
