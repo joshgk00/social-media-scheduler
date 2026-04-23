@@ -29,6 +29,13 @@
       "when": 1776333213279,
       "tag": "0003_phase-06-media-handling",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1745366400000,
+      "tag": "0004_fix-post-media-cascade",
+      "breakpoints": true
     }
   ]
 }

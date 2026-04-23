@@ -272,9 +272,9 @@ export async function deletePost(
   postId: string,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
-    // D-13: Soft-delete associated media before cascade-deleting the post row.
-    // The cascade on post_media.postId hard-deletes the DB rows, but setting
-    // deletedAt first ensures the 30-day cleanup pipeline processes the files.
+    // D-13: Soft-delete associated media before deleting the post row.
+    // The SET NULL FK on post_media.postId nulls post_id when the post is deleted,
+    // but deletedAt persists so the weekly cleanup worker finds and removes storage files.
     // Both operations share a transaction so a failure in either rolls back the other.
     const softDeletedMediaCount = await softDeleteMediaForPost(tx, postId);
     if (softDeletedMediaCount > 0) {

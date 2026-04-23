@@ -11,7 +11,7 @@ export const transcodeStatusEnum = pgEnum('transcode_status', [
 
 export const postMedia = pgTable('post_media', {
   id: uuid('id').primaryKey().defaultRandom(),
-  postId: uuid('post_id').references(() => posts.id, { onDelete: 'cascade' }),
+  postId: uuid('post_id').references(() => posts.id, { onDelete: 'set null' }),
   filePath: text('file_path').notNull(),
   fileName: varchar('file_name', { length: 255 }).notNull(),
   mimeType: varchar('mime_type', { length: 100 }).notNull(),
