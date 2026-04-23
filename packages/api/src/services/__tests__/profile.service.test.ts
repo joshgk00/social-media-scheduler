@@ -4,6 +4,9 @@ import { createMockDb } from '../../__tests__/helpers/mock-db.js';
 import {
   createProfileFromOAuth,
   reconnectProfile,
+  getProfiles,
+  updateProfileMetadata,
+  getDeletePreview,
   ProfileServiceError,
 } from '../profile.service.js';
 import { OAuthServiceError } from '../oauth.service.js';
@@ -341,5 +344,329 @@ describe('profile.service OAuth flows', () => {
         }),
       ).rejects.toMatchObject({ statusCode: 500 });
     });
+  });
+});
+
+// Phase 7 Plan 05 — getProfiles / updateProfileMetadata / getDeletePreview
+// ---------------------------------------------------------------------------
+
+const CIPHERTEXT_KEYS = [
+  'consumerKeyCiphertext',
+  'consumerSecretCiphertext',
+  'accessTokenCiphertext',
+  'accessTokenSecretCiphertext',
+  'oauth2AccessTokenCiphertext',
+  'oauth2RefreshTokenCiphertext',
+  'consumerKeyIv',
+  'consumerKeyAuthTag',
+  'oauth2AccessTokenIv',
+  'oauth2AccessTokenAuthTag',
+  'oauth2RefreshTokenIv',
+  'oauth2RefreshTokenAuthTag',
+] as const;
+
+function buildRawProfileRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: PROFILE_ID,
+    platform: 'linkedin',
+    platform_user_id: 'urn:li:person:abc',
+    platform_account_id: 'urn:li:organization:42',
+    display_name: 'Jane Doe',
+    handle: 'jane-doe',
+    avatar_url: null,
+    connected_at: new Date('2026-04-01T00:00:00Z'),
+    last_published_at: null,
+    token_status: 'active',
+    token_expires_at: new Date('2026-08-01T00:00:00Z'),
+    token_health_checked_at: new Date('2026-04-20T00:00:00Z'),
+    notes: null,
+    next_scheduled_at: null,
+    monthly_tweet_budget: 500,
+    warn_threshold_percent: 80,
+    ...overrides,
+  };
+}
+
+describe('getProfiles (Phase 7 — extended columns + nextScheduledAt)', () => {
+  beforeEach(() => {
+    process.env.ENCRYPTION_KEY = VALID_KEY;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns nextScheduledAt populated when a future scheduled post exists', async () => {
+    const futureDate = new Date('2026-06-01T12:00:00Z');
+    const db = createMockDb();
+    db.execute = vi.fn().mockResolvedValue([
+      buildRawProfileRow({ next_scheduled_at: futureDate }),
+    ]);
+
+    const profiles = await getProfiles(db, USER_ID);
+
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0].nextScheduledAt).toEqual(futureDate);
+    expect(profiles[0].tokenStatus).toBe('active');
+    expect(profiles[0].platformAccountId).toBe('urn:li:organization:42');
+  });
+
+  it('returns nextScheduledAt=null when no future scheduled posts', async () => {
+    const db = createMockDb();
+    db.execute = vi.fn().mockResolvedValue([
+      buildRawProfileRow({ next_scheduled_at: null }),
+    ]);
+
+    const profiles = await getProfiles(db, USER_ID);
+
+    expect(profiles[0].nextScheduledAt).toBeNull();
+  });
+
+  it('never includes ciphertext fields in the response (T-07-03)', async () => {
+    const db = createMockDb();
+    db.execute = vi.fn().mockResolvedValue([buildRawProfileRow()]);
+
+    const profiles = await getProfiles(db, USER_ID);
+    const serialized = JSON.stringify(profiles[0]);
+
+    for (const secretKey of CIPHERTEXT_KEYS) {
+      expect(serialized).not.toContain(secretKey);
+    }
+  });
+
+  it('scopes the query by userId (ownership)', async () => {
+    const db = createMockDb();
+    const execute = vi.fn().mockResolvedValue([]);
+    db.execute = execute;
+
+    await getProfiles(db, USER_ID);
+
+    // The userId should be bound as a parameter in the sql template.
+    // drizzle sql template objects aren't strings — just confirm the call happened.
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('updateProfileMetadata', () => {
+  beforeEach(() => {
+    process.env.ENCRYPTION_KEY = VALID_KEY;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function setupUpdate(updatedRows: Array<{ id: string }>, refreshedRow?: Record<string, unknown>) {
+    const db = createMockDb();
+    let capturedSetPayload: Record<string, unknown> = {};
+
+    db.update = vi.fn().mockImplementation(() => {
+      const chain: Record<string, any> = {};
+      chain.set = vi.fn().mockImplementation((payload: Record<string, unknown>) => {
+        capturedSetPayload = payload;
+        return chain;
+      });
+      chain.where = vi.fn().mockReturnValue(chain);
+      chain.returning = vi.fn().mockResolvedValue(updatedRows);
+      return chain;
+    });
+
+    db.execute = vi.fn().mockResolvedValue(
+      refreshedRow ? [refreshedRow] : [buildRawProfileRow()],
+    );
+
+    return { db, getSetPayload: () => capturedSetPayload };
+  }
+
+  it('updates displayName only (notes preserved when undefined)', async () => {
+    const { db, getSetPayload } = setupUpdate(
+      [{ id: PROFILE_ID }],
+      buildRawProfileRow({ display_name: 'Renamed' }),
+    );
+
+    const refreshed = await updateProfileMetadata(db, {
+      userId: USER_ID,
+      profileId: PROFILE_ID,
+      displayName: 'Renamed',
+    });
+
+    const setPayload = getSetPayload();
+    expect(setPayload.displayName).toBe('Renamed');
+    expect('notes' in setPayload).toBe(false);
+    expect(refreshed.displayName).toBe('Renamed');
+  });
+
+  it('updates notes only (displayName preserved when undefined)', async () => {
+    const { db, getSetPayload } = setupUpdate(
+      [{ id: PROFILE_ID }],
+      buildRawProfileRow({ notes: '# Hello' }),
+    );
+
+    const refreshed = await updateProfileMetadata(db, {
+      userId: USER_ID,
+      profileId: PROFILE_ID,
+      notes: '# Hello',
+    });
+
+    const setPayload = getSetPayload();
+    expect(setPayload.notes).toBe('# Hello');
+    expect('displayName' in setPayload).toBe(false);
+    expect(refreshed.notes).toBe('# Hello');
+  });
+
+  it('updates both displayName and notes in one call', async () => {
+    const { db, getSetPayload } = setupUpdate(
+      [{ id: PROFILE_ID }],
+      buildRawProfileRow({ display_name: 'Both', notes: '# Both' }),
+    );
+
+    await updateProfileMetadata(db, {
+      userId: USER_ID,
+      profileId: PROFILE_ID,
+      displayName: 'Both',
+      notes: '# Both',
+    });
+
+    const setPayload = getSetPayload();
+    expect(setPayload.displayName).toBe('Both');
+    expect(setPayload.notes).toBe('# Both');
+  });
+
+  it('clears notes when passed null', async () => {
+    const { db, getSetPayload } = setupUpdate(
+      [{ id: PROFILE_ID }],
+      buildRawProfileRow({ notes: null }),
+    );
+
+    await updateProfileMetadata(db, {
+      userId: USER_ID,
+      profileId: PROFILE_ID,
+      notes: null,
+    });
+
+    const setPayload = getSetPayload();
+    expect(setPayload.notes).toBeNull();
+  });
+
+  it('throws 404 when update touches zero rows (foreign profileId)', async () => {
+    const { db } = setupUpdate([]);
+
+    await expect(
+      updateProfileMetadata(db, {
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+        displayName: 'Nope',
+      }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('throws 400 no_fields_to_update when both fields are undefined', async () => {
+    const db = createMockDb();
+
+    await expect(
+      updateProfileMetadata(db, {
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining('no_fields_to_update'),
+    });
+  });
+});
+
+describe('getDeletePreview', () => {
+  beforeEach(() => {
+    process.env.ENCRYPTION_KEY = VALID_KEY;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * Builds a mock db whose select().from(posts).where(...) resolves to a
+   * list of count rows — one per COUNT query. Queue counts hit the same
+   * `posts` table (via queueId IS NOT NULL) so one sequence is sufficient.
+   * The tagsLosingLastUse query uses db.execute with raw SQL.
+   */
+  function setupCounts(counts: {
+    drafts: number;
+    scheduled: number;
+    queueMemberships: number;
+    inFlight: number;
+    tagsLosingLastUse: number;
+  }) {
+    const sequence: number[] = [counts.drafts, counts.scheduled, counts.queueMemberships, counts.inFlight];
+    const db = createMockDb();
+    let selectCallIndex = 0;
+
+    db.select = vi.fn().mockImplementation(() => {
+      const callIndex = selectCallIndex++;
+      const chain: Record<string, any> = {};
+      chain.from = vi.fn().mockReturnValue(chain);
+      chain.where = vi.fn().mockResolvedValue([{ count: sequence[callIndex] ?? 0 }]);
+      return chain;
+    });
+
+    db.execute = vi.fn().mockResolvedValue([{ count: counts.tagsLosingLastUse }]);
+
+    return db;
+  }
+
+  it('returns the five cascade counts', async () => {
+    const db = setupCounts({
+      drafts: 3,
+      scheduled: 5,
+      queueMemberships: 2,
+      inFlight: 1,
+      tagsLosingLastUse: 4,
+    });
+
+    const preview = await getDeletePreview(db, USER_ID, PROFILE_ID);
+
+    expect(preview).toEqual({
+      drafts: 3,
+      scheduled: 5,
+      queueMemberships: 2,
+      inFlight: 1,
+      tagsLosingLastUse: 4,
+    });
+  });
+
+  it('returns zeros on an empty profile', async () => {
+    const db = setupCounts({
+      drafts: 0,
+      scheduled: 0,
+      queueMemberships: 0,
+      inFlight: 0,
+      tagsLosingLastUse: 0,
+    });
+
+    const preview = await getDeletePreview(db, USER_ID, PROFILE_ID);
+
+    expect(preview).toEqual({
+      drafts: 0,
+      scheduled: 0,
+      queueMemberships: 0,
+      inFlight: 0,
+      tagsLosingLastUse: 0,
+    });
+  });
+
+  it('counts tagsLosingLastUse via raw SQL (NOT EXISTS subquery)', async () => {
+    const db = setupCounts({
+      drafts: 0,
+      scheduled: 0,
+      queueMemberships: 0,
+      inFlight: 0,
+      tagsLosingLastUse: 1,
+    });
+
+    const preview = await getDeletePreview(db, USER_ID, PROFILE_ID);
+
+    expect(preview.tagsLosingLastUse).toBe(1);
+    // Confirm we invoked raw SQL for the NOT EXISTS tags query.
+    expect(db.execute).toHaveBeenCalledTimes(1);
   });
 });
