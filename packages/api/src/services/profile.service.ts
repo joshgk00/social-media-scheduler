@@ -1,4 +1,4 @@
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { encrypt, validateEncryptionKey } from '@sms/shared/encryption';
 import { AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -6,6 +6,39 @@ import type { Db } from '@sms/db';
 import { socialProfiles, posts } from '@sms/db';
 import { TwitterApi } from 'twitter-api-v2';
 import { OAuthServiceError } from './oauth.service.js';
+
+// Phase 7 Plan 05 — extended profile list shape returned to the frontend.
+// Token-health fields (tokenStatus/tokenExpiresAt/tokenHealthCheckedAt) and
+// nextScheduledAt drive the badge + meta-row render. `platformAccountId`,
+// `notes` are surfaced for PROFILE-07 (rename/notes/delete cascade).
+// This shape NEVER includes *Ciphertext/*Iv/*AuthTag fields (T-07-03).
+export interface ProfileListItem {
+  id: string;
+  platform: 'twitter' | 'linkedin' | 'facebook';
+  platformUserId: string | null;
+  platformAccountId: string | null;
+  displayName: string | null;
+  handle: string | null;
+  avatarUrl: string | null;
+  connectedAt: Date;
+  lastPublishedAt: Date | null;
+  tokenStatus: 'active' | 'expiring' | 'expired' | 'needs_reauth';
+  tokenExpiresAt: Date | null;
+  tokenHealthCheckedAt: Date | null;
+  notes: string | null;
+  nextScheduledAt: Date | null;
+  monthlyTweetBudget: number;
+  warnThresholdPercent: number;
+}
+
+export interface DeletePreview {
+  drafts: number;
+  scheduled: number;
+  queueMemberships: number;
+  tagsLosingLastUse: number;
+  // inFlight > 0 blocks deletion in the existing deleteProfile transaction.
+  inFlight: number;
+}
 
 const logger = createLogger('profile-service');
 
@@ -167,11 +200,93 @@ export async function createProfile(
   return profile;
 }
 
-export async function getProfiles(db: Db, userId: string) {
-  return db
-    .select(SAFE_PROFILE_COLUMNS)
-    .from(socialProfiles)
-    .where(eq(socialProfiles.userId, userId));
+type RawProfileRow = {
+  id: string;
+  platform: string;
+  platform_user_id: string | null;
+  platform_account_id: string | null;
+  display_name: string | null;
+  handle: string | null;
+  avatar_url: string | null;
+  connected_at: Date | string;
+  last_published_at: Date | string | null;
+  token_status: string;
+  token_expires_at: Date | string | null;
+  token_health_checked_at: Date | string | null;
+  notes: string | null;
+  next_scheduled_at: Date | string | null;
+  monthly_tweet_budget: number;
+  warn_threshold_percent: number;
+};
+
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (value === null || value === undefined) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+function mapRowToProfileListItem(row: RawProfileRow): ProfileListItem {
+  return {
+    id: row.id,
+    platform: row.platform as ProfileListItem['platform'],
+    platformUserId: row.platform_user_id,
+    platformAccountId: row.platform_account_id,
+    displayName: row.display_name,
+    handle: row.handle,
+    avatarUrl: row.avatar_url,
+    connectedAt: toDate(row.connected_at) as Date,
+    lastPublishedAt: toDate(row.last_published_at),
+    tokenStatus: row.token_status as ProfileListItem['tokenStatus'],
+    tokenExpiresAt: toDate(row.token_expires_at),
+    tokenHealthCheckedAt: toDate(row.token_health_checked_at),
+    notes: row.notes,
+    nextScheduledAt: toDate(row.next_scheduled_at),
+    monthlyTweetBudget: Number(row.monthly_tweet_budget),
+    warnThresholdPercent: Number(row.warn_threshold_percent),
+  };
+}
+
+// T-07-03 mitigation: projection explicitly lists non-secret columns. Any new
+// *Ciphertext/*Iv/*AuthTag column added to social_profiles will NOT leak here
+// unless someone adds it to this SELECT. Enforced by a test that checks the
+// serialized response for those field names.
+// D-24 / RESEARCH: LEFT JOIN LATERAL computes nextScheduledAt in a single
+// query without N+1. Drizzle 0.45 doesn't have first-class LATERAL, so we
+// use raw sql with bound parameters.
+export async function getProfiles(db: Db, userId: string): Promise<ProfileListItem[]> {
+  const rows = (await db.execute(sql`
+    SELECT
+      sp.id,
+      sp.platform,
+      sp.platform_user_id,
+      sp.platform_account_id,
+      sp.display_name,
+      sp.handle,
+      sp.avatar_url,
+      sp.connected_at,
+      sp.last_published_at,
+      sp.token_status,
+      sp.token_expires_at,
+      sp.token_health_checked_at,
+      sp.notes,
+      sp.monthly_tweet_budget,
+      sp.warn_threshold_percent,
+      lp.next_scheduled_at
+    FROM social_profiles sp
+    LEFT JOIN LATERAL (
+      SELECT p.scheduled_at AS next_scheduled_at
+      FROM posts p
+      WHERE p.profile_id = sp.id
+        AND p.user_id = sp.user_id
+        AND p.status = 'scheduled'
+        AND p.scheduled_at > now()
+      ORDER BY p.scheduled_at ASC
+      LIMIT 1
+    ) lp ON true
+    WHERE sp.user_id = ${userId}
+    ORDER BY sp.connected_at DESC
+  `)) as unknown as RawProfileRow[];
+
+  return rows.map(mapRowToProfileListItem);
 }
 
 export async function getProfileById(db: Db, userId: string, profileId: string) {
@@ -417,4 +532,196 @@ export async function reconnectProfile(
 
     return { profileId: existing.id, existingHandle };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 Plan 05 — profile metadata PATCH + delete-preview
+// ---------------------------------------------------------------------------
+
+interface UpdateProfileMetadataArgs {
+  userId: string;
+  profileId: string;
+  displayName?: string;
+  // Explicit `null` clears the field; `undefined` leaves it untouched.
+  notes?: string | null;
+}
+
+// Fetches a single refreshed profile row using the same LATERAL subquery as
+// getProfiles so the response matches ProfileListItem exactly.
+async function fetchProfileListItemById(
+  db: Db,
+  userId: string,
+  profileId: string,
+): Promise<ProfileListItem | null> {
+  const rows = (await db.execute(sql`
+    SELECT
+      sp.id,
+      sp.platform,
+      sp.platform_user_id,
+      sp.platform_account_id,
+      sp.display_name,
+      sp.handle,
+      sp.avatar_url,
+      sp.connected_at,
+      sp.last_published_at,
+      sp.token_status,
+      sp.token_expires_at,
+      sp.token_health_checked_at,
+      sp.notes,
+      sp.monthly_tweet_budget,
+      sp.warn_threshold_percent,
+      lp.next_scheduled_at
+    FROM social_profiles sp
+    LEFT JOIN LATERAL (
+      SELECT p.scheduled_at AS next_scheduled_at
+      FROM posts p
+      WHERE p.profile_id = sp.id
+        AND p.user_id = sp.user_id
+        AND p.status = 'scheduled'
+        AND p.scheduled_at > now()
+      ORDER BY p.scheduled_at ASC
+      LIMIT 1
+    ) lp ON true
+    WHERE sp.user_id = ${userId} AND sp.id = ${profileId}
+    LIMIT 1
+  `)) as unknown as RawProfileRow[];
+
+  if (rows.length === 0) return null;
+  return mapRowToProfileListItem(rows[0]);
+}
+
+// PATCH /api/profiles/:id handler path. Partial update — only the provided
+// fields are written; omitted fields are preserved. Ownership is enforced
+// in the UPDATE WHERE clause (no read-before-write race, T-07-06).
+// T-07-11: caller is responsible for using `updateProfileMetadataSchema.strict()`
+// so unknown keys never reach this function.
+export async function updateProfileMetadata(
+  db: Db,
+  args: UpdateProfileMetadataArgs,
+): Promise<ProfileListItem> {
+  const hasDisplayName = args.displayName !== undefined;
+  const hasNotes = args.notes !== undefined;
+
+  if (!hasDisplayName && !hasNotes) {
+    throw new ProfileServiceError('no_fields_to_update', 400);
+  }
+
+  const setPayload: Record<string, unknown> = {
+    updatedAt: new Date(),
+  };
+  if (hasDisplayName) setPayload.displayName = args.displayName;
+  if (hasNotes) setPayload.notes = args.notes;
+
+  const updatedRows = await db
+    .update(socialProfiles)
+    .set(setPayload)
+    .where(
+      and(
+        eq(socialProfiles.id, args.profileId),
+        eq(socialProfiles.userId, args.userId),
+      ),
+    )
+    .returning({ id: socialProfiles.id });
+
+  if (updatedRows.length === 0) {
+    throw new ProfileServiceError('profile_not_found', 404);
+  }
+
+  const refreshed = await fetchProfileListItemById(db, args.userId, args.profileId);
+  if (!refreshed) {
+    // Should never happen — row existed for the UPDATE to touch it and we're
+    // inside the same request. A race would have to delete the profile
+    // between the UPDATE and SELECT. Treat as not found.
+    throw new ProfileServiceError('profile_not_found', 404);
+  }
+  return refreshed;
+}
+
+const IN_FLIGHT_STATES = ['queued', 'publishing', 'auto_destructing'] as const;
+
+// GET /api/profiles/:id/delete-preview handler path. Counts are all
+// ownership-scoped via user_id in the WHERE clause. Returns zeros (never
+// throws) when no matches — the endpoint is idempotent and safe to call
+// even for an empty or just-connected profile.
+export async function getDeletePreview(
+  db: Db,
+  userId: string,
+  profileId: string,
+): Promise<DeletePreview> {
+  const [draftsRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.profileId, profileId),
+        eq(posts.userId, userId),
+        eq(posts.status, 'draft'),
+      ),
+    );
+
+  const [scheduledRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.profileId, profileId),
+        eq(posts.userId, userId),
+        eq(posts.status, 'scheduled'),
+      ),
+    );
+
+  // Queue membership is modeled as posts.queueId IS NOT NULL (no separate
+  // queue_posts join table). We count distinct queue rows so a queue holding
+  // many posts shows as a single "queue membership".
+  const [queueMembershipsRow] = await db
+    .select({ count: sql<number>`count(DISTINCT ${posts.queueId})::int` })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.profileId, profileId),
+        eq(posts.userId, userId),
+        sql`${posts.queueId} IS NOT NULL`,
+      ),
+    );
+
+  const [inFlightRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.profileId, profileId),
+        eq(posts.userId, userId),
+        inArray(posts.status, [...IN_FLIGHT_STATES]),
+      ),
+    );
+
+  // Tags that would lose their last tagged post after this profile is gone.
+  // A tag "loses its last use" when every post tagged with it belongs to the
+  // profile being deleted. Raw SQL because Drizzle can't express the
+  // NOT EXISTS correlation cleanly across three tables.
+  const tagsRows = (await db.execute(sql`
+    SELECT COUNT(DISTINCT pt.tag_id)::int AS count
+    FROM post_tags pt
+    JOIN posts p ON p.id = pt.post_id
+    WHERE p.profile_id = ${profileId}
+      AND p.user_id = ${userId}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM post_tags pt2
+        JOIN posts p2 ON p2.id = pt2.post_id
+        WHERE pt2.tag_id = pt.tag_id
+          AND p2.user_id = ${userId}
+          AND (p2.profile_id <> ${profileId} OR p2.profile_id IS NULL)
+      )
+  `)) as unknown as Array<{ count: number | string | null }>;
+
+  const tagsLosingLastUse = Number(tagsRows[0]?.count ?? 0);
+
+  return {
+    drafts: Number(draftsRow?.count ?? 0),
+    scheduled: Number(scheduledRow?.count ?? 0),
+    queueMemberships: Number(queueMembershipsRow?.count ?? 0),
+    inFlight: Number(inFlightRow?.count ?? 0),
+    tagsLosingLastUse,
+  };
 }
