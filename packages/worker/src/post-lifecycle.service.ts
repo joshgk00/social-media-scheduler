@@ -38,7 +38,8 @@ export type LifecycleAbortReason =
   | 'not_scheduled'
   | 'budget_exhausted'
   | 'thread_unsupported'
-  | 'media_pending';
+  | 'media_pending'
+  | 'token_unhealthy';
 
 export class PostLifecycleAbort extends Error {
   constructor(public readonly reason: LifecycleAbortReason) {
@@ -198,6 +199,30 @@ export async function publishPost(
         .where(eq(socialProfiles.id, post.profile_id));
       if (!profile) {
         throw new PostLifecycleAbort('not_scheduled');
+      }
+
+      // TOKEN-05 (D-18/D-19) token-health pre-flight. Mirrors the budget
+      // pre-flight pattern above — abort BEFORE transitioning to `publishing`
+      // so the post stays in `scheduled` and the scanner re-enqueues once
+      // the user Reconnects. A cancelled attempt row records the reason
+      // for the SCHED-04 history modal; no notification is emitted here
+      // (RESEARCH Pitfall 6 — notifications fire at the state-transition
+      // site, not for every blocked publish attempt against the dead token).
+      if (profile.tokenStatus !== 'active') {
+        await tx.insert(postAttempts).values({
+          postId: ctx.postId,
+          attemptNum: ctx.currentAttemptNum,
+          startedAt: attemptStart,
+          finishedAt: new Date(),
+          outcome: 'cancelled',
+          errorCode: 'token_unhealthy',
+          errorMessage: `Profile token status: ${profile.tokenStatus}`,
+        });
+        lifecycleLogger.warn(
+          { profileId: profile.id, tokenStatus: profile.tokenStatus },
+          'Publish aborted — profile token status is not active',
+        );
+        throw new PostLifecycleAbort('token_unhealthy');
       }
 
       // Transition scheduled → publishing, guarded by the optimistic
