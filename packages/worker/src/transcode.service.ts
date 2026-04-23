@@ -37,9 +37,13 @@ export function transcodeVideo(
       reject(new Error('Transcoding timeout exceeded (5 minutes)'));
     }, TRANSCODE_TIMEOUT_MS);
 
+    const MAX_STDERR_BYTES = 8192;
     let stderr = '';
     proc.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
+      if (stderr.length > MAX_STDERR_BYTES) {
+        stderr = stderr.slice(-MAX_STDERR_BYTES);
+      }
     });
 
     proc.on('close', (code) => {

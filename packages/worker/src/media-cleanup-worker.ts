@@ -19,6 +19,9 @@ import type { WorkerDb } from './db.js';
 
 const logger = createLogger('media-cleanup-worker');
 
+const SOFT_DELETE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const ORPHAN_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 export interface MediaCleanupWorkerDeps {
   redis: Redis;
   db: WorkerDb;
@@ -34,7 +37,7 @@ export function createMediaCleanupWorker(
       const jobLogger = logger.child({ queue: QUEUE_NAMES.mediaCleanup });
 
       // 1. Permanently delete soft-deleted files older than 30 days
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(Date.now() - SOFT_DELETE_RETENTION_MS);
       const expiredMedia = await deps.db.select()
         .from(postMedia)
         .where(and(
@@ -71,7 +74,7 @@ export function createMediaCleanupWorker(
       }
 
       // 2. Clean up orphaned uploads older than 24 hours
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const twentyFourHoursAgo = new Date(Date.now() - ORPHAN_THRESHOLD_MS);
       const orphans = await deps.db.select()
         .from(postMedia)
         .where(and(

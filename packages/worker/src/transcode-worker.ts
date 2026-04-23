@@ -11,8 +11,8 @@
 import { Worker, type Job } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
-import { writeFileSync, createReadStream } from 'node:fs';
-import { stat, unlink } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { writeFile, stat, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -60,7 +60,7 @@ export function createTranscodeWorker(
 
         jobLogger.info('Downloading original from storage');
         const inputBuffer = await deps.storage.get(job.data.inputKey);
-        writeFileSync(inputPath, inputBuffer);
+        await writeFile(inputPath, inputBuffer);
 
         jobLogger.info('Starting ffmpeg transcode');
         await transcodeVideo(inputPath, outputPath);
@@ -112,8 +112,8 @@ export function createTranscodeWorker(
         throw err;
       } finally {
         // T-06-12: Clean up temp files regardless of outcome
-        await unlink(inputPath).catch(() => {});
-        await unlink(outputPath).catch(() => {});
+        await unlink(inputPath).catch((err) => jobLogger.warn({ err, path: inputPath }, 'Temp file cleanup failed'));
+        await unlink(outputPath).catch((err) => jobLogger.warn({ err, path: outputPath }, 'Temp file cleanup failed'));
       }
     },
     {
