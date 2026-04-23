@@ -49,6 +49,7 @@ import {
   encrypt,
   validateEncryptionKey,
 } from '@sms/shared/encryption';
+import type { WorkerDb } from './db.js';
 import { tokenRefreshBackoffStrategy } from './backoff.js';
 
 // Re-export so callers (and tests asserting the strategy wiring) have a
@@ -64,27 +65,14 @@ export interface RefreshOrPingTokenPayload {
 
 export interface TokenRefreshWorkerDeps {
   redis: Redis;
-  db: TokenRefreshWorkerDb;
+  db: WorkerDb;
   notificationQueue: Pick<Queue, 'add'>;
 }
 
-// Narrow DB shape — only the subset this worker uses. Lets tests drop in a
-// chainable stub without implementing the full Drizzle surface.
-interface TokenRefreshWorkerDb {
-  select: (...args: unknown[]) => {
-    from: (...args: unknown[]) => {
-      where: (...args: unknown[]) => Promise<Array<Record<string, unknown>>>;
-    };
-  };
-  update: (...args: unknown[]) => {
-    set: (patch: Record<string, unknown>) => {
-      where: (...args: unknown[]) => Promise<unknown> | {
-        returning: (...args: unknown[]) => Promise<Array<{ id: string }>>;
-      };
-    };
-  };
-  transaction?: <T>(cb: (tx: TokenRefreshWorkerDb) => Promise<T>) => Promise<T>;
-}
+// Internal chainable shape used by the helpers — tests pass a stub typed
+// as WorkerDb via `as never`, and at runtime the duck typing matches.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DbLike = any;
 
 export const TOKEN_REFRESH_CONFIG = {
   concurrency: 2,
@@ -221,7 +209,7 @@ function truncateReason(raw: string): string {
 }
 
 async function loadProfile(
-  db: TokenRefreshWorkerDb,
+  db: DbLike,
   profileId: string,
 ): Promise<Record<string, unknown> | null> {
   const rows = await db
@@ -232,7 +220,7 @@ async function loadProfile(
 }
 
 async function handleLinkedInRefresh(
-  db: TokenRefreshWorkerDb,
+  db: DbLike,
   profile: Record<string, unknown>,
 ): Promise<void> {
   const refreshCt = profile.oauth2RefreshTokenCiphertext as string | null;
@@ -281,7 +269,7 @@ async function handleLinkedInRefresh(
 }
 
 async function handleFacebookPing(
-  db: TokenRefreshWorkerDb,
+  db: DbLike,
   profile: Record<string, unknown>,
 ): Promise<void> {
   const accessCt = profile.oauth2AccessTokenCiphertext as string | null;

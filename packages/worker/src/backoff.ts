@@ -37,9 +37,14 @@ export type PublishBackoffStrategy = (
 // Schedule: 5min → 30min → 2hr. With `attempts: 4` on the token-refresh
 // queue, that's initial + 3 retries = max total wait ~2h35m before the
 // `.on('failed')` listener flips tokenStatus to 'needs_reauth'.
+// Signature matches BullMQ's BackoffStrategy (attemptsMade, type?, err?, job?).
+// We only care about attemptsMade; the other params are accepted for
+// compatibility with the Worker `settings.backoffStrategy` contract.
 export function tokenRefreshBackoffStrategy(
   attemptsMade: number,
-  _err: Error,
+  _typeOrErr?: string | Error,
+  _err?: Error,
+  _job?: MinimalJob,
 ): number {
   if (attemptsMade <= 1) return 5 * 60_000;
   if (attemptsMade === 2) return 30 * 60_000;
