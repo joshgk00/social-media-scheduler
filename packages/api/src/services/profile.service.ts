@@ -5,6 +5,7 @@ import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
 import { socialProfiles, posts } from '@sms/db';
 import { TwitterApi } from 'twitter-api-v2';
+import { OAuthServiceError } from './oauth.service.js';
 
 const logger = createLogger('profile-service');
 
@@ -223,5 +224,197 @@ export async function deleteProfile(db: Db, userId: string, profileId: string): 
       .returning({ id: socialProfiles.id });
 
     return deleted.length > 0;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 — OAuth 2.0 profile flows (LinkedIn + Facebook)
+// ---------------------------------------------------------------------------
+
+interface CreateProfileFromOAuthArgs {
+  userId: string;
+  platform: 'linkedin' | 'facebook';
+  platformUserId: string;
+  platformAccountId: string;
+  displayName: string;
+  handle: string;
+  avatarUrl: string | null;
+  accessToken: string;
+  // LinkedIn only. Facebook rows pass null — refresh columns stay null and the
+  // long-lived page token in oauth2AccessToken* is the only persisted token.
+  refreshToken: string | null;
+  tokenExpiresAt: Date | null;
+  refreshTokenExpiresAt: Date | null;
+}
+
+function requireEncryptionKey(): Buffer {
+  const raw = process.env.ENCRYPTION_KEY;
+  if (!raw) {
+    throw new ProfileServiceError('Server configuration error', 500);
+  }
+  try {
+    return validateEncryptionKey(raw);
+  } catch {
+    throw new ProfileServiceError('Server configuration error', 500);
+  }
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  const maybeCode = (err as { code?: string })?.code;
+  return maybeCode === '23505';
+}
+
+export async function createProfileFromOAuth(
+  db: Db,
+  args: CreateProfileFromOAuthArgs,
+): Promise<{ profileId: string }> {
+  const encryptionKey = requireEncryptionKey();
+
+  const accessEncrypted = encrypt(args.accessToken, encryptionKey, 1);
+  const refreshEncrypted = args.refreshToken
+    ? encrypt(args.refreshToken, encryptionKey, 1)
+    : null;
+
+  try {
+    const [profile] = await db
+      .insert(socialProfiles)
+      .values({
+        userId: args.userId,
+        platform: args.platform,
+        platformUserId: args.platformUserId,
+        platformAccountId: args.platformAccountId,
+        displayName: args.displayName,
+        handle: args.handle,
+        avatarUrl: args.avatarUrl,
+
+        oauth2AccessTokenCiphertext: accessEncrypted.ciphertext,
+        oauth2AccessTokenIv: accessEncrypted.iv,
+        oauth2AccessTokenAuthTag: accessEncrypted.authTag,
+
+        oauth2RefreshTokenCiphertext: refreshEncrypted?.ciphertext ?? null,
+        oauth2RefreshTokenIv: refreshEncrypted?.iv ?? null,
+        oauth2RefreshTokenAuthTag: refreshEncrypted?.authTag ?? null,
+
+        tokenExpiresAt: args.tokenExpiresAt,
+        refreshTokenExpiresAt: args.refreshTokenExpiresAt,
+        tokenStatus: 'active',
+        tokenHealthCheckedAt: new Date(),
+        tokenEncryptionVersion: 1,
+      })
+      .returning({ id: socialProfiles.id });
+
+    return { profileId: profile.id };
+  } catch (err: unknown) {
+    if (isUniqueViolation(err)) {
+      throw new ProfileServiceError(
+        `This ${args.platform} account (@${args.handle}) is already connected.`,
+        409,
+      );
+    }
+    logger.error({ err, platform: args.platform }, 'createProfileFromOAuth failed');
+    throw err;
+  }
+}
+
+interface ReconnectProfileArgs {
+  userId: string;
+  profileId: string;
+  incomingPlatformUserId: string;
+  incomingPlatformAccountId: string;
+  accessToken: string;
+  refreshToken: string | null;
+  tokenExpiresAt: Date | null;
+  refreshTokenExpiresAt: Date | null;
+  incomingHandle: string;
+}
+
+interface ReconnectRow {
+  id: string;
+  handle: string | null;
+  platformUserId: string | null;
+  platformAccountId: string | null;
+}
+
+export async function reconnectProfile(
+  db: Db,
+  args: ReconnectProfileArgs,
+): Promise<{ profileId: string; existingHandle: string }> {
+  const encryptionKey = requireEncryptionKey();
+
+  return db.transaction(async (tx) => {
+    // Ownership bound via userId in the WHERE clause so a cross-user profile
+    // id returns 404 instead of 403 — never leaks existence.
+    const rows = await tx
+      .select({
+        id: socialProfiles.id,
+        handle: socialProfiles.handle,
+        platformUserId: socialProfiles.platformUserId,
+        platformAccountId: socialProfiles.platformAccountId,
+      })
+      .from(socialProfiles)
+      .where(
+        and(
+          eq(socialProfiles.id, args.profileId),
+          eq(socialProfiles.userId, args.userId),
+        ),
+      )
+      .limit(1);
+
+    const existing = (rows as ReconnectRow[])[0];
+    if (!existing) {
+      throw new ProfileServiceError('Profile not found', 404);
+    }
+
+    const existingHandle = existing.handle ?? '';
+
+    const isAccountMatch =
+      existing.platformUserId === args.incomingPlatformUserId &&
+      existing.platformAccountId === args.incomingPlatformAccountId;
+
+    if (!isAccountMatch) {
+      throw new OAuthServiceError(
+        `Existing profile is @${existingHandle}; reconnect attempted with @${args.incomingHandle}`,
+        409,
+        'mismatched_account',
+      );
+    }
+
+    const accessEncrypted = encrypt(args.accessToken, encryptionKey, 1);
+
+    // Per RESEARCH Pitfall 3: LinkedIn does NOT rotate refresh tokens.
+    // When incoming refreshToken is null we must SKIP the update so the
+    // previously stored refresh token survives the reconnect — otherwise the
+    // next background refresh would fail with "missing refresh token".
+    const updatePayload: Record<string, unknown> = {
+      oauth2AccessTokenCiphertext: accessEncrypted.ciphertext,
+      oauth2AccessTokenIv: accessEncrypted.iv,
+      oauth2AccessTokenAuthTag: accessEncrypted.authTag,
+      tokenExpiresAt: args.tokenExpiresAt,
+      tokenStatus: 'active',
+      tokenHealthCheckedAt: new Date(),
+      updatedAt: new Date(),
+      tokenEncryptionVersion: 1,
+    };
+
+    if (args.refreshToken !== null) {
+      const refreshEncrypted = encrypt(args.refreshToken, encryptionKey, 1);
+      updatePayload.oauth2RefreshTokenCiphertext = refreshEncrypted.ciphertext;
+      updatePayload.oauth2RefreshTokenIv = refreshEncrypted.iv;
+      updatePayload.oauth2RefreshTokenAuthTag = refreshEncrypted.authTag;
+      updatePayload.refreshTokenExpiresAt = args.refreshTokenExpiresAt;
+    }
+
+    await tx
+      .update(socialProfiles)
+      .set(updatePayload)
+      .where(
+        and(
+          eq(socialProfiles.id, args.profileId),
+          eq(socialProfiles.userId, args.userId),
+        ),
+      )
+      .returning({ id: socialProfiles.id });
+
+    return { profileId: existing.id, existingHandle };
   });
 }
