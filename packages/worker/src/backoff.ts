@@ -29,6 +29,23 @@ export type PublishBackoffStrategy = (
   job: MinimalJob,
 ) => number;
 
+// Token-refresh backoff for the LinkedIn refresh grant / Facebook health-ping
+// worker (D-14). Longer schedule than publish: transient provider outages
+// often span tens of minutes, and we have no user-facing urgency on these
+// background refresh attempts.
+//
+// Schedule: 5min → 30min → 2hr. With `attempts: 4` on the token-refresh
+// queue, that's initial + 3 retries = max total wait ~2h35m before the
+// `.on('failed')` listener flips tokenStatus to 'needs_reauth'.
+export function tokenRefreshBackoffStrategy(
+  attemptsMade: number,
+  _err: Error,
+): number {
+  if (attemptsMade <= 1) return 5 * 60_000;
+  if (attemptsMade === 2) return 30 * 60_000;
+  return 120 * 60_000;
+}
+
 export function buildBackoffStrategy(): BackoffStrategy {
   return (
     attemptsMade: number,

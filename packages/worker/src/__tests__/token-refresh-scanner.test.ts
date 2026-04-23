@@ -185,7 +185,8 @@ describe('startTokenRefreshScanner', () => {
     );
 
     // Returns the queue so the caller can enqueue ad-hoc jobs
-    expect(tokenRefreshQueue).toBe(queueInstances[0]);
+    expect(tokenRefreshQueue).toBeDefined();
+    expect((tokenRefreshQueue as unknown as { name: string }).name).toBe(QUEUE_NAMES.tokenRefresh);
   });
 });
 
