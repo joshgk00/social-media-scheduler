@@ -104,6 +104,9 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
           });
           return { wouldExceed: state.wouldExceed };
         },
+        // TOKEN-04: enables the 401 → `token_revoked` notification emit
+        // inside post-lifecycle.service.ts recordFailureAttempt.
+        notificationQueue: deps.notificationQueue,
       });
 
       logger.info(

@@ -32,7 +32,7 @@ function buildCtx(
   overrides: Partial<PublishContext> = {},
 ): PublishContext {
   return {
-    postId: 'post_00000000-0000-0000-0000-000000000001',
+    postId: TEST_POST_ID,
     expectedVersion: 1,
     correlationId: 'corr_test_401',
     currentAttemptNum: 1,
@@ -43,12 +43,27 @@ function buildCtx(
   };
 }
 
+// Use strict UUIDs so the notification payload round-trips
+// tokenNotificationEventSchema (which validates `profileId` / `userId` with
+// `z.string().uuid()`). The seed helper's default prefixed ids like
+// `profile_00000000-...` deliberately do not match UUID format.
+const TEST_PROFILE_ID = '00000000-0000-4000-8000-000000000001';
+const TEST_USER_ID = '00000000-0000-4000-8000-000000000002';
+const TEST_POST_ID = '00000000-0000-4000-8000-000000000003';
+
 function seedHappyPath(
   db: MockWorkerDb,
   profileOverrides: Parameters<typeof seedSocialProfile>[0] = {},
 ) {
-  const lockedPost = seedLockedPost();
-  const profile = seedSocialProfile(profileOverrides);
+  const lockedPost = seedLockedPost({
+    id: TEST_POST_ID,
+    profileId: TEST_PROFILE_ID,
+  });
+  const profile = seedSocialProfile({
+    id: TEST_PROFILE_ID,
+    userId: TEST_USER_ID,
+    ...profileOverrides,
+  });
   db.__pushExecute(() => [lockedPost]);
   db.__pushSelect(() => [{ count: '0' }]);
   db.__pushSelect(() => [profile]);
@@ -66,10 +81,11 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
 
   it('UPDATEs tokenStatus=needs_reauth and emits token_revoked when active profile hits 401', async () => {
     seedHappyPath(db, { tokenStatus: 'active' });
-    // Conditional UPDATE returns one row (transition fired).
-    db.__pushReturning(() => [
-      { id: 'profile_00000000-0000-0000-0000-000000000001' },
-    ]);
+    // The publish-transition UPDATE runs first and needs one returning row
+    // to satisfy the optimistic-lock check; then the TOKEN-04 conditional
+    // UPDATE returns one row to signal the transition fired.
+    db.__pushReturning(() => [{ id: TEST_POST_ID }]);
+    db.__pushReturning(() => [{ id: TEST_PROFILE_ID }]);
 
     const authErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
     const ctx = buildCtx(notificationQueue, {
@@ -92,8 +108,8 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
     expect(jobName).toBe(JOB_NAMES.tokenRevoked);
     expect(payload).toMatchObject({
       eventType: 'token_revoked',
-      profileId: 'profile_00000000-0000-0000-0000-000000000001',
-      userId: 'user_00000000-0000-0000-0000-000000000001',
+      profileId: TEST_PROFILE_ID,
+      userId: TEST_USER_ID,
       platform: 'twitter',
       correlationId: 'corr_test_401',
     });
@@ -108,7 +124,10 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
     // lock-time and the 401 response. The conditional UPDATE's RETURNING
     // clause comes back empty — no notification may be emitted.
     seedHappyPath(db, { tokenStatus: 'active' });
-    db.__pushReturning(() => []); // UPDATE affected 0 rows
+    // Publish-transition UPDATE returns one row (optimistic lock passes).
+    db.__pushReturning(() => [{ id: TEST_POST_ID }]);
+    // Conditional profile UPDATE returns zero — dedupe path.
+    db.__pushReturning(() => []);
 
     const authErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
     const ctx = buildCtx(notificationQueue, {
@@ -164,9 +183,8 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
 
   it('notification emit happens AFTER the permanent_fail attempt is inserted (post-commit order)', async () => {
     seedHappyPath(db, { tokenStatus: 'active' });
-    db.__pushReturning(() => [
-      { id: 'profile_00000000-0000-0000-0000-000000000001' },
-    ]);
+    db.__pushReturning(() => [{ id: TEST_POST_ID }]);
+    db.__pushReturning(() => [{ id: TEST_PROFILE_ID }]);
 
     const order: string[] = [];
     const originalInsert = db.insert;
