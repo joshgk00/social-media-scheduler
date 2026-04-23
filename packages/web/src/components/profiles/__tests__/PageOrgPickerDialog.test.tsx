@@ -8,18 +8,13 @@ import type { PendingSelection } from '../../../hooks/use-oauth';
 
 const TEMP_TOKEN = 'temp-abc-123';
 
-function renderDialog(overrides: Partial<{
-  onOpenChange: ReturnType<typeof vi.fn>;
-  onMismatch: ReturnType<typeof vi.fn>;
-  onSuccess: ReturnType<typeof vi.fn>;
-  open: boolean;
-}> = {}) {
+function renderDialog(overrides: { open?: boolean } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 0 } },
   });
-  const onOpenChange = overrides.onOpenChange ?? vi.fn();
-  const onMismatch = overrides.onMismatch ?? vi.fn();
-  const onSuccess = overrides.onSuccess ?? vi.fn();
+  const onOpenChange = vi.fn();
+  const onMismatch = vi.fn();
+  const onSuccess = vi.fn();
   return {
     onOpenChange,
     onMismatch,
