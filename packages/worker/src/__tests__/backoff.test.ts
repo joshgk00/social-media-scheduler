@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Job } from 'bullmq';
-import { buildBackoffStrategy } from '../backoff.js';
+import { buildBackoffStrategy, tokenRefreshBackoffStrategy } from '../backoff.js';
 import { buildApiResponseError } from './helpers/mock-twitter.js';
 
 const fakeJob = {} as Job;
@@ -77,5 +77,24 @@ describe('buildBackoffStrategy', () => {
     const err = buildApiResponseError({ httpStatus: 500, detail: 'boom' });
     const delay = strategy(1, 'publishBackoff', err, fakeJob);
     expect(delay).toBe(30_000);
+  });
+});
+
+describe('tokenRefreshBackoffStrategy', () => {
+  it('first retry returns 5 minutes', () => {
+    expect(tokenRefreshBackoffStrategy(1, new Error('boom'))).toBe(5 * 60_000);
+  });
+
+  it('second retry returns 30 minutes', () => {
+    expect(tokenRefreshBackoffStrategy(2, new Error('boom'))).toBe(30 * 60_000);
+  });
+
+  it('third retry returns 2 hours', () => {
+    expect(tokenRefreshBackoffStrategy(3, new Error('boom'))).toBe(120 * 60_000);
+  });
+
+  it('fourth and beyond retries cap at 2 hours', () => {
+    expect(tokenRefreshBackoffStrategy(4, new Error('boom'))).toBe(120 * 60_000);
+    expect(tokenRefreshBackoffStrategy(10, new Error('boom'))).toBe(120 * 60_000);
   });
 });
