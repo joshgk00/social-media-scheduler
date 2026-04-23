@@ -223,7 +223,7 @@ Plans:
 **Gap Closure**: MEDIA-06 partial, Integration /media/ proxy + volume mount, Integration /admin/ proxy, FLOW-E (Bull-Board)
 **Success Criteria** (what must be TRUE):
   1. nginx.conf includes `location /media/` block proxying to `api_backend`; uploaded thumbnails and media files return the actual file (not index.html) through the published nginx port
-  2. docker-compose.yml nginx service mounts the `media_data` volume so express.static can serve files
+  2. nginx `/media/` requests proxy to Express (`api_backend`), which serves files from the `media_data` volume mounted on the api service — nginx does not mount the volume directly, preserving Express path validation and the consistent proxy pattern
   3. nginx.conf includes `location /admin/` block proxying to `api_backend`; `/admin/queues` loads the Bull-Board dashboard through nginx (not the SPA catch-all)
 **Plans**: 1 plan
 Plans:
