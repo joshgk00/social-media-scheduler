@@ -12,10 +12,11 @@ Own the stack, own the data, own the credentials — persistent queue automation
 
 ### Validated
 
-**Media** — Validated in Phase 6: Media Handling (2026-04-16), extended in Phase 6.4 (2026-04-19)
+**Media** — Validated in Phase 6: Media Handling (2026-04-16), extended in Phase 6.4 (2026-04-19), proxy wiring completed in Phase 6.5 (2026-04-22)
 - [x] Media uploads (images, GIF, video) are stored on local filesystem (Docker volume) or S3-compatible backend
 - [x] Images are thumbnailed; videos are transcoded asynchronously via ffmpeg and block publishing until complete
 - [x] MEDIA-05: `post_media.post_id` is set when posts are created or updated with media — publish worker media-readiness gate fires correctly (FLOW-C wired end-to-end)
+- [x] MEDIA-06: uploaded media files are reachable through nginx at `/media/{key}` via proxy to Express (not swallowed by SPA catch-all); Bull-Board dashboard reachable at `/admin/queues`
 
 ### Active
 
@@ -162,4 +163,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-19 after Phase 06.4: Wire Media-Post Association completion*
+*Last updated: 2026-04-22 after Phase 06.5: Nginx Proxy Completion*
