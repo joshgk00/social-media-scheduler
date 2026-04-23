@@ -361,7 +361,8 @@ describe('profiles routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.displayName).toBe('Renamed');
       expect(mockUpdateProfileMetadata).toHaveBeenCalledTimes(1);
-      const args = mockUpdateProfileMetadata.mock.calls[0][0];
+      // Service signature is (db, args) — args lives at index [1].
+      const args = mockUpdateProfileMetadata.mock.calls[0][1];
       expect(args.displayName).toBe('Renamed');
     });
 
@@ -393,7 +394,8 @@ describe('profiles routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.notes).toBeNull();
-      const args = mockUpdateProfileMetadata.mock.calls[0][0];
+      // Service signature is (db, args) — args lives at index [1].
+      const args = mockUpdateProfileMetadata.mock.calls[0][1];
       expect(args.notes).toBeNull();
     });
 
