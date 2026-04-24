@@ -242,12 +242,15 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
           platformAccountId: userInfo.sub,
           name: userInfo.name,
           subLabel: 'Personal profile',
+          kind: 'personal',
         });
         for (const org of orgs) {
           accounts.push({
             platformAccountId: org.orgUrn,
             name: org.name,
             subLabel: 'Company page',
+            kind: 'organization',
+            orgName: org.name,
           });
         }
 
@@ -305,6 +308,9 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
               platformAccountId: page.id,
               name: page.name,
               subLabel: page.category,
+              kind: 'page' as const,
+              pageName: page.name,
+              followerCount: page.fan_count,
               pageAccessToken: page.access_token,
             })),
           };
@@ -343,13 +349,19 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
     }
 
     // Strip token material — the picker UI only needs the account list and
-    // the platform. Handles / display names live elsewhere in the payload.
+    // the platform. WR-08: emit the fields the picker actually reads
+    // (`displayName`, `kind`, `orgName`, `pageName`, `followerCount`) so
+    // LinkedIn Company Pages stop rendering as "— Personal Profile".
     res.json({
       platform: payload.platform,
       accounts: payload.accounts.map((account) => ({
         platformAccountId: account.platformAccountId,
-        name: account.name,
+        displayName: account.name,
         subLabel: account.subLabel,
+        kind: account.kind,
+        orgName: account.orgName,
+        pageName: account.pageName,
+        followerCount: account.followerCount,
       })),
     });
   });

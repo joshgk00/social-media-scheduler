@@ -55,6 +55,16 @@ export interface PendingSelectionAccount {
   platformAccountId: string;
   name: string;
   subLabel?: string;
+  // WR-08: explicit kind drives the picker UI's title rendering. Without it
+  // every LinkedIn Company Page renders as "— Personal Profile" because the
+  // picker falls through to the default branch.
+  kind?: 'personal' | 'organization' | 'page';
+  // LinkedIn organization display name (Phase 7 defaults to the URN until
+  // Phase 8 enriches via GET /rest/organizations/{urn}).
+  orgName?: string;
+  // Facebook-only display fields.
+  pageName?: string;
+  followerCount?: number;
   // Facebook-only: per-page access token; persisted as the oauth2 access token
   // (NOT the long-lived user token) — RESEARCH §Pitfall 4.
   pageAccessToken?: string;

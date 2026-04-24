@@ -2,15 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client';
 import type { Platform } from './use-profiles';
 
+// Mirrors the response shape of GET /api/oauth/pending/:tempToken. WR-08:
+// the previous interface declared `handle` and `avatarUrl`, which the API
+// never sends — they've been dropped so the type reflects the actual wire
+// contract and the picker's describeAccount() branches on fields that are
+// guaranteed to arrive.
 export interface PendingAccountOption {
   platformAccountId: string | null;
-  kind: 'personal' | 'organization' | 'page';
   displayName: string;
-  handle?: string | null;
-  avatarUrl?: string | null;
-  followerCount?: number | null;
-  orgName?: string | null;
-  pageName?: string | null;
+  subLabel?: string;
+  kind?: 'personal' | 'organization' | 'page';
+  orgName?: string;
+  pageName?: string;
+  followerCount?: number;
 }
 
 export interface PendingSelection {
