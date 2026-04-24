@@ -67,8 +67,14 @@ function resolveRedirectUri(platform: Platform): string {
 }
 
 function errorRedirect(res: import('express').Response, returnTo: string, code: string): void {
-  const separator = returnTo.includes('?') ? '&' : '?';
-  res.redirect(`${returnTo}${separator}oauth_error=${encodeURIComponent(code)}`);
+  // WR-01: use URLSearchParams.set() so a replayed callback (or a returnTo
+  // that already carries `oauth_error`) doesn't produce
+  // `?oauth_error=foo&oauth_error=bar`. `validateReturnTo` guarantees
+  // `returnTo` is a relative path starting with `/`, so the dummy base is
+  // only used to parse pathname/search/hash.
+  const url = new URL(returnTo, 'http://internal');
+  url.searchParams.set('oauth_error', code);
+  res.redirect(`${url.pathname}${url.search}${url.hash}`);
 }
 
 function parseHandleFromMismatchMessage(message: string): { existingHandle: string; incomingHandle: string } {
