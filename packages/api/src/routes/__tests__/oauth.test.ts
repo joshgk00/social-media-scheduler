@@ -54,7 +54,7 @@ vi.mock('../../services/profile.service.js', async () => {
 });
 
 import { createOAuthRouter } from '../oauth.js';
-import { OAuthServiceError } from '../../services/oauth.service.js';
+import { MismatchedAccountError } from '../../services/oauth.service.js';
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -320,11 +320,7 @@ describe('oauth router', () => {
       await redis.set('oauth:pending:tok-2', JSON.stringify(pendingPayload), 'EX', 900);
 
       hoisted.reconnectProfile.mockRejectedValue(
-        new OAuthServiceError(
-          'Existing profile is @old-handle; reconnect attempted with @new-handle',
-          409,
-          'mismatched_account',
-        ),
+        new MismatchedAccountError('old-handle', 'new-handle'),
       );
 
       const app = createTestApp({ redis });

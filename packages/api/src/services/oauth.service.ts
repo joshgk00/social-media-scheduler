@@ -22,6 +22,25 @@ export class OAuthServiceError extends AppError {
   }
 }
 
+// WR-02: typed subclass so the route layer no longer has to regex-parse the
+// error message to recover the mismatched handles. Carries the structured
+// fields consumed by the 409 JSON response.
+export class MismatchedAccountError extends OAuthServiceError {
+  public readonly existingHandle: string;
+  public readonly incomingHandle: string;
+
+  constructor(existingHandle: string, incomingHandle: string) {
+    super(
+      `Existing profile is @${existingHandle}; reconnect attempted with @${incomingHandle}`,
+      409,
+      'mismatched_account',
+    );
+    this.name = 'MismatchedAccountError';
+    this.existingHandle = existingHandle;
+    this.incomingHandle = incomingHandle;
+  }
+}
+
 export interface OAuthStatePayload {
   userId: string;
   platform: 'linkedin' | 'facebook';

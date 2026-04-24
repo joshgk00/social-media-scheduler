@@ -5,7 +5,7 @@ import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
 import { socialProfiles, posts } from '@sms/db';
 import { TwitterApi } from 'twitter-api-v2';
-import { OAuthServiceError } from './oauth.service.js';
+import { OAuthServiceError, MismatchedAccountError } from './oauth.service.js';
 
 // Phase 7 Plan 05 — extended profile list shape returned to the frontend.
 // Token-health fields (tokenStatus/tokenExpiresAt/tokenHealthCheckedAt) and
@@ -494,11 +494,7 @@ export async function reconnectProfile(
     // identity check below. Surface the same 409/mismatched_account code path
     // so the existing frontend flow handles it.
     if (existing.platform !== args.platform) {
-      throw new OAuthServiceError(
-        `Existing profile is @${existingHandle}; reconnect attempted with @${args.incomingHandle}`,
-        409,
-        'mismatched_account',
-      );
+      throw new MismatchedAccountError(existingHandle, args.incomingHandle);
     }
 
     const isAccountMatch =
@@ -506,11 +502,7 @@ export async function reconnectProfile(
       existing.platformAccountId === args.incomingPlatformAccountId;
 
     if (!isAccountMatch) {
-      throw new OAuthServiceError(
-        `Existing profile is @${existingHandle}; reconnect attempted with @${args.incomingHandle}`,
-        409,
-        'mismatched_account',
-      );
+      throw new MismatchedAccountError(existingHandle, args.incomingHandle);
     }
 
     const accessEncrypted = encrypt(args.accessToken, encryptionKey, 1);

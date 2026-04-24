@@ -12,6 +12,7 @@ import { createLogger } from '@sms/shared/logger';
 
 import {
   OAuthServiceError,
+  MismatchedAccountError,
   createOAuthState,
   consumeOAuthState,
   createPendingSelection,
@@ -75,16 +76,6 @@ function errorRedirect(res: import('express').Response, returnTo: string, code: 
   const url = new URL(returnTo, 'http://internal');
   url.searchParams.set('oauth_error', code);
   res.redirect(`${url.pathname}${url.search}${url.hash}`);
-}
-
-function parseHandleFromMismatchMessage(message: string): { existingHandle: string; incomingHandle: string } {
-  // Service throws:
-  //   `Existing profile is @<existing>; reconnect attempted with @<incoming>`
-  // Parse both handles out so the frontend can show them without leaking the
-  // raw error string.
-  const match = message.match(/@([^;]+);.*@(.+)$/);
-  if (!match) return { existingHandle: '', incomingHandle: '' };
-  return { existingHandle: match[1].trim(), incomingHandle: match[2].trim() };
 }
 
 export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Router {
@@ -455,12 +446,14 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
 
       res.status(201).json({ profileId });
     } catch (err: unknown) {
-      if (err instanceof OAuthServiceError && err.code === 'mismatched_account') {
-        const { existingHandle, incomingHandle } = parseHandleFromMismatchMessage(err.message);
+      if (err instanceof MismatchedAccountError) {
+        // WR-02: pull the handles off the typed error rather than regex-parsing
+        // the message, so a future service-side message tweak can't silently
+        // break the frontend contract.
         res.status(err.statusCode).json({
           error: 'mismatched_account',
-          existingHandle,
-          incomingHandle,
+          existingHandle: err.existingHandle,
+          incomingHandle: err.incomingHandle,
           // Re-issue the temp token so the frontend can call /finalize-as-new
           // without forcing the user back through the provider.
           tempToken: await createPendingSelection(redis, payload),
