@@ -18,6 +18,11 @@ interface ReconnectMismatchDialogProps {
   existingHandle: string;
   newHandle: string;
   tempToken: string | null;
+  // The `platformAccountId` the user picked in the preceding picker dialog.
+  // Threaded through so "Connect as a new profile" persists that selection
+  // rather than blindly defaulting to `accounts[0]` (which is always Personal
+  // Profile for LinkedIn or the first page for Facebook). See CR-01.
+  platformAccountId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -26,6 +31,7 @@ export function ReconnectMismatchDialog({
   existingHandle,
   newHandle,
   tempToken,
+  platformAccountId,
   open,
   onOpenChange,
 }: ReconnectMismatchDialogProps) {
@@ -34,12 +40,17 @@ export function ReconnectMismatchDialog({
 
   async function handleConnectAsNew() {
     if (!tempToken) return;
-    // Re-peek the pending selection (valid for 15 minutes) to recover the
-    // `platformAccountId` the user already picked in the prior dialog.
+    // Prefer the selection the user made in the preceding picker. Fall back to
+    // the first account only when no selection context exists (e.g. the
+    // mismatch dialog was opened directly from an `oauth_error` query param).
     const accounts = pendingQuery.data?.accounts ?? [];
-    const platformAccountId = accounts[0]?.platformAccountId ?? null;
+    const resolvedAccountId =
+      platformAccountId ?? accounts[0]?.platformAccountId ?? null;
     try {
-      await finalizeAsNew.mutateAsync({ tempToken, platformAccountId });
+      await finalizeAsNew.mutateAsync({
+        tempToken,
+        platformAccountId: resolvedAccountId,
+      });
       toast.success('New profile connected.');
       onOpenChange(false);
     } catch (err) {

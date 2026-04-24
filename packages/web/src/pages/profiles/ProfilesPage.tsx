@@ -61,6 +61,10 @@ interface MismatchDialogState {
   existingHandle: string;
   newHandle: string;
   tempToken: string;
+  // Carries the `platformAccountId` the user already selected in the picker,
+  // so "Connect as a new profile" persists that account rather than falling
+  // back to `accounts[0]`. See CR-01 in REVIEW.md.
+  platformAccountId: string | null;
 }
 
 function filterProfiles(
@@ -105,7 +109,15 @@ export default function ProfilesPage() {
       const existingHandle = searchParams.get('existingHandle') ?? '';
       const newHandle = searchParams.get('newHandle') ?? '';
       const tempToken = searchParams.get('tempToken') ?? '';
-      setMismatchDialog({ existingHandle, newHandle, tempToken });
+      // No selection context exists on the callback-redirect path (the user
+      // hasn't opened the picker yet), so leave `platformAccountId` null and
+      // let the mismatch dialog fall back to its legacy behavior only here.
+      setMismatchDialog({
+        existingHandle,
+        newHandle,
+        tempToken,
+        platformAccountId: null,
+      });
       const next = new URLSearchParams(searchParams);
       next.delete('oauth_error');
       next.delete('existingHandle');
@@ -152,11 +164,13 @@ export default function ProfilesPage() {
     existingHandle: string;
     incomingHandle: string;
     tempToken: string;
+    platformAccountId: string | null;
   }) {
     setMismatchDialog({
       existingHandle: payload.existingHandle,
       newHandle: payload.incomingHandle,
       tempToken: payload.tempToken,
+      platformAccountId: payload.platformAccountId,
     });
   }
 
@@ -283,6 +297,7 @@ export default function ProfilesPage() {
         existingHandle={mismatchDialog?.existingHandle ?? ''}
         newHandle={mismatchDialog?.newHandle ?? ''}
         tempToken={mismatchDialog?.tempToken ?? null}
+        platformAccountId={mismatchDialog?.platformAccountId ?? null}
         open={mismatchDialog !== null}
         onOpenChange={(isOpen) => {
           if (!isOpen) setMismatchDialog(null);

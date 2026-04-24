@@ -140,6 +140,7 @@ describe('PageOrgPickerDialog', () => {
         existingHandle: 'oldhandle',
         incomingHandle: 'newhandle',
         tempToken: TEMP_TOKEN,
+        platformAccountId: null,
       });
     });
   });

@@ -25,6 +25,12 @@ export interface MismatchPayload {
   existingHandle: string;
   incomingHandle: string;
   tempToken: string;
+  // The `platformAccountId` the user selected in the picker before the
+  // mismatch was detected — threaded through so "Connect as a new profile"
+  // persists the originally-chosen account instead of falling back to
+  // `accounts[0]` (which is always Personal Profile for LinkedIn and the
+  // first page for Facebook). See CR-01 in REVIEW.md.
+  platformAccountId: string | null;
 }
 
 interface PageOrgPickerDialogProps {
@@ -107,9 +113,9 @@ export function PageOrgPickerDialog({
 
   async function handleFinalize() {
     if (!tempToken || !selectedId) return;
+    const platformAccountId =
+      selectedId === '__personal__' ? null : selectedId;
     try {
-      const platformAccountId =
-        selectedId === '__personal__' ? null : selectedId;
       await finalize.mutateAsync({ tempToken, platformAccountId });
       const selected = accounts.find(
         (a) => (a.platformAccountId ?? '__personal__') === selectedId,
@@ -123,6 +129,7 @@ export function PageOrgPickerDialog({
           existingHandle: err.existingHandle,
           incomingHandle: err.incomingHandle,
           tempToken: err.tempToken,
+          platformAccountId,
         });
         handleOpenChange(false);
         return;
