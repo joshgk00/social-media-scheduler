@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -81,8 +81,13 @@ function generateNonce(): string {
   return randomBytes(32).toString('base64url');
 }
 
-function redactToken(token: string): string {
-  return token.length > 8 ? `${token.slice(0, 8)}…` : '[redacted]';
+// WR-07: returns a SHA-256 fingerprint prefix so log lines can correlate the
+// same nonce across entries without leaking any of its entropy. Previous
+// implementation returned `token.slice(0, 8) + '…'`, which exposed ~48 bits
+// of a 256-bit nonce and could let a log-reader correlate a debug line with
+// a subsequent callback `state=` query string.
+function noncePrefixForLog(token: string): string {
+  return createHash('sha256').update(token).digest('hex').slice(0, 12);
 }
 
 export async function createOAuthState(
@@ -99,7 +104,7 @@ export async function createOAuthState(
       userId: payload.userId,
       platform: payload.platform,
       reconnectProfileId: payload.reconnectProfileId,
-      noncePrefix: redactToken(nonce),
+      noncePrefix: noncePrefixForLog(nonce),
     },
     'oauth state nonce created',
   );
@@ -149,7 +154,7 @@ export async function createPendingSelection(
       userId: payload.userId,
       platform: payload.platform,
       accountCount: payload.accounts.length,
-      tempTokenPrefix: redactToken(tempToken),
+      tempTokenPrefix: noncePrefixForLog(tempToken),
     },
     'oauth pending selection created',
   );
