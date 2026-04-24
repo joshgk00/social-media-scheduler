@@ -339,7 +339,26 @@ async function callLinkedInRefresh(args: {
   });
 
   if (res.ok) {
-    return (await res.json()) as LinkedInTokenResponse;
+    const payload = (await res.json()) as Partial<LinkedInTokenResponse>;
+    // WR-03: a partial 200 (proxy rewrite, malformed upstream) would otherwise
+    // yield undefined fields — downstream `expires_in * 1000` becomes `NaN`,
+    // and `encrypt(undefined)` fails obscurely after the existing refresh
+    // token ciphertext was already decrypted. Throw as UnrecoverableError so
+    // BullMQ doesn't burn retries on a structural mismatch.
+    if (
+      typeof payload?.access_token !== 'string' ||
+      payload.access_token.length === 0 ||
+      typeof payload?.expires_in !== 'number' ||
+      !Number.isFinite(payload.expires_in) ||
+      payload.expires_in <= 0 ||
+      typeof payload?.refresh_token !== 'string' ||
+      payload.refresh_token.length === 0
+    ) {
+      throw new UnrecoverableError(
+        'LinkedIn refresh returned an unexpected token response shape',
+      );
+    }
+    return payload as LinkedInTokenResponse;
   }
 
   // 400 and any other 4xx → permanent. Most commonly invalid_grant.

@@ -2,6 +2,32 @@ import { createLogger } from '@sms/shared/logger';
 
 const logger = createLogger('linkedin-service');
 
+// WR-03: runtime contract check on LinkedIn token responses. A partial 200
+// (malformed proxy rewrite, test environment, future API change) would
+// otherwise yield `undefined` fields — `expires_in * 1000` becomes `NaN` in
+// downstream date math, and `encrypt(undefined)` fails obscurely. Validating
+// here keeps the typed LinkedInTokenResponse contract honest at runtime
+// without pulling zod into the api package (see CLAUDE.md: don't add new
+// dependencies unless required).
+function validateLinkedInTokenResponse(
+  payload: unknown,
+): LinkedInTokenResponse | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.access_token !== 'string' || p.access_token.length === 0) return null;
+  if (typeof p.expires_in !== 'number' || !Number.isFinite(p.expires_in) || p.expires_in <= 0) return null;
+  if (typeof p.refresh_token !== 'string' || p.refresh_token.length === 0) return null;
+  if (
+    typeof p.refresh_token_expires_in !== 'number' ||
+    !Number.isFinite(p.refresh_token_expires_in) ||
+    p.refresh_token_expires_in <= 0
+  ) {
+    return null;
+  }
+  if (p.scope !== undefined && typeof p.scope !== 'string') return null;
+  return p as unknown as LinkedInTokenResponse;
+}
+
 const AUTHORIZATION_URL = 'https://www.linkedin.com/oauth/v2/authorization';
 const TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken';
 const USERINFO_URL = 'https://api.linkedin.com/v2/userinfo';
@@ -100,7 +126,12 @@ export async function exchangeAuthorizationCode(args: {
     throw new LinkedInApiError(response.status, bodyText);
   }
 
-  return (await response.json()) as LinkedInTokenResponse;
+  const parsed = validateLinkedInTokenResponse(await response.json());
+  if (!parsed) {
+    logger.warn({ platform: 'linkedin' }, 'token exchange returned unexpected shape');
+    throw new LinkedInApiError(response.status, 'unexpected token response shape');
+  }
+  return parsed;
 }
 
 export async function refreshAccessToken(args: {
@@ -127,7 +158,12 @@ export async function refreshAccessToken(args: {
     throw new LinkedInApiError(response.status, bodyText);
   }
 
-  return (await response.json()) as LinkedInTokenResponse;
+  const parsed = validateLinkedInTokenResponse(await response.json());
+  if (!parsed) {
+    logger.warn({ platform: 'linkedin' }, 'refresh returned unexpected shape');
+    throw new LinkedInApiError(response.status, 'unexpected token response shape');
+  }
+  return parsed;
 }
 
 export async function fetchUserInfo(accessToken: string): Promise<LinkedInUserInfo> {
