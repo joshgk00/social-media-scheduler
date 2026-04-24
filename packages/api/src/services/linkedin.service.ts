@@ -34,6 +34,19 @@ const USERINFO_URL = 'https://api.linkedin.com/v2/userinfo';
 const ORG_ACLS_URL = 'https://api.linkedin.com/rest/organizationAcls';
 const DEFAULT_API_VERSION = '202604';
 
+// WR-04: redact any long token-shaped substrings (base64url, hex, jwt-like)
+// from captured error bodies. LinkedIn's `invalid_grant` response can echo
+// the submitted refresh_token back in some error conditions — retaining the
+// raw body on the public `body` field is a latent credential-leakage risk
+// if any future caller writes `logger.error({ err }, ...)`. The truncated +
+// redacted summary is still useful for diagnostics.
+const TOKEN_SHAPED_SEQUENCE_RE = /[A-Za-z0-9_-]{32,}/g;
+
+function sanitizeErrorBody(body: string | null | undefined): string {
+  if (!body) return '';
+  return body.slice(0, 500).replace(TOKEN_SHAPED_SEQUENCE_RE, '[redacted]');
+}
+
 export class LinkedInApiError extends Error {
   public readonly status: number;
   public readonly body: string;
@@ -42,7 +55,8 @@ export class LinkedInApiError extends Error {
     super(`LinkedIn API error ${status}`);
     this.name = 'LinkedInApiError';
     this.status = status;
-    this.body = body;
+    // WR-04: never retain the raw body — sanitize before storing.
+    this.body = sanitizeErrorBody(body);
   }
 }
 

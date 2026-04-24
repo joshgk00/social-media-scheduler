@@ -4,6 +4,19 @@ const logger = createLogger('facebook-service');
 
 const DEFAULT_GRAPH_VERSION = 'v25.0';
 
+// WR-04: redact any long token-shaped substrings (base64url, hex, jwt-like)
+// from captured error bodies. Facebook Graph errors can occasionally include
+// access-token fragments in the response envelope; retaining the raw body on
+// the public `body` field is a latent credential-leakage risk if a future
+// caller writes `logger.error({ err }, ...)`. The truncated + redacted
+// summary is still useful for diagnostics.
+const TOKEN_SHAPED_SEQUENCE_RE = /[A-Za-z0-9_-]{32,}/g;
+
+function sanitizeErrorBody(body: string | null | undefined): string {
+  if (!body) return '';
+  return body.slice(0, 500).replace(TOKEN_SHAPED_SEQUENCE_RE, '[redacted]');
+}
+
 export class FacebookApiError extends Error {
   public readonly status: number;
   public readonly body: string;
@@ -13,7 +26,8 @@ export class FacebookApiError extends Error {
     super(`Facebook API error ${status}${code !== undefined ? ` (code ${code})` : ''}`);
     this.name = 'FacebookApiError';
     this.status = status;
-    this.body = body;
+    // WR-04: never retain the raw body — sanitize before storing.
+    this.body = sanitizeErrorBody(body);
     this.code = code;
   }
 }
