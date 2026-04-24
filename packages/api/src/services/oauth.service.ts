@@ -184,7 +184,18 @@ export async function peekPendingSelection(
   tempToken: string,
 ): Promise<PendingSelectionPayload | null> {
   const value = await redis.get(`${PENDING_KEY_PREFIX}${tempToken}`);
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined) {
+    // WR-05: emit a log line when a pending selection has expired mid-flow so
+    // on-call can correlate "user reported blank mismatch dialog" reports
+    // with a bounded TTL window. Fingerprint the temp token so the same
+    // request can be cross-referenced against the createPendingSelection
+    // debug line without exposing the token material.
+    logger.info(
+      { tempTokenPrefix: noncePrefixForLog(tempToken) },
+      'pending selection not found or expired',
+    );
+    return null;
+  }
   try {
     return JSON.parse(value) as PendingSelectionPayload;
   } catch (err) {
