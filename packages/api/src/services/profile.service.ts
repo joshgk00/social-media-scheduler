@@ -434,6 +434,10 @@ export async function createProfileFromOAuth(
 interface ReconnectProfileArgs {
   userId: string;
   profileId: string;
+  // The platform the incoming OAuth flow ran through. Compared against the
+  // existing row's platform to block cross-platform reconnects (e.g. feeding
+  // a LinkedIn profileId into a Facebook callback). See CR-02 in REVIEW.md.
+  platform: 'twitter' | 'linkedin' | 'facebook';
   incomingPlatformUserId: string;
   incomingPlatformAccountId: string;
   accessToken: string;
@@ -445,6 +449,7 @@ interface ReconnectProfileArgs {
 
 interface ReconnectRow {
   id: string;
+  platform: 'twitter' | 'linkedin' | 'facebook';
   handle: string | null;
   platformUserId: string | null;
   platformAccountId: string | null;
@@ -462,6 +467,7 @@ export async function reconnectProfile(
     const rows = await tx
       .select({
         id: socialProfiles.id,
+        platform: socialProfiles.platform,
         handle: socialProfiles.handle,
         platformUserId: socialProfiles.platformUserId,
         platformAccountId: socialProfiles.platformAccountId,
@@ -481,6 +487,19 @@ export async function reconnectProfile(
     }
 
     const existingHandle = existing.handle ?? '';
+
+    // CR-02: block cross-platform reconnects (e.g. feeding a LinkedIn
+    // profileId into a Facebook callback). `platformAccountId`/`platformUserId`
+    // are opaque strings, so a platform mismatch can otherwise slip past the
+    // identity check below. Surface the same 409/mismatched_account code path
+    // so the existing frontend flow handles it.
+    if (existing.platform !== args.platform) {
+      throw new OAuthServiceError(
+        `Existing profile is @${existingHandle}; reconnect attempted with @${args.incomingHandle}`,
+        409,
+        'mismatched_account',
+      );
+    }
 
     const isAccountMatch =
       existing.platformUserId === args.incomingPlatformUserId &&

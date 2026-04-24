@@ -420,6 +420,7 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
         const result = await reconnectProfile(db, {
           userId: payload.userId,
           profileId: reconnectProfileId,
+          platform: payload.platform,
           incomingPlatformUserId: payload.platformUserId,
           incomingPlatformAccountId: selected.platformAccountId,
           accessToken: accessTokenForPersist,

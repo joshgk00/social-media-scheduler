@@ -166,6 +166,7 @@ describe('profile.service OAuth flows', () => {
     it('updates tokens on platformUserId + platformAccountId match', async () => {
       const db = setupSelect({
         id: PROFILE_ID,
+        platform: 'linkedin',
         handle: 'existing-handle',
         platformUserId: 'urn:li:person:abc',
         platformAccountId: 'urn:li:organization:42',
@@ -189,6 +190,7 @@ describe('profile.service OAuth flows', () => {
       const result = await reconnectProfile(db, {
         userId: USER_ID,
         profileId: PROFILE_ID,
+        platform: 'linkedin',
         incomingPlatformUserId: 'urn:li:person:abc',
         incomingPlatformAccountId: 'urn:li:organization:42',
         accessToken: 'new-at',
@@ -209,6 +211,7 @@ describe('profile.service OAuth flows', () => {
     it('throws OAuthServiceError 409 mismatched_account on platform ID mismatch', async () => {
       const db = setupSelect({
         id: PROFILE_ID,
+        platform: 'linkedin',
         handle: 'existing-handle',
         platformUserId: 'urn:li:person:DIFFERENT',
         platformAccountId: 'urn:li:organization:42',
@@ -221,6 +224,37 @@ describe('profile.service OAuth flows', () => {
         reconnectProfile(db, {
           userId: USER_ID,
           profileId: PROFILE_ID,
+          platform: 'linkedin',
+          incomingPlatformUserId: 'urn:li:person:abc',
+          incomingPlatformAccountId: 'urn:li:organization:42',
+          accessToken: 'a',
+          refreshToken: null,
+          tokenExpiresAt: null,
+          refreshTokenExpiresAt: null,
+          incomingHandle: 'jane-doe',
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        code: 'mismatched_account',
+      });
+    });
+
+    it('throws OAuthServiceError 409 mismatched_account on platform mismatch (cross-platform reconnect)', async () => {
+      // CR-02: a LinkedIn profile id fed into a Facebook callback must not
+      // overwrite the LinkedIn row's oauth2 columns.
+      const db = setupSelect({
+        id: PROFILE_ID,
+        platform: 'linkedin',
+        handle: 'existing-handle',
+        platformUserId: 'urn:li:person:abc',
+        platformAccountId: 'urn:li:organization:42',
+      });
+
+      await expect(
+        reconnectProfile(db, {
+          userId: USER_ID,
+          profileId: PROFILE_ID,
+          platform: 'facebook',
           incomingPlatformUserId: 'urn:li:person:abc',
           incomingPlatformAccountId: 'urn:li:organization:42',
           accessToken: 'a',
@@ -238,6 +272,7 @@ describe('profile.service OAuth flows', () => {
     it('mismatch error message includes both handles', async () => {
       const db = setupSelect({
         id: PROFILE_ID,
+        platform: 'linkedin',
         handle: 'OLD-HANDLE',
         platformUserId: 'urn:li:person:DIFFERENT',
         platformAccountId: 'urn:li:organization:42',
@@ -247,6 +282,7 @@ describe('profile.service OAuth flows', () => {
         await reconnectProfile(db, {
           userId: USER_ID,
           profileId: PROFILE_ID,
+          platform: 'linkedin',
           incomingPlatformUserId: 'urn:li:person:abc',
           incomingPlatformAccountId: 'urn:li:organization:42',
           accessToken: 'a',
@@ -269,6 +305,7 @@ describe('profile.service OAuth flows', () => {
         reconnectProfile(db, {
           userId: USER_ID,
           profileId: PROFILE_ID,
+          platform: 'linkedin',
           incomingPlatformUserId: 'p',
           incomingPlatformAccountId: 'a',
           accessToken: 'a',
@@ -283,6 +320,7 @@ describe('profile.service OAuth flows', () => {
     it('preserves existing refresh token when incoming refreshToken is null', async () => {
       const db = setupSelect({
         id: PROFILE_ID,
+        platform: 'linkedin',
         handle: 'existing',
         platformUserId: 'urn:li:person:abc',
         platformAccountId: 'urn:li:organization:42',
@@ -306,6 +344,7 @@ describe('profile.service OAuth flows', () => {
       await reconnectProfile(db, {
         userId: USER_ID,
         profileId: PROFILE_ID,
+        platform: 'linkedin',
         incomingPlatformUserId: 'urn:li:person:abc',
         incomingPlatformAccountId: 'urn:li:organization:42',
         accessToken: 'new-at',
@@ -325,6 +364,7 @@ describe('profile.service OAuth flows', () => {
       delete process.env.ENCRYPTION_KEY;
       const db = setupSelect({
         id: PROFILE_ID,
+        platform: 'linkedin',
         handle: 'existing',
         platformUserId: 'urn:li:person:abc',
         platformAccountId: 'urn:li:organization:42',
@@ -334,6 +374,7 @@ describe('profile.service OAuth flows', () => {
         reconnectProfile(db, {
           userId: USER_ID,
           profileId: PROFILE_ID,
+          platform: 'linkedin',
           incomingPlatformUserId: 'urn:li:person:abc',
           incomingPlatformAccountId: 'urn:li:organization:42',
           accessToken: 'a',
