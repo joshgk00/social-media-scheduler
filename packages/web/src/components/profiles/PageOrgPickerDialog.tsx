@@ -142,6 +142,14 @@ export function PageOrgPickerDialog({
   const isSubmitting = finalize.isPending;
   const isEmpty = !isLoading && accounts.length === 0 && !pendingQuery.isError;
   const hasError = pendingQuery.isError;
+  // WR-06: the API returns 403 when the pending selection is owned by a
+  // different user (the session drifted between /start and /pending). A
+  // generic "try again" prompt is misleading there — the user needs to
+  // restart the connect flow, not retry the fetch. Distinguish the two cases
+  // so the copy matches the failure mode.
+  const pendingErrorStatus =
+    (pendingQuery.error as { status?: number } | null)?.status;
+  const hasSessionDriftError = pendingErrorStatus === 403;
   const selectedAccount = accounts.find(
     (a) => (a.platformAccountId ?? '__personal__') === selectedId,
   );
@@ -177,7 +185,9 @@ export function PageOrgPickerDialog({
 
         {hasError && (
           <p className="text-sm text-destructive" role="alert">
-            Couldn't load your accounts. Try again or go back.
+            {hasSessionDriftError
+              ? 'This connection belongs to a different session. Close this dialog and restart the connect flow.'
+              : "Couldn't load your accounts. Try again or go back."}
           </p>
         )}
 
