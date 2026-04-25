@@ -1,10 +1,11 @@
 ---
 phase: 8
 slug: linkedin-facebook-post-creation
-status: draft
+status: approved
 shadcn_initialized: true
 preset: zinc (shadcn default, Phase 2 scaffold)
 created: 2026-04-25
+reviewed_at: 2026-04-25T00:00:00Z
 ---
 
 # Phase 8 — UI Design Contract
