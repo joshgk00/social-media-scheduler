@@ -16,5 +16,20 @@ export const updateProfileSchema = z.object({
   displayName: z.string().max(255).optional(),
 });
 
+// PATCH /api/profiles/:id — profile rename + Markdown notes.
+// `.strict()` rejects unknown keys (mass-assignment mitigation, same rationale
+// as rate-limit.ts). Notes are rendered client-side via react-markdown +
+// rehype-sanitize; the API never renders to HTML — see T-07-05.
+export const updateProfileMetadataSchema = z
+  .object({
+    displayName: z.string().min(1).max(255).optional(),
+    notes: z.string().max(5000).nullish(),
+  })
+  .strict();
+
+export const tokenStatusSchema = z.enum(['active', 'expiring', 'expired', 'needs_reauth']);
+
 export type CreateProfileInput = z.infer<typeof createProfileSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type UpdateProfileMetadata = z.infer<typeof updateProfileMetadataSchema>;
+export type TokenStatus = z.infer<typeof tokenStatusSchema>;

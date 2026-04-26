@@ -8,6 +8,8 @@ export * from './schemas/auth.js';
 export * from './schemas/settings.js';
 export * from './schemas/recovery.js';
 export * from './schemas/profiles.js';
+export * from './schemas/oauth.js';
+export * from './schemas/notifications.js';
 export * from './schemas/posts.js';
 export * from './schemas/tags.js';
 export * from './schemas/rate-limit.js';

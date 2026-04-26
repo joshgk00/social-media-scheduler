@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { and, eq } from 'drizzle-orm';
-import { createProfileSchema, rateLimitUpdateSchema } from '@sms/shared';
+import {
+  createProfileSchema,
+  rateLimitUpdateSchema,
+  updateProfileMetadataSchema,
+} from '@sms/shared';
 import type { Db } from '@sms/db';
 import { socialProfiles } from '@sms/db';
 
@@ -9,6 +13,8 @@ import {
   getProfiles,
   getProfileById,
   deleteProfile,
+  updateProfileMetadata,
+  getDeletePreview,
   ProfileServiceError,
 } from '../services/profile.service.js';
 import { checkTwitterBudgetWithDb } from '../services/rate-limit.service.js';
@@ -73,6 +79,54 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
       }
       throw err;
     }
+  });
+
+  // PATCH /api/profiles/:id — rename + Markdown notes.
+  // `updateProfileMetadataSchema.strict()` rejects unknown keys so an attacker
+  // cannot sneak `userId` or token fields into the UPDATE (T-07-11).
+  // Ownership lives in the UPDATE WHERE clause inside updateProfileMetadata
+  // (no read-before-write race, T-07-06). CSRF is enforced by the
+  // `doubleCsrfProtection` middleware already mounted in app.ts.
+  router.patch('/api/profiles/:id', requireAuth, async (req, res) => {
+    const profileId = validateUuidParam(req.params.id as string);
+    const userId = req.session.userId!;
+
+    const parsed = updateProfileMetadataSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Validation failed',
+        details: parsed.error.issues,
+      });
+      return;
+    }
+
+    try {
+      const refreshed = await updateProfileMetadata(db, {
+        userId,
+        profileId,
+        displayName: parsed.data.displayName,
+        notes: parsed.data.notes,
+      });
+      res.json(refreshed);
+    } catch (err: unknown) {
+      if (err instanceof ProfileServiceError) {
+        res.status(err.statusCode).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+  });
+
+  // GET /api/profiles/:id/delete-preview — cascade count summary for the
+  // confirm-delete dialog. Returns all zeros when the profile has no related
+  // posts/queues/tags; the endpoint is idempotent and never 404s so the
+  // dialog can open before the user commits to deletion.
+  router.get('/api/profiles/:id/delete-preview', requireAuth, async (req, res) => {
+    const profileId = validateUuidParam(req.params.id as string);
+    const userId = req.session.userId!;
+
+    const preview = await getDeletePreview(db, userId, profileId);
+    res.json(preview);
   });
 
   // GET /api/profiles/:id/rate-limit — return the current Twitter budget

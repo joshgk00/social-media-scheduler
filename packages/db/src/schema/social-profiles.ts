@@ -31,8 +31,26 @@ export const socialProfiles = pgTable('social_profiles', {
   warnThresholdPercent: integer('warn_threshold_percent').notNull().default(80),
   connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),
   lastPublishedAt: timestamp('last_published_at', { withTimezone: true }),
+
+  // Phase 7: OAuth 2.0 token lifecycle (LinkedIn, Facebook) per CONTEXT D-06..D-11.
+  // Twitter rows keep `platformAccountId = NULL` and continue using the OAuth 1.0a
+  // consumer*/accessTokenSecret* triples above. Token columns are encrypted at rest
+  // (AES-256-GCM) — ciphertext/iv/authTag stored together; plaintext never persists.
+  platformAccountId: varchar('platform_account_id', { length: 255 }),
+  oauth2AccessTokenCiphertext: text('oauth2_access_token_ciphertext'),
+  oauth2AccessTokenIv: varchar('oauth2_access_token_iv', { length: 64 }),
+  oauth2AccessTokenAuthTag: varchar('oauth2_access_token_auth_tag', { length: 64 }),
+  oauth2RefreshTokenCiphertext: text('oauth2_refresh_token_ciphertext'),
+  oauth2RefreshTokenIv: varchar('oauth2_refresh_token_iv', { length: 64 }),
+  oauth2RefreshTokenAuthTag: varchar('oauth2_refresh_token_auth_tag', { length: 64 }),
+  tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
+  tokenStatus: varchar('token_status', { length: 20 }).notNull().default('active'),
+  tokenHealthCheckedAt: timestamp('token_health_checked_at', { withTimezone: true }),
+  notes: text('notes'),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  unique('social_profiles_user_platform_account').on(table.userId, table.platform, table.platformUserId).nullsNotDistinct(),
+  unique('social_profiles_user_platform_account').on(table.userId, table.platform, table.platformUserId, table.platformAccountId).nullsNotDistinct(),
 ]);

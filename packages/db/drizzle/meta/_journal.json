@@ -36,6 +36,13 @@
       "when": 1745366400000,
       "tag": "0004_fix-post-media-cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776977789844,
+      "tag": "0005_phase-07-oauth-token-lifecycle",
+      "breakpoints": true
     }
   ]
 }

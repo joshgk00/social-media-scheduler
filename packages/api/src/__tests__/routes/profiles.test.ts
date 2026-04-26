@@ -8,6 +8,8 @@ const mockCreateProfile = vi.fn();
 const mockGetProfiles = vi.fn();
 const mockGetProfileById = vi.fn();
 const mockDeleteProfile = vi.fn();
+const mockUpdateProfileMetadata = vi.fn();
+const mockGetDeletePreview = vi.fn();
 
 vi.mock('../../services/profile.service.js', () => {
   class ProfileServiceError extends Error {
@@ -21,6 +23,8 @@ vi.mock('../../services/profile.service.js', () => {
     getProfiles: (...args: unknown[]) => mockGetProfiles(...args),
     getProfileById: (...args: unknown[]) => mockGetProfileById(...args),
     deleteProfile: (...args: unknown[]) => mockDeleteProfile(...args),
+    updateProfileMetadata: (...args: unknown[]) => mockUpdateProfileMetadata(...args),
+    getDeletePreview: (...args: unknown[]) => mockGetDeletePreview(...args),
     ProfileServiceError,
   };
 });
@@ -317,6 +321,218 @@ describe('profiles routes', () => {
 
       expect(res.status).toBe(409);
       expect(res.body.error).toContain('in-flight posts');
+    });
+  });
+
+  // Phase 7 Plan 05 — PATCH metadata + delete-preview + extended GET list
+  // ---------------------------------------------------------------------
+
+  const EXTENDED_PROFILE = {
+    id: PROFILE_UUID,
+    platform: 'linkedin',
+    platformUserId: 'urn:li:person:abc',
+    platformAccountId: 'urn:li:organization:42',
+    displayName: 'Jane Doe',
+    handle: 'jane-doe',
+    avatarUrl: null,
+    connectedAt: new Date('2026-04-01T00:00:00Z').toISOString(),
+    lastPublishedAt: null,
+    tokenStatus: 'active',
+    tokenExpiresAt: new Date('2026-08-01T00:00:00Z').toISOString(),
+    tokenHealthCheckedAt: new Date('2026-04-20T00:00:00Z').toISOString(),
+    notes: null,
+    nextScheduledAt: null,
+    monthlyTweetBudget: 500,
+    warnThresholdPercent: 80,
+  };
+
+  describe('PATCH /api/profiles/:id', () => {
+    it('returns 200 with refreshed row for valid displayName', async () => {
+      mockUpdateProfileMetadata.mockResolvedValueOnce({
+        ...EXTENDED_PROFILE,
+        displayName: 'Renamed',
+      });
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .send({ displayName: 'Renamed' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.displayName).toBe('Renamed');
+      expect(mockUpdateProfileMetadata).toHaveBeenCalledTimes(1);
+      // Service signature is (db, args) — args lives at index [1].
+      const args = mockUpdateProfileMetadata.mock.calls[0][1];
+      expect(args.displayName).toBe('Renamed');
+    });
+
+    it('returns 200 with notes stored when notes-only provided', async () => {
+      mockUpdateProfileMetadata.mockResolvedValueOnce({
+        ...EXTENDED_PROFILE,
+        notes: '# Hello',
+      });
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .send({ notes: '# Hello' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.notes).toBe('# Hello');
+    });
+
+    it('returns 200 with notes cleared when notes=null', async () => {
+      mockUpdateProfileMetadata.mockResolvedValueOnce({
+        ...EXTENDED_PROFILE,
+        notes: null,
+      });
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .send({ notes: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.notes).toBeNull();
+      // Service signature is (db, args) — args lives at index [1].
+      const args = mockUpdateProfileMetadata.mock.calls[0][1];
+      expect(args.notes).toBeNull();
+    });
+
+    it('returns 400 when body is empty ({}) — service throws no_fields_to_update', async () => {
+      const { ProfileServiceError } = await import('../../services/profile.service.js');
+      mockUpdateProfileMetadata.mockRejectedValueOnce(
+        new ProfileServiceError('no_fields_to_update', 400),
+      );
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .send({});
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when notes exceeds 5000 chars (Zod)', async () => {
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .send({ notes: 'x'.repeat(5001) });
+
+      expect(res.status).toBe(400);
+      expect(mockUpdateProfileMetadata).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when body includes unknown keys (strict schema)', async () => {
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .send({ displayName: 'x', platform: 'linkedin' });
+
+      expect(res.status).toBe(400);
+      expect(mockUpdateProfileMetadata).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when service throws profile_not_found', async () => {
+      const { ProfileServiceError } = await import('../../services/profile.service.js');
+      mockUpdateProfileMetadata.mockRejectedValueOnce(
+        new ProfileServiceError('profile_not_found', 404),
+      );
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .send({ displayName: 'New' });
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 401 without a session', async () => {
+      const app = createTestApp();
+      const res = await request(app)
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .send({ displayName: 'New' });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 400 when :id is not a valid UUID', async () => {
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .patch('/api/profiles/not-a-uuid')
+        .send({ displayName: 'New' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /api/profiles/:id/delete-preview', () => {
+    it('returns 200 with the five cascade counts', async () => {
+      mockGetDeletePreview.mockResolvedValueOnce({
+        drafts: 3,
+        scheduled: 5,
+        queueMemberships: 2,
+        tagsLosingLastUse: 1,
+        inFlight: 0,
+      });
+      const agent = await authenticatedAgent();
+
+      const res = await agent.get(`/api/profiles/${PROFILE_UUID}/delete-preview`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        drafts: 3,
+        scheduled: 5,
+        queueMemberships: 2,
+        tagsLosingLastUse: 1,
+        inFlight: 0,
+      });
+    });
+
+    it('returns 401 without a session', async () => {
+      const app = createTestApp();
+      const res = await request(app).get(`/api/profiles/${PROFILE_UUID}/delete-preview`);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 400 when :id is not a valid UUID', async () => {
+      const agent = await authenticatedAgent();
+      const res = await agent.get('/api/profiles/not-a-uuid/delete-preview');
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /api/profiles (Phase 7 extended shape)', () => {
+    it('response includes tokenStatus, tokenExpiresAt, tokenHealthCheckedAt, notes, nextScheduledAt', async () => {
+      mockGetProfiles.mockResolvedValueOnce([EXTENDED_PROFILE]);
+      const agent = await authenticatedAgent();
+
+      const res = await agent.get('/api/profiles');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(1);
+      const row = res.body[0];
+      expect(row).toHaveProperty('tokenStatus', 'active');
+      expect(row).toHaveProperty('tokenExpiresAt');
+      expect(row).toHaveProperty('tokenHealthCheckedAt');
+      expect(row).toHaveProperty('notes');
+      expect(row).toHaveProperty('nextScheduledAt');
+      expect(row).toHaveProperty('platformAccountId', 'urn:li:organization:42');
+    });
+
+    it('response does NOT include ciphertext fields (T-07-03)', async () => {
+      mockGetProfiles.mockResolvedValueOnce([EXTENDED_PROFILE]);
+      const agent = await authenticatedAgent();
+
+      const res = await agent.get('/api/profiles');
+
+      const serialized = JSON.stringify(res.body);
+      expect(serialized).not.toContain('Ciphertext');
+      expect(serialized).not.toContain('AuthTag');
+      expect(serialized).not.toMatch(/oauth2[A-Za-z]*Iv/);
     });
   });
 });

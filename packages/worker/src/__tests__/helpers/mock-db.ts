@@ -19,6 +19,7 @@ export interface MockWorkerDb {
   __selectQueue: QueryPlan[];
   __pushExecute: (plan: QueryPlan) => void;
   __pushSelect: (plan: QueryPlan) => void;
+  __pushReturning: (plan: QueryPlan) => void;
   __insertedRows: unknown[];
   __updates: Array<{ set: Record<string, unknown>; where?: unknown }>;
 }
@@ -52,6 +53,7 @@ function buildChain(terminal: unknown) {
 export function createMockWorkerDb(): MockWorkerDb {
   const executeQueue: QueryPlan[] = [];
   const selectQueue: QueryPlan[] = [];
+  const returningQueue: QueryPlan[] = [];
   const insertedRows: unknown[] = [];
   const updates: Array<{ set: Record<string, unknown>; where?: unknown }> = [];
 
@@ -65,7 +67,12 @@ export function createMockWorkerDb(): MockWorkerDb {
 
   const updateChain = () => {
     const result: Record<string, unknown> = {};
-    const returningFn = vi.fn().mockResolvedValue([{ id: 'mock-updated-id' }]);
+    const returningFn = vi.fn().mockImplementation(() => {
+      // Tailored per-call returning values take priority; otherwise fall back
+      // to the default mock id so pre-existing tests keep passing.
+      const next = returningQueue.shift();
+      return Promise.resolve(next ? next() : [{ id: 'mock-updated-id' }]);
+    });
     const whereFn = vi.fn().mockImplementation(() => {
       // Return a thenable that also supports .returning()
       const whereResult = Promise.resolve(undefined) as Promise<undefined> & { returning: typeof returningFn };
@@ -103,6 +110,9 @@ export function createMockWorkerDb(): MockWorkerDb {
     },
     __pushSelect: (plan: QueryPlan) => {
       selectQueue.push(plan);
+    },
+    __pushReturning: (plan: QueryPlan) => {
+      returningQueue.push(plan);
     },
     __insertedRows: insertedRows,
     __updates: updates,

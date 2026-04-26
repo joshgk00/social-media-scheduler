@@ -277,23 +277,48 @@ describe('profile.service', () => {
 
   describe('getProfiles', () => {
     it('returns profiles without credential ciphertext, IV, or authTag columns', async () => {
-      const db = createMockDb({ selectResult: [SAFE_PROFILE] });
+      // Phase 7 Plan 05: getProfiles now uses db.execute(sql`...`) with a
+      // LATERAL subquery so the projection lives in the raw SQL, not in a
+      // Drizzle .select({...}) object. T-07-03 is enforced by making the
+      // serialized response free of every secret column name.
+      const db = createMockDb({ selectResult: [] });
+      db.execute = vi.fn().mockResolvedValue([
+        {
+          id: 'profile-uuid-1',
+          platform: 'twitter',
+          platform_user_id: '12345',
+          platform_account_id: null,
+          display_name: 'Test User',
+          handle: 'testuser',
+          avatar_url: 'https://pbs.twimg.com/avatar.jpg',
+          connected_at: new Date(),
+          last_published_at: null,
+          token_status: 'active',
+          token_expires_at: null,
+          token_health_checked_at: null,
+          notes: null,
+          next_scheduled_at: null,
+          monthly_tweet_budget: 500,
+          warn_threshold_percent: 80,
+        },
+      ]);
+
       const profiles = await getProfiles(db, 'user-1');
 
       expect(profiles).toHaveLength(1);
 
-      const selectCall = (db.select as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      const columnNames = Object.keys(selectCall);
-
+      const serialized = JSON.stringify(profiles[0]);
       const credentialFields = [
         'consumerKeyCiphertext', 'consumerKeyIv', 'consumerKeyAuthTag',
         'consumerSecretCiphertext', 'consumerSecretIv', 'consumerSecretAuthTag',
         'accessTokenCiphertext', 'accessTokenIv', 'accessTokenAuthTag',
         'accessTokenSecretCiphertext', 'accessTokenSecretIv', 'accessTokenSecretAuthTag',
+        'oauth2AccessTokenCiphertext', 'oauth2AccessTokenIv', 'oauth2AccessTokenAuthTag',
+        'oauth2RefreshTokenCiphertext', 'oauth2RefreshTokenIv', 'oauth2RefreshTokenAuthTag',
       ];
 
       for (const field of credentialFields) {
-        expect(columnNames).not.toContain(field);
+        expect(serialized).not.toContain(field);
       }
     });
 

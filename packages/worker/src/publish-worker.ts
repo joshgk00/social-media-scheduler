@@ -104,6 +104,9 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
           });
           return { wouldExceed: state.wouldExceed };
         },
+        // TOKEN-04: enables the 401 → `token_revoked` notification emit
+        // inside post-lifecycle.service.ts recordFailureAttempt.
+        notificationQueue: deps.notificationQueue,
       });
 
       logger.info(
@@ -125,8 +128,13 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
           err.reason === 'budget_exhausted' ||
           err.reason === 'not_scheduled' ||
           err.reason === 'thread_unsupported' ||
-          err.reason === 'media_pending'
+          err.reason === 'media_pending' ||
+          err.reason === 'token_unhealthy'
         ) {
+          // Phase 07-04 (TOKEN-05): token_unhealthy mirrors budget_exhausted —
+          // post stays in `scheduled`, no retry budget consumed. Scanner will
+          // re-enqueue once the user Reconnects and tokenStatus flips back to
+          // `active`.
           logger.info(
             { reason: err.reason },
             'Graceful abort — scanner will re-evaluate',

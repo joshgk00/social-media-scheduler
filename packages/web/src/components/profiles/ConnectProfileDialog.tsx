@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createProfileSchema, type CreateProfileInput } from '@sms/shared';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Info, Loader2, Network, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCreateProfile } from '../../hooks/use-profiles';
 import { Button } from '../ui/button';
@@ -24,6 +24,7 @@ import {
   FormDescription,
   FormMessage,
 } from '../ui/form';
+import { Separator } from '../ui/separator';
 
 interface ConnectProfileDialogProps {
   open: boolean;
@@ -116,12 +117,53 @@ export function ConnectProfileDialog({ open, onOpenChange }: ConnectProfileDialo
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Connect Profile</DialogTitle>
+          <DialogTitle>Connect a profile</DialogTitle>
           <DialogDescription>
-            Enter your Twitter Developer App credentials. You can find these in the
-            Twitter Developer Portal under your app's Keys and Tokens section.
+            Choose a platform. You'll be redirected to sign in and authorize posting access.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="space-y-3">
+          <Button
+            type="button"
+            className="w-full justify-center"
+            onClick={() =>
+              window.location.assign('/api/oauth/start/linkedin?returnTo=/profiles')
+            }
+          >
+            <Network className="h-4 w-4 mr-2" aria-hidden="true" />
+            Connect LinkedIn
+          </Button>
+          <p className="text-xs text-muted-foreground flex items-start gap-1">
+            <Info className="h-3 w-3 mt-0.5 shrink-0" aria-hidden="true" />
+            You'll pick a Personal Profile or Company Page after signing in.
+          </p>
+
+          <Button
+            type="button"
+            className="w-full justify-center"
+            onClick={() =>
+              window.location.assign('/api/oauth/start/facebook?returnTo=/profiles')
+            }
+          >
+            <Share2 className="h-4 w-4 mr-2" aria-hidden="true" />
+            Connect Facebook Page
+          </Button>
+          <p className="text-xs text-muted-foreground flex items-start gap-1">
+            <Info className="h-3 w-3 mt-0.5 shrink-0" aria-hidden="true" />
+            You'll pick which Page to post to after signing in.
+          </p>
+        </div>
+
+        <Separator />
+
+        <div>
+          <p className="text-sm font-semibold">Connect Twitter/X</p>
+          <p className="text-xs text-muted-foreground mb-2 flex items-start gap-1">
+            <Info className="h-3 w-3 mt-0.5 shrink-0" aria-hidden="true" />
+            You'll paste your Developer App credentials on the next step.
+          </p>
+        </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -171,11 +213,11 @@ export function ConnectProfileDialog({ open, onOpenChange }: ConnectProfileDialo
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-                Cancel
+                Maybe later
               </Button>
               <Button type="submit" disabled={createProfile.isPending}>
                 {createProfile.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Connect
+                Connect Twitter/X
               </Button>
             </DialogFooter>
           </form>

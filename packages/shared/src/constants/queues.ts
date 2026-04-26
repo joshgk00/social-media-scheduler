@@ -7,6 +7,7 @@ export const QUEUE_NAMES = {
   autoDestruct: 'auto-destruct',
   transcode: 'transcode',
   mediaCleanup: 'media-cleanup',
+  tokenRefresh: 'token-refresh',
 } as const;
 
 export const JOB_NAMES = {
@@ -22,6 +23,12 @@ export const JOB_NAMES = {
   transcodeVideo: 'transcode-video',
   mediaCleanup: 'media-cleanup',
   mediaCleanupScheduler: 'weekly-media-cleanup',
+  scanTokenHealth: 'scan-token-health',
+  refreshOrPingToken: 'refresh-or-ping-token',
+  tokenRefreshFailed: 'token-refresh-failed',
+  tokenExpiringSoon: 'token-expiring-soon',
+  tokenRevoked: 'token-revoked',
+  tokenReauthRequired: 'token-reauth-required',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
@@ -44,4 +51,16 @@ export function buildPublishJobId(postId: string, postVersion: number): string {
 
 export function buildAutoDestructJobId(postId: string, platformPostId: string): string {
   return `auto-destruct-${postId}-${platformPostId}`;
+}
+
+/**
+ * Build a stable BullMQ jobId for the token-refresh queue.
+ *
+ * The scanner enqueues one `refreshOrPingToken` job per eligible profile per UTC
+ * day. Using `refresh-${profileId}-${yyyymmdd}` means a scanner re-run inside
+ * the same UTC day is a no-op (BullMQ silently ignores re-enqueues of an
+ * existing jobId) — see RESEARCH Open Question 3.
+ */
+export function buildTokenRefreshJobId(profileId: string, yyyymmdd: string): string {
+  return `refresh-${profileId}-${yyyymmdd}`;
 }

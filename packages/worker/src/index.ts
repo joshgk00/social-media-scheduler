@@ -27,6 +27,8 @@ import { createMediaCleanupWorker, startMediaCleanupScheduler } from './media-cl
 import { startScanner } from './scanner.js';
 import { startQueueScanner } from './queue-scanner.js';
 import { createAutoDestructWorker } from './auto-destruct-worker.js';
+import { startTokenRefreshScanner } from './token-refresh-scanner.js';
+import { createTokenRefreshWorker } from './token-refresh-worker.js';
 
 const logger = createLogger('worker');
 
@@ -81,8 +83,15 @@ async function main() {
   const { cleanupQueue } = await startMediaCleanupScheduler(redis);
   const mediaCleanupWorker = createMediaCleanupWorker({ redis, db, storage });
 
+  const { tokenRefreshQueue } = await startTokenRefreshScanner({ redis });
+  const tokenRefreshWorker = createTokenRefreshWorker({
+    redis,
+    db,
+    notificationQueue,
+  });
+
   logger.info(
-    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker + transcode worker + media cleanup worker active',
+    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker + transcode worker + media cleanup worker + token-refresh scanner/worker active',
   );
 
   const closeWithTimeout = async (
@@ -120,6 +129,7 @@ async function main() {
     // Close order: workers first (stop accepting jobs, drain in-flight),
     // then queues (stop new enqueues), then DB, then Redis. Each in its
     // own try/catch so one failure does not skip the rest.
+    await closeWithTimeout('tokenRefreshWorker', () => tokenRefreshWorker.close());
     await closeWithTimeout('mediaCleanupWorker', () => mediaCleanupWorker.close());
     await closeWithTimeout('transcodeWorker', () => transcodeWorker.close());
     await closeWithTimeout('autoDestructWorker', () => autoDestructWorker.close());
@@ -131,6 +141,7 @@ async function main() {
     await closeWithTimeout('publishQueue', () => publishQueue.close());
     await closeWithTimeout('scannerQueue', () => scannerQueue.close());
     await closeWithTimeout('cleanupQueue', () => cleanupQueue.close());
+    await closeWithTimeout('tokenRefreshQueue', () => tokenRefreshQueue.close());
     await closeWithTimeout('notificationQueue', () => notificationQueue.close());
     await closeWithTimeout('pgClient', () => pgClient.end({ timeout: 5 }));
 

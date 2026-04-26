@@ -25,8 +25,14 @@
 // UnrecoverableError replaces the error object.
 
 import { sql, eq, and, isNull, inArray } from 'drizzle-orm';
+import type { Queue } from 'bullmq';
 import { posts, postAttempts, socialProfiles, postMedia } from '@sms/db';
-import { classifyTwitterError, type ClassifiedError } from '@sms/shared';
+import {
+  classifyTwitterError,
+  JOB_NAMES,
+  type ClassifiedError,
+  type TokenNotificationEvent,
+} from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { WorkerDb } from './db.js';
 
@@ -38,7 +44,8 @@ export type LifecycleAbortReason =
   | 'not_scheduled'
   | 'budget_exhausted'
   | 'thread_unsupported'
-  | 'media_pending';
+  | 'media_pending'
+  | 'token_unhealthy';
 
 export class PostLifecycleAbort extends Error {
   constructor(public readonly reason: LifecycleAbortReason) {
@@ -68,6 +75,10 @@ export interface PublishContext {
     isThread: boolean,
   ) => Promise<{ platformPostId: string }>;
   checkBudget: (profileId: string) => Promise<{ wouldExceed: boolean }>;
+  // Phase 07-04 (TOKEN-04): the failure path emits `token_revoked`
+  // notifications AFTER the permanent_fail transaction commits so an orphan
+  // notification can never escape a rolled-back state change.
+  notificationQueue?: Queue;
 }
 
 export interface PublishResult {
@@ -200,6 +211,30 @@ export async function publishPost(
         throw new PostLifecycleAbort('not_scheduled');
       }
 
+      // TOKEN-05 (D-18/D-19) token-health pre-flight. Mirrors the budget
+      // pre-flight pattern above — abort BEFORE transitioning to `publishing`
+      // so the post stays in `scheduled` and the scanner re-enqueues once
+      // the user Reconnects. A cancelled attempt row records the reason
+      // for the SCHED-04 history modal; no notification is emitted here
+      // (RESEARCH Pitfall 6 — notifications fire at the state-transition
+      // site, not for every blocked publish attempt against the dead token).
+      if (profile.tokenStatus !== 'active') {
+        await tx.insert(postAttempts).values({
+          postId: ctx.postId,
+          attemptNum: ctx.currentAttemptNum,
+          startedAt: attemptStart,
+          finishedAt: new Date(),
+          outcome: 'cancelled',
+          errorCode: 'token_unhealthy',
+          errorMessage: `Profile token status: ${profile.tokenStatus}`,
+        });
+        lifecycleLogger.warn(
+          { profileId: profile.id, tokenStatus: profile.tokenStatus },
+          'Publish aborted — profile token status is not active',
+        );
+        throw new PostLifecycleAbort('token_unhealthy');
+      }
+
       // Transition scheduled → publishing, guarded by the optimistic
       // version check so a concurrent edit still loses the race cleanly.
       const [updatedRow] = await tx
@@ -241,9 +276,14 @@ export async function publishPost(
     const classification = classifyTwitterError(twitterErr);
     await recordFailureAttempt(db, {
       postId: ctx.postId,
+      profileId: lockedProfile.id,
+      userId: lockedProfile.userId,
+      platform: lockedProfile.platform,
       attemptNum: ctx.currentAttemptNum,
       attemptStart,
       classification,
+      correlationId: ctx.correlationId,
+      notificationQueue: ctx.notificationQueue,
     }).catch((writeErr) => {
       // Never let a failure-attempt write swallow the original error.
       lifecycleLogger.error(
@@ -283,9 +323,14 @@ export async function publishPost(
 
 interface RecordFailureArgs {
   postId: string;
+  profileId: string;
+  userId: string;
+  platform: string;
   attemptNum: number;
   attemptStart: Date;
   classification: ClassifiedError;
+  correlationId: string;
+  notificationQueue?: Queue;
 }
 
 async function recordFailureAttempt(
@@ -294,6 +339,11 @@ async function recordFailureAttempt(
 ): Promise<void> {
   const outcome: 'transient_fail' | 'permanent_fail' =
     args.classification.kind === 'permanent' ? 'permanent_fail' : 'transient_fail';
+
+  // Phase 07-04 (TOKEN-04): accumulate notifications while the transaction
+  // runs; enqueue AFTER the commit so a rolled-back state change can never
+  // produce an orphan notification.
+  const notificationsToEmit: TokenNotificationEvent[] = [];
 
   await db.transaction(async (tx) => {
     await tx.insert(postAttempts).values({
@@ -319,6 +369,38 @@ async function recordFailureAttempt(
           updatedAt: new Date(),
         })
         .where(eq(posts.id, args.postId));
+
+      // TOKEN-04 side effect. Twitter 401 flips tokenStatus to
+      // `needs_reauth`; the conditional WHERE + RETURNING guards against
+      // dedupe. Multiple concurrent 401s against the same profile UPDATE
+      // zero rows (rowsAffected === 0) → no notification emitted.
+      if (
+        args.classification.errorCode === 'auth_revoked' &&
+        isKnownPlatform(args.platform)
+      ) {
+        const profileUpdate = await tx
+          .update(socialProfiles)
+          .set({ tokenStatus: 'needs_reauth', updatedAt: new Date() })
+          .where(
+            and(
+              eq(socialProfiles.id, args.profileId),
+              sql`${socialProfiles.tokenStatus} != 'needs_reauth'`,
+            ),
+          )
+          .returning({ id: socialProfiles.id });
+
+        if (profileUpdate.length === 1) {
+          notificationsToEmit.push({
+            eventType: 'token_revoked',
+            profileId: args.profileId,
+            userId: args.userId,
+            platform: args.platform,
+            reason: `${args.platform} returned ${args.classification.httpStatus ?? 401} during publish`,
+            correlationId: args.correlationId,
+            occurredAt: new Date().toISOString(),
+          });
+        }
+      }
     } else {
       // Transient: revert publishing → scheduled so the retry picks it up.
       await tx
@@ -327,4 +409,34 @@ async function recordFailureAttempt(
         .where(eq(posts.id, args.postId));
     }
   });
+
+  // Post-commit notification emit (RESEARCH Pitfall 6 — notifications must
+  // never fire inside the transaction that gates the state transition).
+  if (notificationsToEmit.length > 0 && args.notificationQueue) {
+    const queue = args.notificationQueue;
+    for (const event of notificationsToEmit) {
+      try {
+        await queue.add(JOB_NAMES.tokenRevoked, event);
+      } catch (enqueueErr) {
+        logger.error(
+          {
+            err: enqueueErr,
+            profileId: event.profileId,
+            correlationId: event.correlationId,
+          },
+          'Failed to enqueue token_revoked notification after 401 transition',
+        );
+      }
+    }
+  }
+}
+
+// Narrow the platform string loaded from the social_profiles row into the
+// union that the tokenNotificationEventSchema accepts. Anything else skips
+// the notification — LinkedIn/Facebook 401 handling lives in Plan 03 and
+// will add those branches explicitly.
+function isKnownPlatform(
+  platform: string,
+): platform is TokenNotificationEvent['platform'] {
+  return platform === 'twitter' || platform === 'linkedin' || platform === 'facebook';
 }
