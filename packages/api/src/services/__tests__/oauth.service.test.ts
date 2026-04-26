@@ -132,7 +132,7 @@ describe('oauth.service', () => {
   });
 
   describe('createPendingSelection', () => {
-    it('stores payload with 900s TTL and returns a tempToken distinct from the nonce', async () => {
+    it('stores payload with 600s TTL and returns a tempToken distinct from the nonce', async () => {
       const token = await createPendingSelection(redis as unknown as import('ioredis').Redis, basePendingPayload);
       expect(typeof token).toBe('string');
       expect(token.length).toBeGreaterThanOrEqual(43);
@@ -140,7 +140,9 @@ describe('oauth.service', () => {
       const [key, _value, mode, ttl] = redis.set.mock.calls[0];
       expect(key).toBe(`oauth:pending:${token}`);
       expect(mode).toBe('EX');
-      expect(ttl).toBe(900);
+      // PENDING_TTL_SECONDS = 10 * 60 — aligned with STATE_TTL so the pending
+      // selection cannot outlive the state nonce that produced it.
+      expect(ttl).toBe(600);
     });
   });
 

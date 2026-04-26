@@ -6,7 +6,12 @@ import { createLogger } from '@sms/shared/logger';
 const logger = createLogger('oauth-service');
 
 const STATE_TTL_SECONDS = 10 * 60;
-const PENDING_TTL_SECONDS = 15 * 60;
+// Pending-selection TTL matches the state TTL (10 minutes). The picker is
+// presented immediately after token exchange; if the user walks away long
+// enough for the state nonce to expire, the pending selection is also stale.
+// Keeping these aligned avoids mixed-window confusion in /pending-account
+// expiry messages and the operator notes referenced in the PR description.
+const PENDING_TTL_SECONDS = 10 * 60;
 const STATE_KEY_PREFIX = 'oauth:state:';
 const PENDING_KEY_PREFIX = 'oauth:pending:';
 
@@ -77,7 +82,7 @@ export interface PendingSelectionPayload {
   displayName: string;
   handle: string;
   // Plaintext — in-memory (or Redis) only. Never persisted to the DB as plaintext.
-  // Lifetime is bounded by PENDING_TTL_SECONDS (15 min).
+  // Lifetime is bounded by PENDING_TTL_SECONDS (10 min).
   userToken: string;
   // LinkedIn only. Facebook does not issue a refresh token (long-lived page tokens
   // instead — see facebook.service.ts).
