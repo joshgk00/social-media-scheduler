@@ -20,12 +20,26 @@ import {
   type Queue,
 } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { QUEUE_NAMES, JOB_NAMES, classifyTwitterError } from '@sms/shared';
+import { eq } from 'drizzle-orm';
+import { socialProfiles } from '@sms/db';
+import {
+  QUEUE_NAMES,
+  JOB_NAMES,
+  classifyTwitterError,
+  classifyLinkedInError,
+  classifyFacebookError,
+} from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { WorkerDb } from './db.js';
 import { publishPost, PostLifecycleAbort } from './post-lifecycle.service.js';
 import { callTwitter } from './twitter-publish.service.js';
-import { checkBudgetForWorker } from './rate-limit.js';
+import { callLinkedIn } from './linkedin-publish.service.js';
+import { callFacebook } from './facebook-publish.service.js';
+import {
+  checkBudgetForWorker,
+  checkLinkedInBudgetForWorker,
+  checkFacebookBudgetForWorker,
+} from './rate-limit.js';
 import { buildBackoffStrategy } from './backoff.js';
 
 export interface PublishJobPayload {
@@ -51,7 +65,13 @@ export interface PublishHandlerDeps {
   notificationQueue: Queue;
   publishPostImpl?: typeof publishPost;
   callTwitterImpl?: typeof callTwitter;
+  // Phase 8 — platform dispatcher accepts per-platform publish impls so tests
+  // can substitute mocks without spinning up real LinkedIn / Facebook calls.
+  callLinkedInImpl?: typeof callLinkedIn;
+  callFacebookImpl?: typeof callFacebook;
   checkBudgetImpl?: typeof checkBudgetForWorker;
+  checkLinkedInBudgetImpl?: typeof checkLinkedInBudgetForWorker;
+  checkFacebookBudgetImpl?: typeof checkFacebookBudgetForWorker;
 }
 
 const PUBLISH_WORKER_CONFIG = {
@@ -72,7 +92,13 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
   const baseLogger = createLogger('publish-worker');
   const runPublish = deps.publishPostImpl ?? publishPost;
   const runCallTwitter = deps.callTwitterImpl ?? callTwitter;
+  const runCallLinkedIn = deps.callLinkedInImpl ?? callLinkedIn;
+  const runCallFacebook = deps.callFacebookImpl ?? callFacebook;
   const runCheckBudget = deps.checkBudgetImpl ?? checkBudgetForWorker;
+  const runCheckLinkedInBudget =
+    deps.checkLinkedInBudgetImpl ?? checkLinkedInBudgetForWorker;
+  const runCheckFacebookBudget =
+    deps.checkFacebookBudgetImpl ?? checkFacebookBudgetForWorker;
 
   return async function handle(
     job: Job<PublishJobPayload>,
@@ -84,25 +110,102 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
       attempt: job.attemptsMade + 1,
     });
 
+    // Track the resolved platform for this run so the catch-block classifier
+    // dispatch knows which API's error semantics to apply. Captured by the
+    // budget callback (which sees the platform first via the joined profile).
+    type SupportedPlatform = 'twitter' | 'linkedin' | 'facebook';
+    let resolvedPlatform: SupportedPlatform = 'twitter';
+
     try {
       const result = await runPublish(deps.db, {
         postId: job.data.postId,
         expectedVersion: job.data.postVersion,
         correlationId: job.data.correlationId,
         currentAttemptNum: job.attemptsMade + 1,
-        callTwitter: (profile, postText, isThread) =>
-          runCallTwitter({
+        callTwitter: async (profile, postText, isThread, extras) => {
+          // Plan 02 added typed posts.platform / posts.visibility / posts.linkUrl
+          // columns. The lifecycle passes them through `extras` so we dispatch
+          // here without a second SELECT. Direct field access — no
+          // `as Record<string, unknown>` casts (B-01 cascade complete).
+          const platform = (extras?.platform ?? profile.platform) as
+            | 'twitter'
+            | 'linkedin'
+            | 'facebook';
+          if (platform === 'linkedin') {
+            const visibility = (extras?.visibility as
+              | 'PUBLIC'
+              | 'CONNECTIONS'
+              | null
+              | undefined) ?? 'PUBLIC';
+            return runCallLinkedIn({
+              profile,
+              postText,
+              visibility,
+              correlationId: job.data.correlationId,
+            });
+          }
+          if (platform === 'facebook') {
+            return runCallFacebook({
+              profile,
+              postText,
+              linkUrl: extras?.linkUrl ?? null,
+              correlationId: job.data.correlationId,
+            });
+          }
+          // Default Twitter path — preserves existing wiring exactly.
+          return runCallTwitter({
             profile,
             postText,
             isThread,
             correlationId: job.data.correlationId,
-          }),
+          });
+        },
         checkBudget: async (profileId: string) => {
+          // Resolve the platform from the joined profile so the lifecycle
+          // can branch on rate_limit_exhausted vs budget_exhausted, and so
+          // the catch-block classifier knows which error semantics apply.
+          const [profileRow] = await deps.db
+            .select({ platform: socialProfiles.platform })
+            .from(socialProfiles)
+            .where(eq(socialProfiles.id, profileId));
+          const platform = (profileRow?.platform ?? 'twitter') as
+            | 'twitter'
+            | 'linkedin'
+            | 'facebook';
+          resolvedPlatform = platform;
+
+          if (platform === 'linkedin') {
+            const state = await runCheckLinkedInBudget(deps.db, {
+              profileId,
+              additionalCount: 1,
+            });
+            return {
+              wouldExceed: state.willExceed,
+              blockThresholdHit: state.blockThresholdHit,
+              platform,
+            };
+          }
+          if (platform === 'facebook') {
+            // POST-FB-02 Pitfall 2 — multi-photo counts each upload + the feed
+            // call independently. Phase 8 worker hot path doesn't yet thread
+            // mediaIds.length here; the API pre-flight + the worker's runtime
+            // re-check are layered defenses. This single-call estimate is
+            // conservative and matches Phase 7's existing behavior.
+            const state = await runCheckFacebookBudget(deps.db, {
+              profileId,
+              additionalCount: 1,
+            });
+            return {
+              wouldExceed: state.willExceed,
+              blockThresholdHit: state.blockThresholdHit,
+              platform,
+            };
+          }
           const state = await runCheckBudget(deps.db, {
             profileId,
             additionalPostCount: 1,
           });
-          return { wouldExceed: state.wouldExceed };
+          return { wouldExceed: state.wouldExceed, platform };
         },
         // TOKEN-04: enables the 401 → `token_revoked` notification emit
         // inside post-lifecycle.service.ts recordFailureAttempt.
@@ -129,12 +232,13 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
           err.reason === 'not_scheduled' ||
           err.reason === 'thread_unsupported' ||
           err.reason === 'media_pending' ||
-          err.reason === 'token_unhealthy'
+          err.reason === 'token_unhealthy' ||
+          err.reason === 'rate_limit_exhausted'
         ) {
-          // Phase 07-04 (TOKEN-05): token_unhealthy mirrors budget_exhausted —
-          // post stays in `scheduled`, no retry budget consumed. Scanner will
-          // re-enqueue once the user Reconnects and tokenStatus flips back to
-          // `active`.
+          // Phase 07-04 (TOKEN-05) / Phase 8 (LIMIT-06/LIMIT-07):
+          // rate_limit_exhausted mirrors budget_exhausted / token_unhealthy —
+          // post stays in `scheduled`, no retry budget consumed. The scanner
+          // re-enqueues once the platform window resets.
           logger.info(
             { reason: err.reason },
             'Graceful abort — scanner will re-evaluate',
@@ -143,7 +247,22 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
         }
       }
 
-      const classification = classifyTwitterError(err);
+      // Phase 8: classifier dispatch by platform — LinkedIn/Facebook errors
+      // (LinkedInPublishApiError / FacebookPublishApiError) carry the same
+      // ClassifiedError shape as Twitter via @sms/shared classifyXError.
+      // The let-binding of `resolvedPlatform` is mutated inside an async
+      // closure (the checkBudget callback above). TypeScript's control-flow
+      // analysis can't see that mutation from this catch block, so it
+      // narrows the variable back to its initial literal type. Re-widen via
+      // a string cast — runtime value reflects the closure assignment.
+      const platformAtFailure = resolvedPlatform as string;
+      const classifier =
+        platformAtFailure === 'linkedin'
+          ? classifyLinkedInError
+          : platformAtFailure === 'facebook'
+            ? classifyFacebookError
+            : classifyTwitterError;
+      const classification = classifier(err);
       if (classification.kind === 'permanent') {
         logger.warn(
           { errorCode: classification.errorCode, httpStatus: classification.httpStatus },
