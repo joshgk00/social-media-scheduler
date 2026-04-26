@@ -7,6 +7,15 @@
 // Plan 04 ships `callFacebook` in `../facebook-publish.service.js`.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Stub the shared encryption helpers so tests exercise the FETCH chain — the
+// test fixtures use placeholder Buffer payloads that would fail real GCM
+// validation. Plan 04 ships a separate integration test against real crypto.
+vi.mock('@sms/shared/encryption', () => ({
+  decrypt: vi.fn().mockReturnValue('test-page-access-token'),
+  validateEncryptionKey: vi.fn().mockReturnValue(Buffer.alloc(32)),
+}));
+
 import { callFacebook } from '../facebook-publish.service.js';
 
 const baseFacebookProfile = {
@@ -149,7 +158,9 @@ describe('callFacebook', () => {
     // No /feed call was made.
     expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(
-      fetchSpy.mock.calls.some((call) => String(call[0]).includes('/feed')),
+      fetchSpy.mock.calls.some((call: unknown[]) =>
+        String(call[0]).includes('/feed'),
+      ),
     ).toBe(false);
   });
 
