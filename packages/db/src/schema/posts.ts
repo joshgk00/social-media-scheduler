@@ -20,6 +20,11 @@ export const posts = pgTable('posts', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   // Preserve posts if a connected account is later disconnected.
   profileId: uuid('profile_id').references(() => socialProfiles.id, { onDelete: 'set null' }),
+  // Phase 8 — denormalized from the joined `social_profiles.platform` to avoid a
+  // JOIN on the worker hot-path (Pattern 1 / Pitfall A5). Application layer
+  // (post.service.ts) MUST set this from social_profiles.platform at insert
+  // time and reject updates that change it (T-DATA-01).
+  platform: varchar('platform', { length: 16 }).notNull().default('twitter'),
   text: text('text').notNull(),
   isThread: boolean('is_thread').notNull().default(false),
   status: postStatusEnum('status').notNull().default('draft'),
@@ -35,6 +40,10 @@ export const posts = pgTable('posts', {
   queuePosition: integer('queue_position'),
   destroyedAt: timestamp('destroyed_at', { withTimezone: true }),
   notes: text('notes'),
+  // Phase 8 — LinkedIn-only visibility setting (POST-LI-03). NULL for twitter/facebook posts.
+  visibility: varchar('visibility', { length: 16 }),
+  // Phase 8 — Facebook-only optional link URL (POST-FB-04). NULL for twitter/linkedin posts.
+  linkUrl: text('link_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
