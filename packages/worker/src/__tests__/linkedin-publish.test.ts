@@ -6,6 +6,15 @@
 // Plan 04 ships `callLinkedIn` in `../linkedin-publish.service.js`.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Stub the shared encryption helpers so tests exercise the FETCH chain — the
+// test fixtures use placeholder Buffer payloads that would fail real GCM
+// validation. Plan 04 ships a separate integration test against real crypto.
+vi.mock('@sms/shared/encryption', () => ({
+  decrypt: vi.fn().mockReturnValue('test-bearer-token'),
+  validateEncryptionKey: vi.fn().mockReturnValue(Buffer.alloc(32)),
+}));
+
 import { callLinkedIn } from '../linkedin-publish.service.js';
 
 const baseProfile = {
