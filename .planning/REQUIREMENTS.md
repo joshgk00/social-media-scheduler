@@ -71,20 +71,20 @@
 
 ### Post Creation — LinkedIn (POST-LI)
 
-- [ ] **POST-LI-01**: User can create a text-only LinkedIn share
-- [ ] **POST-LI-02**: User can create a LinkedIn share with one image (JPG, GIF, PNG, max 20 MB)
-- [ ] **POST-LI-03**: Share visibility selector: Anyone on LinkedIn | Connections only
-- [ ] **POST-LI-04**: Share text field shows real-time character count (max 3,000)
-- [ ] **POST-LI-05**: LinkedIn creation form shows live preview approximating LinkedIn's rendering
+- [x] **POST-LI-01**: User can create a text-only LinkedIn share
+- [x] **POST-LI-02**: User can create a LinkedIn share with one image (JPG, GIF, PNG, max 20 MB)
+- [x] **POST-LI-03**: Share visibility selector: Anyone on LinkedIn | Connections only
+- [x] **POST-LI-04**: Share text field shows real-time character count (max 3,000)
+- [x] **POST-LI-05**: LinkedIn creation form shows live preview approximating LinkedIn's rendering
 
 ### Post Creation — Facebook (POST-FB)
 
-- [ ] **POST-FB-01**: User can create a text-only Facebook post
-- [ ] **POST-FB-02**: User can create a Facebook post with up to 10 images (JPG, GIF, PNG, BMP, TIFF, max 5 MB each)
-- [ ] **POST-FB-03**: User can create a Facebook post with one video (max 100 MB)
-- [ ] **POST-FB-04**: User can attach an optional URL to a Facebook post
-- [ ] **POST-FB-05**: Post text field shows real-time character count (max 63,206)
-- [ ] **POST-FB-06**: Facebook creation form shows live preview approximating Facebook's rendering
+- [x] **POST-FB-01**: User can create a text-only Facebook post
+- [x] **POST-FB-02**: User can create a Facebook post with up to 10 images (JPG, GIF, PNG, BMP, TIFF, max 5 MB each)
+- [x] **POST-FB-03**: User can create a Facebook post with one video (max 100 MB)
+- [x] **POST-FB-04**: User can attach an optional URL to a Facebook post
+- [x] **POST-FB-05**: Post text field shows real-time character count (max 63,206)
+- [x] **POST-FB-06**: Facebook creation form shows live preview approximating Facebook's rendering
 
 ### Post Creation — Common Fields (POST-CMN)
 
@@ -152,9 +152,9 @@
 - [ ] **LIMIT-03**: When configured monthly budget is reached, scheduling engine skips Twitter posts with clear log message; does not attempt publish and receive 429
 - [ ] **LIMIT-04**: Pre-flight check on new Twitter post: estimates current-month tweet total (existing scheduled + queued + new); warns at 90% of budget, blocks at 100%
 - [ ] **LIMIT-05**: Pre-flight check on CSV bulk upload targeting Twitter: counts rows, adds to current-month total, applies same warn/block logic before processing
-- [ ] **LIMIT-06**: Facebook rate limit tracking: 200 Graph API calls/user/hour; backoff when approaching limit
-- [ ] **LIMIT-07**: LinkedIn rate limit tracking: daily API call limits tracked; backoff when approaching limit
-- [ ] **LIMIT-08**: Dashboard widget shows current usage vs. limit for each connected profile (color-coded: green <50%, yellow 50–80%, red >80%)
+- [x] **LIMIT-06**: Facebook rate limit tracking: 200 Graph API calls/user/hour; backoff when approaching limit
+- [x] **LIMIT-07**: LinkedIn rate limit tracking: daily API call limits tracked; backoff when approaching limit
+- [x] **LIMIT-08**: Dashboard widget shows current usage vs. limit for each connected profile (color-coded: green <50%, yellow 50–80%, red >80%)
 
 ### Notifications (NOTIF)
 
@@ -341,20 +341,20 @@
 | TOKEN-03 | Phase 7 | Pending |
 | TOKEN-04 | Phase 7 | Pending |
 | TOKEN-05 | Phase 7 | Pending |
-| POST-LI-01 | Phase 8 | Pending |
-| POST-LI-02 | Phase 8 | Pending |
-| POST-LI-03 | Phase 8 | Pending |
-| POST-LI-04 | Phase 8 | Pending |
-| POST-LI-05 | Phase 8 | Pending |
-| POST-FB-01 | Phase 8 | Pending |
-| POST-FB-02 | Phase 8 | Pending |
-| POST-FB-03 | Phase 8 | Pending |
-| POST-FB-04 | Phase 8 | Pending |
-| POST-FB-05 | Phase 8 | Pending |
-| POST-FB-06 | Phase 8 | Pending |
-| LIMIT-06 | Phase 8 | Pending |
-| LIMIT-07 | Phase 8 | Pending |
-| LIMIT-08 | Phase 8 | Pending |
+| POST-LI-01 | Phase 8 | Complete |
+| POST-LI-02 | Phase 8 | Complete |
+| POST-LI-03 | Phase 8 | Complete |
+| POST-LI-04 | Phase 8 | Complete |
+| POST-LI-05 | Phase 8 | Complete |
+| POST-FB-01 | Phase 8 | Complete |
+| POST-FB-02 | Phase 8 | Complete |
+| POST-FB-03 | Phase 8 | Complete |
+| POST-FB-04 | Phase 8 | Complete |
+| POST-FB-05 | Phase 8 | Complete |
+| POST-FB-06 | Phase 8 | Complete |
+| LIMIT-06 | Phase 8 | Complete |
+| LIMIT-07 | Phase 8 | Complete |
+| LIMIT-08 | Phase 8 | Complete |
 | NOTIF-01 | Phase 9 | Pending |
 | NOTIF-02 | Phase 9 | Pending |
 | NOTIF-03 | Phase 9 | Pending |
