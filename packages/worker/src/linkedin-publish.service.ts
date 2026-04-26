@@ -114,7 +114,9 @@ async function putImageBinary(args: {
 }): Promise<void> {
   const res = await fetch(args.uploadUrl, {
     method: 'PUT',
-    body: args.imageBytes,
+    // Wrap Buffer in Uint8Array — undici's BodyInit accepts ArrayBufferView
+    // but not raw Node Buffer in current TS lib.dom typings.
+    body: new Uint8Array(args.imageBytes),
   });
   if (!res.ok) {
     // T-WORKER-01: throw before any /posts call so we don't leave an orphaned

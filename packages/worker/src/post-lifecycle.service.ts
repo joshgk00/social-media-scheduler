@@ -85,6 +85,14 @@ export interface PublishContext {
     profile: typeof socialProfiles.$inferSelect,
     postText: string,
     isThread: boolean,
+    // Phase 8: typed columns flowed through so the publish-worker's platform
+    // dispatcher can branch to LinkedIn / Facebook without a second SELECT.
+    // Backward-compatible — Twitter callbacks ignore these.
+    extras?: {
+      platform: string | null;
+      visibility: string | null;
+      linkUrl: string | null;
+    },
   ) => Promise<{ platformPostId: string }>;
   // Phase 8 (D-05, D-07): callers may now annotate the result with the
   // platform whose window was checked. When `platform` is `linkedin` or
@@ -119,6 +127,13 @@ interface LockedPostRow extends Record<string, unknown> {
   post_version: number;
   platform_post_id: string | null;
   profile_id: string | null;
+  // Phase 8: typed columns added by Plan 02 — read directly from the locked
+  // row so the platform dispatcher (publish-worker) doesn't need a second
+  // round-trip. Falls back to the joined profile.platform when null (legacy
+  // rows pre-dating the denormalization migration).
+  platform: string | null;
+  visibility: string | null;
+  link_url: string | null;
 }
 
 export async function publishPost(
@@ -145,7 +160,10 @@ export async function publishPost(
                status,
                post_version,
                platform_post_id,
-               profile_id
+               profile_id,
+               platform,
+               visibility,
+               link_url
           FROM posts
          WHERE id = ${ctx.postId}
            FOR UPDATE
@@ -316,6 +334,11 @@ export async function publishPost(
       lockedProfile,
       lockedPost.text,
       lockedPost.is_thread,
+      {
+        platform: lockedPost.platform,
+        visibility: lockedPost.visibility,
+        linkUrl: lockedPost.link_url,
+      },
     );
     platformPostId = callResult.platformPostId;
   } catch (twitterErr) {

@@ -1,4 +1,4 @@
-// Twitter publish error classifier. Lives in @sms/shared so that both
+// Multi-platform publish error classifier. Lives in @sms/shared so that both
 // @sms/api (pre-flight tests, manual retry flow) and @sms/worker (retry
 // decisions inside the BullMQ job handler) import the SAME classification
 // logic. Per revision Blocker 4 — eliminates any worker→api dependency.
@@ -122,4 +122,121 @@ export function classifyTwitterError(err: unknown): ClassifiedError {
   // leak the raw stack trace; only Error.message.
   const message = err instanceof Error ? err.message : 'Unknown error';
   return { kind: 'transient', httpStatus: null, errorCode: 'unknown', message };
+}
+
+// ============================================================================
+// Phase 8 — LinkedIn / Facebook publish error classifiers
+// ============================================================================
+//
+// Both platforms surface a `status: number` on the thrown error (the worker
+// publish services attach this on LinkedInPublishApiError /
+// FacebookPublishApiError). Decisions:
+//
+//   401 → permanent / auth_revoked (token invalid; needs reconnect)
+//   403 → permanent / forbidden (scope or page-permission misconfig)
+//   429 → transient / rate_limited
+//   5xx → transient / upstream
+//   4xx (other) → permanent / client_error
+//   Network / no-status → transient (safer default — give caller one retry)
+
+function readErrorStatus(err: unknown): number | null {
+  if (err === null || typeof err !== 'object') return null;
+  const candidate = (err as { status?: unknown }).status;
+  return typeof candidate === 'number' ? candidate : null;
+}
+
+export function classifyLinkedInError(err: unknown): ClassifiedError {
+  const message = err instanceof Error ? err.message : 'Unknown error';
+  const httpStatus = readErrorStatus(err);
+
+  if (httpStatus === 401) {
+    return {
+      kind: 'permanent',
+      httpStatus: 401,
+      errorCode: 'auth_revoked',
+      message:
+        'LinkedIn credentials are no longer valid — please reconnect the profile',
+    };
+  }
+  if (httpStatus === 429) {
+    return { kind: 'transient', httpStatus, errorCode: 'rate_limited', message };
+  }
+  if (httpStatus !== null && httpStatus >= 500) {
+    return {
+      kind: 'transient',
+      httpStatus,
+      errorCode: `http_${httpStatus}`,
+      message,
+    };
+  }
+  if (httpStatus !== null && httpStatus >= 400) {
+    return {
+      kind: 'permanent',
+      httpStatus,
+      errorCode: `http_${httpStatus}`,
+      message,
+    };
+  }
+  // Network / unknown — transient default.
+  return { kind: 'transient', httpStatus, errorCode: 'unknown', message };
+}
+
+// Facebook Graph API error envelope: { error: { code, type, message } }.
+// Codes 4 / 17 / 32 / 613 are the user/app/page/permission rate-limit codes;
+// code 190 means the access token has been invalidated (needs_reauth).
+const FACEBOOK_RATE_LIMIT_CODES = new Set([4, 17, 32, 613]);
+const FACEBOOK_AUTH_REVOKED_CODE = 190;
+
+function readFacebookGraphCode(err: unknown): number | null {
+  if (err === null || typeof err !== 'object') return null;
+  const message = (err as { message?: unknown }).message;
+  if (typeof message !== 'string') return null;
+  // Match `"code":190` or `code: 190` from sanitized error bodies. Anchored
+  // word boundary on the right keeps `1900` from matching `190`.
+  const match = message.match(/code["']?\s*[:=]\s*(\d+)\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+export function classifyFacebookError(err: unknown): ClassifiedError {
+  const message = err instanceof Error ? err.message : 'Unknown error';
+  const httpStatus = readErrorStatus(err);
+  const fbCode = readFacebookGraphCode(err);
+
+  if (httpStatus === 401 || fbCode === FACEBOOK_AUTH_REVOKED_CODE) {
+    return {
+      kind: 'permanent',
+      httpStatus: httpStatus ?? 401,
+      errorCode: 'auth_revoked',
+      message:
+        'Facebook page access token is no longer valid — please reconnect the page',
+    };
+  }
+  if (fbCode !== null && FACEBOOK_RATE_LIMIT_CODES.has(fbCode)) {
+    return {
+      kind: 'transient',
+      httpStatus,
+      errorCode: `fb_code_${fbCode}`,
+      message,
+    };
+  }
+  if (httpStatus === 429) {
+    return { kind: 'transient', httpStatus, errorCode: 'rate_limited', message };
+  }
+  if (httpStatus !== null && httpStatus >= 500) {
+    return {
+      kind: 'transient',
+      httpStatus,
+      errorCode: `http_${httpStatus}`,
+      message,
+    };
+  }
+  if (httpStatus !== null && httpStatus >= 400) {
+    return {
+      kind: 'permanent',
+      httpStatus,
+      errorCode: `http_${httpStatus}`,
+      message,
+    };
+  }
+  return { kind: 'transient', httpStatus, errorCode: 'unknown', message };
 }
