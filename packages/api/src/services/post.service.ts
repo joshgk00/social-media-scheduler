@@ -13,8 +13,14 @@ function escapeLikePattern(input: string): string {
   return input.replace(/[%_\\]/g, '\\$&');
 }
 
+type Platform = 'twitter' | 'linkedin' | 'facebook';
+
 interface CreatePostInput {
   profileId: string;
+  // Phase 8: discriminator. Required for new payloads; defaults to 'twitter'
+  // when callers (older Phase 3-7 paths) omit it so the existing single-shape
+  // contract keeps working until every caller migrates to the union.
+  platform?: Platform;
   text: string;
   isThread?: boolean;
   status?: 'draft' | 'scheduled';
@@ -24,9 +30,16 @@ interface CreatePostInput {
   notes?: string | null;
   tagIds?: string[];
   mediaIds?: string[];
+  // Phase 8: LinkedIn-only — persisted into posts.visibility (POST-LI-03).
+  visibility?: 'PUBLIC' | 'CONNECTIONS' | null;
+  // Phase 8: Facebook-only — persisted into posts.link_url (POST-FB-04).
+  linkUrl?: string | null;
 }
 
 interface UpdatePostInput {
+  // Phase 8: T-DATA-01 invariant 2 — platform is immutable post-insert.
+  // updatePost rejects if this doesn't match the existing posts.platform value.
+  platform?: Platform;
   text?: string;
   isThread?: boolean;
   status?: 'draft' | 'scheduled';
@@ -36,6 +49,8 @@ interface UpdatePostInput {
   notes?: string | null;
   tagIds?: string[];
   mediaIds?: string[];
+  visibility?: 'PUBLIC' | 'CONNECTIONS' | null;
+  linkUrl?: string | null;
   postVersion: number;
 }
 
@@ -49,10 +64,15 @@ interface PostQuery {
 }
 
 // Subclass exists so structured logs show 'PostServiceError' instead of 'AppError'.
-// All behavior comes from AppError; the subclass adds no fields or methods.
+// Phase 8 adds an optional `code` discriminator (e.g. 'PLATFORM_MISMATCH',
+// 'PLATFORM_IMMUTABLE') so route handlers can map service errors to specific
+// 409 response shapes without parsing the message string.
 export class PostServiceError extends AppError {
-  constructor(message: string, statusCode: number) {
+  public readonly code?: string;
+  constructor(message: string, statusCode: number, code?: string) {
     super(message, statusCode);
+    this.name = 'PostServiceError';
+    this.code = code;
   }
 }
 
@@ -69,7 +89,10 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
   }
 
   const [ownedProfile] = await db
-    .select({ id: socialProfiles.id })
+    .select({
+      id: socialProfiles.id,
+      platform: socialProfiles.platform,
+    })
     .from(socialProfiles)
     .where(and(eq(socialProfiles.id, input.profileId), eq(socialProfiles.userId, userId)));
 
@@ -77,12 +100,28 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
     throw new PostServiceError('Profile not found', 404);
   }
 
+  // T-DATA-01 invariant 1: posts.platform is denormalized from
+  // social_profiles.platform at insert time. When the caller passes a
+  // platform on the input, defensively confirm it matches the profile —
+  // otherwise the inserted row would assert one platform while the
+  // upstream (e.g. UI form) believed another.
+  if (input.platform && input.platform !== ownedProfile.platform) {
+    throw new PostServiceError(
+      `Profile platform '${ownedProfile.platform}' does not match payload platform '${input.platform}'.`,
+      400,
+      'PLATFORM_MISMATCH',
+    );
+  }
+  const effectivePlatform = (ownedProfile.platform ?? 'twitter') as Platform;
+
   const tagIds = input.tagIds ?? [];
 
   const post = await db.transaction(async (tx) => {
     const [insertedPost] = await tx.insert(posts).values({
       userId,
       profileId: input.profileId,
+      // T-DATA-01: copy from social_profiles, never trust the payload as source.
+      platform: effectivePlatform,
       text: input.text,
       isThread: input.isThread ?? false,
       status,
@@ -90,6 +129,11 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
       hasSpinnableText: input.hasSpinnableText ?? false,
       autoDestructAfter: input.autoDestructAfter ?? null,
       notes: input.notes ?? null,
+      // Phase 8: per-platform optional fields. Schema-level validation
+      // (createPostSchema in @sms/shared) already rejects cross-platform
+      // smuggling — these are only set when the matching variant is used.
+      visibility: effectivePlatform === 'linkedin' ? input.visibility ?? 'PUBLIC' : null,
+      linkUrl: effectivePlatform === 'facebook' ? input.linkUrl ?? null : null,
     }).returning();
 
     if (tagIds.length > 0) {
@@ -137,10 +181,20 @@ export async function updatePost(
   if (input.hasSpinnableText !== undefined) updateFields.hasSpinnableText = input.hasSpinnableText;
   if (input.autoDestructAfter !== undefined) updateFields.autoDestructAfter = input.autoDestructAfter;
   if (input.notes !== undefined) updateFields.notes = input.notes;
+  // Phase 8: per-platform optional fields. Only persisted when the caller
+  // explicitly passed a value — undefined means "leave existing alone".
+  if (input.visibility !== undefined) updateFields.visibility = input.visibility;
+  if (input.linkUrl !== undefined) updateFields.linkUrl = input.linkUrl;
 
   await db.transaction(async (tx) => {
     const existingRows = await tx
-      .select({ id: posts.id, status: posts.status, postVersion: posts.postVersion, scheduledAt: posts.scheduledAt })
+      .select({
+        id: posts.id,
+        status: posts.status,
+        postVersion: posts.postVersion,
+        scheduledAt: posts.scheduledAt,
+        platform: posts.platform,
+      })
       .from(posts)
       .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
@@ -149,6 +203,18 @@ export async function updatePost(
     }
 
     const existingPost = existingRows[0];
+
+    // T-DATA-01 invariant 2: posts.platform is immutable. Reject any update
+    // payload whose platform differs from the persisted value. (When the
+    // caller omits platform — e.g. legacy code paths — we leave the existing
+    // value alone.)
+    if (input.platform && input.platform !== existingPost.platform) {
+      throw new PostServiceError(
+        `Cannot change post platform from '${existingPost.platform}' to '${input.platform}'.`,
+        409,
+        'PLATFORM_IMMUTABLE',
+      );
+    }
 
     if (!EDITABLE_STATES.includes(existingPost.status as PostStatus)) {
       throw new PostServiceError(
