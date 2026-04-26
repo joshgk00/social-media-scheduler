@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 08-05a-web-forms-and-previews-PLAN.md
-last_updated: "2026-04-26T15:12:22.217Z"
+stopped_at: Completed 08-05b-dashboard-and-rate-limit-chip-PLAN.md
+last_updated: "2026-04-26T15:23:20.768Z"
 progress:
   total_phases: 16
   completed_phases: 10
   total_plans: 46
-  completed_plans: 44
-  percent: 96
+  completed_plans: 45
+  percent: 98
 ---
 
 # Project State
@@ -75,6 +75,8 @@ for current phase.
 - [Phase 08-linkedin-facebook-post-creation]: Helper named apply-platform-switch.ts (matches Plan 01 RED test import); B-03 closure via SharedPostFields component mounted once in NewPostPage and EditPostPage above the platform branch
 - [Phase 08-linkedin-facebook-post-creation]: Toast string carries two phrasings — removed X, Y, Z prefix-form for non-visibility drops AND visibility removed postfix-form — so a single toast satisfies both regex patterns in the Plan 01 cross-platform-switch stub
 - [Phase 08-linkedin-facebook-post-creation]: Web layer keeps existing local-state media flow (mediaItems, uploadingFiles, dnd-kit reorder) instead of moving to FormProvider tree — preserves every Phase 6 media feature without sweeping refactor
+- [Phase 08-linkedin-facebook-post-creation]: useAllProfilesRateLimits uses TanStack Query select() to flatten {profiles: [...]} envelope into flat RateLimitState[] — matches Plan 01 RED test contract and real API in one hook
+- [Phase 08-linkedin-facebook-post-creation]: apiClient.getRateLimit re-routed to platform-aware /api/rate-limit/:profileId endpoint — keeps existing test mocks working while delivering discriminated RateLimitState shape
 
 ### Pending Todos
 
@@ -87,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-26T15:12:03.263Z
-Stopped at: Completed 08-05a-web-forms-and-previews-PLAN.md
+Last session: 2026-04-26T15:23:20.763Z
+Stopped at: Completed 08-05b-dashboard-and-rate-limit-chip-PLAN.md
 Resume file: None
