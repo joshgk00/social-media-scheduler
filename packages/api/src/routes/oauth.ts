@@ -151,9 +151,17 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
   // rides along. Inside we verify session.userId === statePayload.userId.
   // ------------------------------------------------------------------
   router.get('/api/oauth/callback/:platform', async (req, res) => {
-    const platform = req.params.platform as Platform;
     // Default redirect target when we have no state payload yet.
     let returnTo = '/profiles';
+
+    // Validate the route param against the same enum as the start handler so
+    // an unknown :platform never reaches the provider-specific branches below.
+    const platformParse = oauthStartQuerySchema.shape.platform.safeParse(req.params.platform);
+    if (!platformParse.success) {
+      errorRedirect(res, returnTo, 'invalid_state');
+      return;
+    }
+    const platform: Platform = platformParse.data;
 
     try {
       const parsed = oauthCallbackQuerySchema.safeParse(req.query);
@@ -182,6 +190,15 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
       }
 
       returnTo = statePayload.returnTo;
+
+      // The callback route must match the platform originally bound into the
+      // OAuth state; otherwise a valid nonce could be consumed on the wrong
+      // provider callback route, producing a pending selection/profile for the
+      // wrong provider.
+      if (platform !== statePayload.platform) {
+        errorRedirect(res, returnTo, 'invalid_state');
+        return;
+      }
 
       // Session binding check — the nonce was allocated to this user; if the
       // browser's session cookie disagrees, treat it as a stale/replayed flow.

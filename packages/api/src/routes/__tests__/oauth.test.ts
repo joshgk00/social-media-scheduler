@@ -185,6 +185,38 @@ describe('oauth router', () => {
       expect(res.headers.location).toBe('/profiles?oauth_error=invalid_state');
     });
 
+    it('redirects with oauth_error=invalid_state when route :platform does not match the state payload platform', async () => {
+      // Seed a LinkedIn-bound state nonce, then replay it on the Facebook
+      // callback route. Without the equality check this would consume the
+      // nonce and produce a Facebook pending selection from a LinkedIn flow.
+      const statePayload = {
+        userId: USER_ID,
+        platform: 'linkedin' as const,
+        scope: 'openid profile email w_member_social',
+        returnTo: '/profiles',
+        reconnectProfileId: null,
+      };
+      await redis.set('oauth:state:cross-nonce', JSON.stringify(statePayload), 'EX', 600);
+
+      const app = createTestApp({ redis });
+      const res = await request(app).get(
+        '/api/oauth/callback/facebook?state=cross-nonce&code=CODE',
+      );
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe('/profiles?oauth_error=invalid_state');
+      expect(hoisted.fbExchange).not.toHaveBeenCalled();
+      expect(hoisted.linkedinExchange).not.toHaveBeenCalled();
+    });
+
+    it('redirects with oauth_error=invalid_state when :platform is not a known provider', async () => {
+      const app = createTestApp({ redis });
+      const res = await request(app).get(
+        '/api/oauth/callback/myspace?state=any&code=CODE',
+      );
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe('/profiles?oauth_error=invalid_state');
+    });
+
     it('on valid state completes flow and redirects to returnTo?connect=<tempToken>', async () => {
       // Seed a state payload
       const statePayload = {
