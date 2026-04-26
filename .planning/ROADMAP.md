@@ -256,13 +256,14 @@ Plans:
   2. User can create a Facebook post (text, up to 10 images, video, optional URL) with real-time character count (63,206 max); live preview approximates Facebook rendering
   3. LinkedIn and Facebook posts publish through the existing worker pipeline with the same retry, state machine, and idempotency guarantees as Twitter
   4. Dashboard widget shows current API usage vs. limit for each connected profile (color-coded green/yellow/red) across all platforms
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 08-01-PLAN.md — Failing test stubs and MSW handlers (Wave 0)
+- [ ] 08-02-PLAN.md — Drizzle schema + migration 0006 + shared platform-text-limits + discriminated-union schemas + [BLOCKING] schema push
+- [ ] 08-03-PLAN.md — API routes + per-platform rate-limit service (atomic CAS) + post.service platform invariant
+- [ ] 08-04-PLAN.md — Worker LinkedIn/Facebook publish services + lifecycle rate_limit_exhausted + dispatcher + error classifier
+- [ ] 08-05-PLAN.md — Web platform-aware NewPostPage/EditPostPage + LinkedIn/Facebook previews + Dashboard + RateLimitChip + cross-platform-switch helper
+- [ ] 08-06-PLAN.md — Integration verification + manual LinkedIn/Facebook sandbox sign-off + nyquist flip
 **UI hint**: yes
 
 ### Phase 9: Notifications & Settings
@@ -341,7 +342,7 @@ Note: Phases 6.1-6.5 are gap closure phases inserted after v1.0 milestone audit.
 | 6.4 Wire Media-Post Association | 0/TBD | Gap closure | - |
 | 6.5 Nginx Proxy Completion | 0/1 | Planning complete | - |
 | 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
-| 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
+| 8. LinkedIn & Facebook Post Creation | 0/6 | Planning complete | - |
 | 9. Notifications & Settings | 0/TBD | Not started | - |
 | 10. Bulk Operations | 0/TBD | Not started | - |
 | 11. Snippets, Search, Calendar & Polish | 0/TBD | Not started | - |
