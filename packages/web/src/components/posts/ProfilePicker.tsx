@@ -1,4 +1,3 @@
-import { Twitter, Linkedin, Facebook } from 'lucide-react';
 import { Label } from '../ui/label';
 import {
   Select,
@@ -15,10 +14,20 @@ interface ProfilePickerProps {
   disabled?: boolean;
 }
 
+// lucide-react 1.7 (the version pinned in this workspace) does not yet ship
+// brand icons. Render a single-letter badge per platform until the icon set
+// catches up; the picker still satisfies UI-SPEC because the platform name
+// renders next to the badge for every option.
 function platformIcon(platform: Platform) {
-  if (platform === 'twitter') return <Twitter className="h-4 w-4" aria-hidden="true" />;
-  if (platform === 'linkedin') return <Linkedin className="h-4 w-4" aria-hidden="true" />;
-  return <Facebook className="h-4 w-4" aria-hidden="true" />;
+  const letter = platform === 'twitter' ? 'T' : platform === 'linkedin' ? 'in' : 'f';
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex h-4 w-4 items-center justify-center rounded-sm bg-secondary text-[10px] font-bold text-secondary-foreground"
+    >
+      {letter}
+    </span>
+  );
 }
 
 function platformLabel(platform: Platform): string {

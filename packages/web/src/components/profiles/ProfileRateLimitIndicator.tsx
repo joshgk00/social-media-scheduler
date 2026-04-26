@@ -35,6 +35,13 @@ export function ProfileRateLimitIndicator({ profileId }: ProfileRateLimitIndicat
     return <p className="text-xs text-muted-foreground">Usage unavailable</p>;
   }
 
+  // Plan 05b ships the per-platform indicator copy. For now this component
+  // only renders the Twitter variant (the only platform Phase 7 had connected
+  // before Plan 05b lands); LI/FB profiles render a placeholder.
+  if (data.platform !== 'twitter') {
+    return <p className="text-xs text-muted-foreground">Usage chip in Plan 05b.</p>;
+  }
+
   const percent = data.budget > 0
     ? Math.round((data.currentCount / data.budget) * 100)
     : 0;
