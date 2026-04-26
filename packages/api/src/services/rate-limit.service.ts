@@ -5,7 +5,10 @@ import { posts, socialProfiles } from '@sms/db';
 import {
   checkTwitterBudget,
   checkBulkBudget,
+  checkLinkedInBudget,
+  checkFacebookBudget,
   type BudgetCheckResult,
+  type PlatformBudgetCheckResult,
 } from '@sms/shared';
 
 // Thin DB-backed wrapper around the pure calculators in
@@ -112,4 +115,343 @@ export async function checkBulkBudgetWithDb(
     additionalCount: args.additionalCount,
   });
   return { ...result, monthStartUtc: snapshot.monthStartUtc };
+}
+
+// ============================================================================
+// Phase 8 — per-platform rate-limit loaders + atomic CAS increment
+// ============================================================================
+//
+// LinkedIn (LIMIT-07): rolling daily window keyed off UTC midnight.
+// Facebook (LIMIT-06): rolling 1-hour window (now - INTERVAL '1 hour').
+//
+// Both use a single `db.update().set({ ... sql\`CASE WHEN ... END\` })` so two
+// concurrent pre-flights cannot both pass without one observing the other's
+// counter bump (T-API-02 / T-LIMITS-01). The CASE-WHEN handles window reset
+// AND increment atomically — the row lock held during the UPDATE serializes
+// concurrent callers without an explicit transaction or advisory lock.
+
+export interface LinkedInRateLimitExceededBody {
+  code: 'linkedin_rate_limit_exceeded';
+  limit: number;
+  currentCount: number;
+  windowResetAt: string; // ISO
+}
+
+export interface FacebookRateLimitExceededBody {
+  code: 'facebook_rate_limit_exceeded';
+  limit: number;
+  currentCount: number;
+  windowResetAt: string;
+}
+
+export interface TwitterBudgetExceededBody {
+  code: 'twitter_budget_exceeded';
+  budget: number;
+  currentCount: number;
+}
+
+export type RateLimitExceededBody =
+  | TwitterBudgetExceededBody
+  | LinkedInRateLimitExceededBody
+  | FacebookRateLimitExceededBody;
+
+const DEFAULT_WARN_THRESHOLD_PERCENT = 80;
+
+function utcDayStart(now: Date): Date {
+  const dayStart = new Date(now);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  return dayStart;
+}
+
+function utcNextDayStart(now: Date): Date {
+  const next = utcDayStart(now);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next;
+}
+
+function rollingHourThreshold(now: Date): Date {
+  return new Date(now.getTime() - 60 * 60 * 1000);
+}
+
+function nextHourTop(now: Date): Date {
+  const top = new Date(now);
+  top.setUTCMinutes(0, 0, 0);
+  top.setUTCHours(top.getUTCHours() + 1);
+  return top;
+}
+
+export interface PlatformRateLimitSnapshot {
+  currentCount: number;
+  limit: number;
+  warnThresholdPercent: number;
+  windowStartUtc: Date;
+  windowResetAt: Date;
+}
+
+/**
+ * LinkedIn daily-window loader (LIMIT-07). Returns the effective snapshot
+ * after applying the UTC-midnight reset rule (Pitfall 7): a window stamped
+ * before today's UTC midnight is treated as count=0 starting at today's
+ * midnight.
+ *
+ * No DB write — this is the read-side companion to
+ * `checkLinkedInBudgetWithDb`, used by the rate-limit GET endpoint.
+ */
+export async function loadLinkedInUsage(
+  db: Db,
+  profileId: string,
+  now: Date = new Date(),
+): Promise<PlatformRateLimitSnapshot> {
+  const rows = await db
+    .select({
+      limit: socialProfiles.linkedinDailyLimit,
+      count: socialProfiles.linkedinDailyCount,
+      windowStart: socialProfiles.linkedinWindowStartUtc,
+      warnThresholdPercent: socialProfiles.warnThresholdPercent,
+    })
+    .from(socialProfiles)
+    .where(eq(socialProfiles.id, profileId));
+
+  if (!rows || rows.length === 0) {
+    throw new Error(`Profile ${profileId} not found`);
+  }
+  const row = rows[0];
+
+  const dayStart = utcDayStart(now);
+  const windowStart = row.windowStart;
+  const isExpired = !windowStart || windowStart < dayStart;
+  return {
+    currentCount: isExpired ? 0 : row.count,
+    limit: row.limit,
+    warnThresholdPercent: row.warnThresholdPercent ?? DEFAULT_WARN_THRESHOLD_PERCENT,
+    windowStartUtc: !isExpired && windowStart ? windowStart : dayStart,
+    windowResetAt: utcNextDayStart(now),
+  };
+}
+
+/**
+ * Facebook hourly-window loader (LIMIT-06). Returns the effective snapshot
+ * after applying the rolling-hour reset rule (Pitfall 6): a window stamped
+ * more than an hour before `now` is treated as count=0 starting at `now`.
+ */
+export async function loadFacebookUsage(
+  db: Db,
+  profileId: string,
+  now: Date = new Date(),
+): Promise<PlatformRateLimitSnapshot> {
+  const rows = await db
+    .select({
+      limit: socialProfiles.facebookHourlyLimit,
+      count: socialProfiles.facebookHourlyCount,
+      windowStart: socialProfiles.facebookWindowStartUtc,
+      warnThresholdPercent: socialProfiles.warnThresholdPercent,
+    })
+    .from(socialProfiles)
+    .where(eq(socialProfiles.id, profileId));
+
+  if (!rows || rows.length === 0) {
+    throw new Error(`Profile ${profileId} not found`);
+  }
+  const row = rows[0];
+
+  const hourThreshold = rollingHourThreshold(now);
+  const windowStart = row.windowStart;
+  const isExpired = !windowStart || windowStart < hourThreshold;
+  return {
+    currentCount: isExpired ? 0 : row.count,
+    limit: row.limit,
+    warnThresholdPercent: row.warnThresholdPercent ?? DEFAULT_WARN_THRESHOLD_PERCENT,
+    windowStartUtc: !isExpired && windowStart ? windowStart : now,
+    windowResetAt: nextHourTop(now),
+  };
+}
+
+export interface PlatformBudgetCheckOutcome extends PlatformBudgetCheckResult {
+  /** Post-CAS-update current count (already reflects `additionalCount` increment). */
+  currentCount: number;
+  /** Effective snapshot after window reset rules — useful for 409 bodies. */
+  snapshot: PlatformRateLimitSnapshot;
+}
+
+/**
+ * LinkedIn pre-flight (LIMIT-07). Loads the live snapshot (applying the
+ * UTC-midnight reset rule), runs the pure budget projection, then issues a
+ * single-statement CASE-WHEN UPDATE that atomically resets the window or
+ * increments the counter.
+ *
+ * The single-statement UPDATE is the T-API-02 / T-LIMITS-01 mitigation: two
+ * concurrent UPDATEs serialize on the row lock, so even if both passed the
+ * SELECT pre-flight, the second's count after increment correctly reflects
+ * the first's bump (the worker's runtime re-check then catches the over-cap
+ * second post and aborts).
+ */
+export async function checkLinkedInBudgetWithDb(
+  db: Db,
+  args: { profileId: string; additionalCount: number; now?: Date },
+): Promise<PlatformBudgetCheckOutcome> {
+  const now = args.now ?? new Date();
+  const snapshot = await loadLinkedInUsage(db, args.profileId, now);
+
+  // Project the post-increment count for the budget decision.
+  const projected = checkLinkedInBudget(
+    {
+      currentCount: snapshot.currentCount,
+      limit: snapshot.limit,
+      warnThresholdPercent: snapshot.warnThresholdPercent,
+    },
+    args.additionalCount,
+  );
+
+  // Atomic CAS-style increment. CASE-WHEN handles both reset (expired
+  // window) and increment in a single statement. The row lock held by this
+  // UPDATE is what serializes concurrent callers (T-API-02 / T-LIMITS-01).
+  const dayStart = utcDayStart(now);
+  await db
+    .update(socialProfiles)
+    .set({
+      linkedinDailyCount: sql`CASE
+        WHEN ${socialProfiles.linkedinWindowStartUtc} IS NULL
+          OR ${socialProfiles.linkedinWindowStartUtc} < ${dayStart}
+          THEN ${args.additionalCount}
+        ELSE ${socialProfiles.linkedinDailyCount} + ${args.additionalCount}
+      END`,
+      linkedinWindowStartUtc: sql`CASE
+        WHEN ${socialProfiles.linkedinWindowStartUtc} IS NULL
+          OR ${socialProfiles.linkedinWindowStartUtc} < ${dayStart}
+          THEN ${dayStart}
+        ELSE ${socialProfiles.linkedinWindowStartUtc}
+      END`,
+      updatedAt: new Date(),
+    })
+    .where(eq(socialProfiles.id, args.profileId));
+
+  return {
+    ...projected,
+    currentCount: snapshot.currentCount + args.additionalCount,
+    snapshot,
+  };
+}
+
+/**
+ * Facebook pre-flight (LIMIT-06). Same SELECT-then-CAS-UPDATE pattern as
+ * LinkedIn; the window is rolling-hour instead of UTC-day.
+ *
+ * CRITICAL: callers must pass `mediaIds.length + 1` for multi-photo posts
+ * because each photo POST counts against the hourly cap independently of
+ * the final /feed call (Pitfall 2). For text-only or single-link posts,
+ * pass 1.
+ */
+export async function checkFacebookBudgetWithDb(
+  db: Db,
+  args: { profileId: string; additionalCount: number; now?: Date },
+): Promise<PlatformBudgetCheckOutcome> {
+  const now = args.now ?? new Date();
+  const snapshot = await loadFacebookUsage(db, args.profileId, now);
+
+  const projected = checkFacebookBudget(
+    {
+      currentCount: snapshot.currentCount,
+      limit: snapshot.limit,
+      warnThresholdPercent: snapshot.warnThresholdPercent,
+    },
+    args.additionalCount,
+  );
+
+  const hourThreshold = rollingHourThreshold(now);
+  await db
+    .update(socialProfiles)
+    .set({
+      facebookHourlyCount: sql`CASE
+        WHEN ${socialProfiles.facebookWindowStartUtc} IS NULL
+          OR ${socialProfiles.facebookWindowStartUtc} < ${hourThreshold}
+          THEN ${args.additionalCount}
+        ELSE ${socialProfiles.facebookHourlyCount} + ${args.additionalCount}
+      END`,
+      facebookWindowStartUtc: sql`CASE
+        WHEN ${socialProfiles.facebookWindowStartUtc} IS NULL
+          OR ${socialProfiles.facebookWindowStartUtc} < ${hourThreshold}
+          THEN ${now}
+        ELSE ${socialProfiles.facebookWindowStartUtc}
+      END`,
+      updatedAt: new Date(),
+    })
+    .where(eq(socialProfiles.id, args.profileId));
+
+  return {
+    ...projected,
+    currentCount: snapshot.currentCount + args.additionalCount,
+    snapshot,
+  };
+}
+
+/**
+ * Platform dispatcher used by the POST /api/posts pre-flight. Twitter
+ * delegates to the existing monthly-budget service; LinkedIn and Facebook
+ * use the new atomic CAS pre-flights above.
+ *
+ * Returns a uniform shape: `blockThresholdHit` is the discriminator the
+ * route reads to choose between 201 and 409. For Twitter, the legacy
+ * service exposes `wouldExceed` instead — we surface both fields so callers
+ * can use either name.
+ */
+export interface PlatformBudgetDispatchOutcome {
+  blockThresholdHit: boolean;
+  warnThresholdHit: boolean;
+  /** Twitter monthly budget (when platform=twitter) — unset for LI/FB. */
+  budget?: number;
+  /** Twitter current usage (when platform=twitter) — unset for LI/FB. */
+  currentUsage?: number;
+  /** Per-window snapshot (when platform=linkedin|facebook) — unset for Twitter. */
+  snapshot?: PlatformRateLimitSnapshot;
+  /** Twitter warn threshold percent — used to enqueue warn notifications. */
+  warnThresholdPercent?: number;
+}
+
+export async function checkPlatformBudgetWithDb(
+  db: Db,
+  args: {
+    profileId: string;
+    platform: 'twitter' | 'linkedin' | 'facebook';
+    additionalCount: number;
+    now?: Date;
+  },
+): Promise<PlatformBudgetDispatchOutcome> {
+  if (args.platform === 'twitter') {
+    const result = await checkTwitterBudgetWithDb(db, {
+      profileId: args.profileId,
+      additionalPostCount: args.additionalCount,
+    });
+    return {
+      blockThresholdHit: result.wouldExceed,
+      warnThresholdHit: result.warnThresholdHit,
+      budget: result.budget,
+      currentUsage: result.currentUsage,
+      warnThresholdPercent: result.warnThresholdPercent,
+    };
+  }
+  if (args.platform === 'linkedin') {
+    const result = await checkLinkedInBudgetWithDb(db, {
+      profileId: args.profileId,
+      additionalCount: args.additionalCount,
+      now: args.now,
+    });
+    return {
+      blockThresholdHit: result.willExceed || result.blockThresholdHit,
+      warnThresholdHit: result.warnThresholdHit,
+      snapshot: result.snapshot,
+      warnThresholdPercent: result.snapshot.warnThresholdPercent,
+    };
+  }
+  // facebook
+  const result = await checkFacebookBudgetWithDb(db, {
+    profileId: args.profileId,
+    additionalCount: args.additionalCount,
+    now: args.now,
+  });
+  return {
+    blockThresholdHit: result.willExceed || result.blockThresholdHit,
+    warnThresholdHit: result.warnThresholdHit,
+    snapshot: result.snapshot,
+    warnThresholdPercent: result.snapshot.warnThresholdPercent,
+  };
 }
