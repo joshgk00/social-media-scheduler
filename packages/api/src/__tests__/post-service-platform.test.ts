@@ -20,10 +20,16 @@ const USER_ID = '00000000-0000-4000-8000-00000000cccc';
 // run select/insert/update in a deterministic order.
 function buildPlatformMockDb(opts: {
   profile?: { id: string; userId: string; platform: string } | null;
-  existingPost?: { id: string; profileId: string; platform: string; postVersion: number } | null;
+  existingPost?: { id: string; profileId: string; platform: string; postVersion: number; status?: string } | null;
 }) {
   const inserted: Array<Record<string, unknown>> = [];
   const updated: Array<Record<string, unknown>> = [];
+  // The most recently inserted/updated post is returned to subsequent
+  // getPostById select calls so `createPost` / `updatePost` can complete
+  // their final SELECT-after-write.
+  let lastWrittenPost: Record<string, unknown> | null = opts.existingPost
+    ? { ...opts.existingPost, status: opts.existingPost.status ?? 'draft' }
+    : null;
 
   const selectChain = (rows: unknown[]) => {
     const chain: any = {};
@@ -41,10 +47,11 @@ function buildPlatformMockDb(opts: {
     const chain: any = {};
     chain.values = vi.fn().mockImplementation((row: Record<string, unknown>) => {
       inserted.push(row);
+      const persistedRow = { ...row, id: row.id ?? POST_ID, postVersion: 1 };
+      lastWrittenPost = persistedRow;
       const returningChain: any = {
-        then: (resolve: (val: unknown) => void) =>
-          resolve([{ ...row, id: row.id ?? POST_ID }]),
-        returning: vi.fn().mockResolvedValue([{ ...row, id: row.id ?? POST_ID }]),
+        then: (resolve: (val: unknown) => void) => resolve([persistedRow]),
+        returning: vi.fn().mockResolvedValue([persistedRow]),
       };
       return returningChain;
     });
@@ -59,32 +66,42 @@ function buildPlatformMockDb(opts: {
       return chain;
     });
     chain.where = vi.fn().mockImplementation(() => {
-      const result: any = Promise.resolve(undefined);
+      const result: any = {};
+      result.then = (resolve: (val: unknown) => void) => resolve(undefined);
       result.returning = vi.fn().mockImplementation(() => {
         updated.push(setPayload);
-        return Promise.resolve([
-          { ...(opts.existingPost ?? {}), ...setPayload, id: POST_ID },
-        ]);
+        const merged = { ...(lastWrittenPost ?? {}), ...setPayload, id: POST_ID };
+        lastWrittenPost = merged;
+        return Promise.resolve([merged]);
       });
       return result;
     });
     return chain;
   };
 
-  // Deterministic select sequencing. The post.service.ts implementation may
-  // call select in an arbitrary order — we return the same row set for
-  // profile lookups and for existing-post lookups based on call sequence.
+  // Deterministic select sequencing. The post.service.ts implementation
+  // makes SELECTs in this order:
+  //   createPost: 1) owned profile → 2..N) getPostById (post, tags, media)
+  //   updatePost: 1) existing post (inside tx) → 2..N) getPostById
   let selectCallNum = 0;
   const selectFn = vi.fn().mockImplementation(() => {
     selectCallNum += 1;
-    // First select: profile. Second: existing post (for update only).
     if (selectCallNum === 1) {
-      return selectChain(opts.profile ? [opts.profile] : []);
+      // For createPost: profile lookup. For updatePost: existing post lookup.
+      if (opts.profile && !opts.existingPost) {
+        return selectChain([opts.profile]);
+      }
+      if (opts.existingPost) {
+        return selectChain([
+          { ...opts.existingPost, status: opts.existingPost.status ?? 'draft' },
+        ]);
+      }
+      return selectChain([]);
     }
-    if (opts.existingPost) {
-      return selectChain([opts.existingPost]);
-    }
-    return selectChain([]);
+    // Subsequent selects: getPostById flow. Return the post row, empty tags,
+    // empty media. The post.service code only reads the first row's fields,
+    // so feeding lastWrittenPost satisfies all 3 select calls.
+    return selectChain(lastWrittenPost ? [lastWrittenPost] : []);
   });
 
   const db: any = {
@@ -113,10 +130,9 @@ describe('post.service — T-DATA-01 invariants (Plan 03 Task 2)', () => {
       profile: { id: PROFILE_ID, userId: USER_ID, platform: 'linkedin' },
     });
 
-    const row = await createPost(db, {
+    const row = await createPost(db, USER_ID, {
       platform: 'linkedin',
       profileId: PROFILE_ID,
-      userId: USER_ID,
       text: 'hello',
       visibility: 'PUBLIC',
       status: 'draft',
@@ -134,10 +150,9 @@ describe('post.service — T-DATA-01 invariants (Plan 03 Task 2)', () => {
     });
 
     await expect(
-      createPost(db, {
+      createPost(db, USER_ID, {
         platform: 'linkedin',
         profileId: PROFILE_ID,
-        userId: USER_ID,
         text: 'hello',
         visibility: 'PUBLIC',
         status: 'draft',
@@ -156,10 +171,9 @@ describe('post.service — T-DATA-01 invariants (Plan 03 Task 2)', () => {
       profile: { id: PROFILE_ID, userId: USER_ID, platform: 'linkedin' },
     });
 
-    await createPost(db, {
+    await createPost(db, USER_ID, {
       platform: 'linkedin',
       profileId: PROFILE_ID,
-      userId: USER_ID,
       text: 'hello',
       visibility: 'CONNECTIONS',
       status: 'draft',
@@ -177,10 +191,9 @@ describe('post.service — T-DATA-01 invariants (Plan 03 Task 2)', () => {
       profile: { id: PROFILE_ID, userId: USER_ID, platform: 'facebook' },
     });
 
-    await createPost(db, {
+    await createPost(db, USER_ID, {
       platform: 'facebook',
       profileId: PROFILE_ID,
-      userId: USER_ID,
       text: 'hello',
       linkUrl: 'https://example.com',
       status: 'draft',
@@ -200,10 +213,9 @@ describe('post.service — T-DATA-01 invariants (Plan 03 Task 2)', () => {
     });
 
     await expect(
-      updatePost(db, POST_ID, {
+      updatePost(db, USER_ID, POST_ID, {
         platform: 'twitter', // changed!
         profileId: PROFILE_ID,
-        userId: USER_ID,
         text: 'hello',
         isThread: false,
         status: 'draft',
@@ -224,10 +236,9 @@ describe('post.service — T-DATA-01 invariants (Plan 03 Task 2)', () => {
       existingPost: { id: POST_ID, profileId: PROFILE_ID, platform: 'linkedin', postVersion: 1 },
     });
 
-    const updated = await updatePost(db, POST_ID, {
+    const updated = await updatePost(db, USER_ID, POST_ID, {
       platform: 'linkedin',
       profileId: PROFILE_ID,
-      userId: USER_ID,
       text: 'updated text',
       visibility: 'PUBLIC',
       status: 'draft',
