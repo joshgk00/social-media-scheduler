@@ -17,14 +17,7 @@ const EditPostPage = lazy(() => import('./pages/posts/EditPostPage'));
 const QueuesPage = lazy(() => import('./pages/queues/QueuesPage'));
 const QueueDetailPage = lazy(() => import('./pages/queues/QueueDetailPage'));
 const QueuePostsPage = lazy(() => import('./pages/queues/QueuePostsPage'));
-
-function DashboardPlaceholder() {
-  return (
-    <main className="flex items-center justify-center min-h-[60vh]">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-    </main>
-  );
-}
+const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage'));
 
 export function App() {
   return (
@@ -39,7 +32,8 @@ export function App() {
 
             {/* Protected routes -- with sidebar layout */}
             <Route element={<ProtectedRoute><ErrorBoundary><SidebarLayout /></ErrorBoundary></ProtectedRoute>}>
-              <Route index element={<DashboardPlaceholder />} />
+              <Route index element={<DashboardPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/posts" element={<PostsPage />} />
               <Route path="/posts/new" element={<NewPostPage />} />
               <Route path="/posts/:id/edit" element={<EditPostPage />} />
