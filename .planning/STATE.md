@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 08-03-api-routes-and-rate-limit-PLAN.md
-last_updated: "2026-04-26T14:33:18.978Z"
+stopped_at: Completed 08-04-worker-publish-services-PLAN.md
+last_updated: "2026-04-26T14:52:33.622Z"
 progress:
   total_phases: 16
   completed_phases: 10
   total_plans: 46
-  completed_plans: 42
-  percent: 91
+  completed_plans: 43
+  percent: 93
 ---
 
 # Project State
@@ -69,6 +69,9 @@ for current phase.
 - [Phase 08]: SELECT-then-CASE-WHEN-UPDATE for per-platform rate-limit pre-flight: pure calculator runs on the SELECT snapshot for the budget decision; the UPDATE applies atomic increment + window reset in one statement so concurrent callers serialize on the row lock
 - [Phase 08]: updatePostSchema variants made partial via .partial().extend({platform, postVersion}) so PATCH bodies only need the discriminator + concurrency guard + the fields actually changing
 - [Phase 08]: PostServiceError now carries an optional code discriminator (PLATFORM_MISMATCH, PLATFORM_IMMUTABLE) so route handlers map service errors to specific 409 body shapes without parsing message strings
+- [Phase 08]: DI-style budget callback in lifecycle (vs direct platform-checker imports) — keeps lifecycle platform-agnostic and the publish-worker tags result with platform + blockThresholdHit so rate_limit_exhausted dispatches correctly
+- [Phase 08]: callTwitter callback signature gained optional extras { platform, visibility, linkUrl } — backward compatible, lets publish-worker dispatch by typed Plan-02 columns without a second SELECT
+- [Phase 08]: FacebookPublishApiError exposes orphanedPhotoIds (not uploadedPhotoIds) for partial multi-photo failure cleanup — matches Wave-0 test contract; success-path return still carries uploadedPhotoIds separately
 
 ### Pending Todos
 
@@ -81,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-26T14:33:18.974Z
-Stopped at: Completed 08-03-api-routes-and-rate-limit-PLAN.md
+Last session: 2026-04-26T14:52:33.618Z
+Stopped at: Completed 08-04-worker-publish-services-PLAN.md
 Resume file: None
