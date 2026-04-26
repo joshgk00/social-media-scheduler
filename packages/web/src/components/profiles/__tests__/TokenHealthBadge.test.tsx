@@ -119,6 +119,23 @@ describe('TokenHealthBadge', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
+  it('badge is keyboard-focusable so the tooltip opens on Tab focus', () => {
+    // Regression: the trigger span had no tabIndex, so keyboard users
+    // couldn't reach it and the tooltip never opened on focus.
+    render(
+      <TokenHealthBadge
+        status="active"
+        expiresAt={null}
+        checkedAt={null}
+        failureReason={null}
+        platform="twitter"
+      />,
+    );
+
+    const badge = screen.getByRole('status');
+    expect(badge.getAttribute('tabindex')).toBe('0');
+  });
+
   it('label conveys status via text, not color alone', () => {
     // The visible label text must stand on its own for screen readers.
     render(

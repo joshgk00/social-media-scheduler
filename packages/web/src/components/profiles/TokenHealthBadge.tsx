@@ -113,10 +113,18 @@ export function TokenHealthBadge({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
+          {/*
+            tabIndex={0} makes the badge reachable via Tab — without it, the
+            span was silently dropped from the tab sequence and the tooltip
+            never opened for keyboard users. role="status" + aria-description
+            preserve the existing screen-reader contract; the focus-visible
+            ring matches the standard ring used elsewhere in the UI.
+          */}
           <span
+            tabIndex={0}
             role="status"
             aria-description={tooltipText}
-            className="inline-flex items-center gap-1"
+            className="inline-flex items-center gap-1 cursor-default rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <span
               aria-hidden="true"
