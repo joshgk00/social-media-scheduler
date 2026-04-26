@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 08-02-schema-shared-and-migration-PLAN.md
-last_updated: "2026-04-26T14:10:47.559Z"
+stopped_at: Completed 08-03-api-routes-and-rate-limit-PLAN.md
+last_updated: "2026-04-26T14:33:18.978Z"
 progress:
   total_phases: 16
   completed_phases: 10
   total_plans: 46
-  completed_plans: 41
-  percent: 89
+  completed_plans: 42
+  percent: 91
 ---
 
 # Project State
@@ -66,6 +66,9 @@ for current phase.
 - [Phase 08]: Installed msw@2.13.6 as devDep on @sms/web — required by Plan 08-01 Task 3 acceptance criteria
 - [Phase 08-linkedin-facebook-post-creation]: Applied superRefine at the discriminatedUnion level (not per variant). Zod 3 rejects ZodEffects inside discriminatedUnion.
 - [Phase 08-linkedin-facebook-post-creation]: linkedin_account_type defaults to person NOT NULL — Phase 7's only LinkedIn flow connected personal profiles, organization profiles set this explicitly at insert.
+- [Phase 08]: SELECT-then-CASE-WHEN-UPDATE for per-platform rate-limit pre-flight: pure calculator runs on the SELECT snapshot for the budget decision; the UPDATE applies atomic increment + window reset in one statement so concurrent callers serialize on the row lock
+- [Phase 08]: updatePostSchema variants made partial via .partial().extend({platform, postVersion}) so PATCH bodies only need the discriminator + concurrency guard + the fields actually changing
+- [Phase 08]: PostServiceError now carries an optional code discriminator (PLATFORM_MISMATCH, PLATFORM_IMMUTABLE) so route handlers map service errors to specific 409 body shapes without parsing message strings
 
 ### Pending Todos
 
@@ -78,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-26T14:10:47.556Z
-Stopped at: Completed 08-02-schema-shared-and-migration-PLAN.md
+Last session: 2026-04-26T14:33:18.974Z
+Stopped at: Completed 08-03-api-routes-and-rate-limit-PLAN.md
 Resume file: None
