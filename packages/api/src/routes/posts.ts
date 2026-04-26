@@ -25,7 +25,12 @@ import {
   checkConflicts,
   PostServiceError,
 } from '../services/post.service.js';
-import { checkTwitterBudgetWithDb } from '../services/rate-limit.service.js';
+import {
+  checkTwitterBudgetWithDb,
+  checkPlatformBudgetWithDb,
+  type LinkedInRateLimitExceededBody,
+  type FacebookRateLimitExceededBody,
+} from '../services/rate-limit.service.js';
 import type { PublishQueueService } from '../services/publish-queue.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { validateUuidParam } from '../middleware/validation.js';
@@ -103,13 +108,15 @@ export function createPostsRouter({
 
     const userId = req.session.userId!;
 
-    // Pre-flight Twitter budget check (LIMIT-01/02/03/04). Runs only when
-    // the target profile is a Twitter profile and the caller is trying to
+    // Pre-flight rate-limit check. Runs only when the caller is trying to
     // schedule (not save as draft). Ownership is enforced by the profile
     // lookup below — a cross-user profileId returns 404 before any budget
-    // data is leaked.
-    const isScheduledTweet = parsed.data.status === 'scheduled';
-    if (isScheduledTweet) {
+    // data is leaked. Platform-specific behavior:
+    //   twitter  → monthly budget (LIMIT-01..04), 409 'twitter_budget_exceeded'
+    //   linkedin → daily window (LIMIT-07), 409 'linkedin_rate_limit_exceeded'
+    //   facebook → hourly window (LIMIT-06), 409 'facebook_rate_limit_exceeded'
+    const isScheduledPost = parsed.data.status === 'scheduled';
+    if (isScheduledPost) {
       const [ownedProfile] = await db
         .select({ id: socialProfiles.id, platform: socialProfiles.platform })
         .from(socialProfiles)
@@ -125,34 +132,76 @@ export function createPostsRouter({
         return;
       }
 
-      if (ownedProfile.platform === 'twitter') {
-        const budget = await checkTwitterBudgetWithDb(db, {
-          profileId: parsed.data.profileId,
-          additionalPostCount: 1,
+      if (ownedProfile.platform !== parsed.data.platform) {
+        // Defensive — schema-layer doesn't know about the profile's platform.
+        // T-DATA-01: cross-platform profile/payload combinations get 400 here
+        // before they reach post.service.
+        res.status(400).json({
+          error: 'Profile platform mismatch',
+          details: [
+            {
+              path: ['platform'],
+              message: `Profile is on '${ownedProfile.platform}', not '${parsed.data.platform}'.`,
+            },
+          ],
         });
+        return;
+      }
 
-        if (budget.wouldExceed) {
-          // 409 block path. Mutually exclusive with the warn-notification
-          // enqueue below — a blocked post never fires a warn notification.
-          const budgetExceededResponse: BudgetExceededBody = {
+      // Pitfall 2: Facebook multi-photo posts consume mediaIds.length + 1
+      // calls (one per photo upload + one for the /feed wrapper). LinkedIn
+      // and Twitter publish via a single API call.
+      const additionalCount =
+        parsed.data.platform === 'facebook'
+          ? (parsed.data.mediaIds?.length ?? 0) + 1
+          : 1;
+
+      const budget = await checkPlatformBudgetWithDb(db, {
+        profileId: parsed.data.profileId,
+        platform: parsed.data.platform,
+        additionalCount,
+      });
+
+      if (budget.blockThresholdHit) {
+        // Per-platform 409 body. Mutually exclusive with the warn-notification
+        // enqueue below — a blocked post never fires a warn notification.
+        if (parsed.data.platform === 'twitter') {
+          const body: BudgetExceededBody = {
             code: 'twitter_budget_exceeded',
-            budget: budget.budget,
-            currentCount: budget.currentUsage,
+            budget: budget.budget!,
+            currentCount: budget.currentUsage!,
           };
-          res.status(409).json(budgetExceededResponse);
+          res.status(409).json(body);
           return;
         }
+        const snapshot = budget.snapshot!;
+        const body: LinkedInRateLimitExceededBody | FacebookRateLimitExceededBody = {
+          code:
+            parsed.data.platform === 'linkedin'
+              ? 'linkedin_rate_limit_exceeded'
+              : 'facebook_rate_limit_exceeded',
+          limit: snapshot.limit,
+          currentCount: snapshot.currentCount,
+          windowResetAt: snapshot.windowResetAt.toISOString(),
+        };
+        res.status(409).json(body);
+        return;
+      }
 
-        if (budget.warnThresholdHit && notificationQueue) {
-          // LIMIT-02 / revision Blocker 5: enqueue a per-month deduped warn.
-          // jobId shape: `rate-limit-warn:{profileId}:YYYY-MM`
-          await enqueueWarnNotification(notificationQueue, {
-            profileId: parsed.data.profileId,
-            currentUsage: budget.currentUsage,
-            monthlyBudget: budget.budget,
-            warnThresholdPercent: budget.warnThresholdPercent,
-          });
-        }
+      if (
+        parsed.data.platform === 'twitter' &&
+        budget.warnThresholdHit &&
+        notificationQueue
+      ) {
+        // LIMIT-02 warn enqueue is Twitter-specific for now; LinkedIn /
+        // Facebook warn surfacing is a UI concern (the dashboard chip),
+        // not a notification job.
+        await enqueueWarnNotification(notificationQueue, {
+          profileId: parsed.data.profileId,
+          currentUsage: budget.currentUsage!,
+          monthlyBudget: budget.budget!,
+          warnThresholdPercent: budget.warnThresholdPercent!,
+        });
       }
     }
 
@@ -235,9 +284,9 @@ export function createPostsRouter({
     const userId = req.session.userId!;
 
     // If the edit moves the post into `scheduled` OR reschedules an already
-    // scheduled post, rerun the Twitter budget pre-flight so a mass-reschedule
-    // can't sneak past the block. A post staying in `draft` has no budget
-    // impact and skips the check entirely.
+    // scheduled post, rerun the platform-specific budget pre-flight so a
+    // mass-reschedule can't sneak past the block. A post staying in `draft`
+    // has no budget impact and skips the check entirely.
     const transitioningToScheduled = parsed.data.status === 'scheduled';
     if (transitioningToScheduled) {
       const [existingPost] = await db
@@ -246,12 +295,24 @@ export function createPostsRouter({
           profileId: posts.profileId,
           status: posts.status,
           postVersion: posts.postVersion,
+          platform: posts.platform,
         })
         .from(posts)
         .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
       if (!existingPost) {
         res.status(404).json({ error: 'Post not found' });
+        return;
+      }
+
+      // T-DATA-01: posts.platform is immutable. Reject PATCH that tries to
+      // change platform with a 409 + 'platform_immutable' before any other
+      // pre-flight runs. The post.service also enforces this defense-in-depth.
+      if (parsed.data.platform && parsed.data.platform !== existingPost.platform) {
+        res.status(409).json({
+          code: 'platform_immutable',
+          message: `Cannot change post platform from '${existingPost.platform}' to '${parsed.data.platform}'.`,
+        });
         return;
       }
 
@@ -266,29 +327,56 @@ export function createPostsRouter({
             ),
           );
 
-        if (ownedProfile?.platform === 'twitter') {
-          const budget = await checkTwitterBudgetWithDb(db, {
+        if (ownedProfile) {
+          // additionalCount = 0 when re-scheduling an already-scheduled post
+          // (it's already counted), 1 for new schedule transitions. Facebook
+          // multi-photo posts add mediaIds.length on top of the +1 wrapper.
+          const baseAdditional = existingPost.status === 'scheduled' ? 0 : 1;
+          const additionalCount =
+            ownedProfile.platform === 'facebook'
+              ? baseAdditional + (parsed.data.mediaIds?.length ?? 0)
+              : baseAdditional;
+
+          const budget = await checkPlatformBudgetWithDb(db, {
             profileId: existingPost.profileId,
-            additionalPostCount:
-              existingPost.status === 'scheduled' ? 0 : 1,
+            platform: ownedProfile.platform as 'twitter' | 'linkedin' | 'facebook',
+            additionalCount,
           });
 
-          if (budget.wouldExceed) {
-            const budgetExceededResponse: BudgetExceededBody = {
-              code: 'twitter_budget_exceeded',
-              budget: budget.budget,
-              currentCount: budget.currentUsage,
+          if (budget.blockThresholdHit) {
+            if (ownedProfile.platform === 'twitter') {
+              const body: BudgetExceededBody = {
+                code: 'twitter_budget_exceeded',
+                budget: budget.budget!,
+                currentCount: budget.currentUsage!,
+              };
+              res.status(409).json(body);
+              return;
+            }
+            const snapshot = budget.snapshot!;
+            const body: LinkedInRateLimitExceededBody | FacebookRateLimitExceededBody = {
+              code:
+                ownedProfile.platform === 'linkedin'
+                  ? 'linkedin_rate_limit_exceeded'
+                  : 'facebook_rate_limit_exceeded',
+              limit: snapshot.limit,
+              currentCount: snapshot.currentCount,
+              windowResetAt: snapshot.windowResetAt.toISOString(),
             };
-            res.status(409).json(budgetExceededResponse);
+            res.status(409).json(body);
             return;
           }
 
-          if (budget.warnThresholdHit && notificationQueue) {
+          if (
+            ownedProfile.platform === 'twitter' &&
+            budget.warnThresholdHit &&
+            notificationQueue
+          ) {
             await enqueueWarnNotification(notificationQueue, {
               profileId: existingPost.profileId,
-              currentUsage: budget.currentUsage,
-              monthlyBudget: budget.budget,
-              warnThresholdPercent: budget.warnThresholdPercent,
+              currentUsage: budget.currentUsage!,
+              monthlyBudget: budget.budget!,
+              warnThresholdPercent: budget.warnThresholdPercent!,
             });
           }
         }
@@ -334,6 +422,12 @@ export function createPostsRouter({
       res.json(updatedPost);
     } catch (err: unknown) {
       if (err instanceof PostServiceError) {
+        // T-DATA-01 invariant 2: PLATFORM_IMMUTABLE → 409 with the canonical
+        // platform_immutable code shape so the UI can render the right toast.
+        if (err.code === 'PLATFORM_IMMUTABLE') {
+          res.status(409).json({ code: 'platform_immutable', message: err.message });
+          return;
+        }
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
