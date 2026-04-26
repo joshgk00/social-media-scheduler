@@ -208,6 +208,7 @@ describe('posts API integration', () => {
       const res = await agent
         .post('/api/posts')
         .send({
+          platform: 'twitter',
           profileId: PROFILE_ID,
           text: 'Hello world from the scheduler!',
           status: 'draft',
@@ -228,6 +229,7 @@ describe('posts API integration', () => {
       const res = await agent
         .post('/api/posts')
         .send({
+          platform: 'twitter',
           profileId: PROFILE_ID,
           text: 'Tagged post',
           tagIds: [TAG_ID],
@@ -246,6 +248,7 @@ describe('posts API integration', () => {
       const res = await agent
         .post('/api/posts')
         .send({
+          platform: 'twitter',
           profileId: PROFILE_ID,
           text: 'Temporary post',
           autoDestructAfter: '24 hours',
@@ -262,6 +265,7 @@ describe('posts API integration', () => {
       const res = await agent
         .post('/api/posts')
         .send({
+          platform: 'twitter',
           profileId: PROFILE_ID,
           text: 'Post with notes',
           notes: 'Test note',
@@ -359,7 +363,7 @@ describe('posts API integration', () => {
 
       const res = await agent
         .patch(`/api/posts/${POST_ID}`)
-        .send({ text: 'Updated text', postVersion: 1 });
+        .send({ platform: 'twitter', text: 'Updated text', postVersion: 1 });
 
       expect(res.status).toBe(200);
       expect(mockUpdatePost).toHaveBeenCalledWith(
@@ -379,7 +383,7 @@ describe('posts API integration', () => {
 
       const res = await agent
         .patch(`/api/posts/${POST_ID}`)
-        .send({ text: 'Stale update', postVersion: 1 });
+        .send({ platform: 'twitter', text: 'Stale update', postVersion: 1 });
 
       expect(res.status).toBe(409);
       expect(res.body.error).toContain('modified elsewhere');
@@ -394,7 +398,7 @@ describe('posts API integration', () => {
 
       const res = await agent
         .patch(`/api/posts/${POST_ID}`)
-        .send({ text: 'Blocked update', postVersion: 1 });
+        .send({ platform: 'twitter', text: 'Blocked update', postVersion: 1 });
 
       expect(res.status).toBe(409);
       expect(res.body.error).toContain('currently being published');
@@ -429,7 +433,7 @@ describe('posts API integration', () => {
 
       const res = await agent
         .patch(`/api/posts/${POST_ID}`)
-        .send({ text: 'Blocked edit', postVersion: 1 });
+        .send({ platform: 'twitter', text: 'Blocked edit', postVersion: 1 });
 
       expect(res.status).toBe(409);
       expect(res.body.error).toContain('currently being published');
@@ -539,6 +543,7 @@ describe('posts API integration', () => {
       const res = await agent
         .post('/api/posts')
         .send({
+          platform: 'twitter',
           profileId: PROFILE_ID,
           text: 'Post with media',
           mediaIds: [MEDIA_ID_1, MEDIA_ID_2],
@@ -552,17 +557,20 @@ describe('posts API integration', () => {
       );
     });
 
-    it('POST /api/posts without mediaIds passes undefined mediaIds to createPost', async () => {
+    it('POST /api/posts without mediaIds defaults to empty array via the schema default', async () => {
+      // Phase 8: createPostSchema applies `.default([])` to mediaIds. The
+      // route forwards the parsed input verbatim, so the service sees `[]`,
+      // not `undefined` (matches the discriminated-union schema contract).
       mockCreatePost.mockResolvedValueOnce(SAMPLE_POST);
       const agent = await authenticatedAgent();
 
       await agent
         .post('/api/posts')
-        .send({ profileId: PROFILE_ID, text: 'Post without media' });
+        .send({ platform: 'twitter', profileId: PROFILE_ID, text: 'Post without media' });
 
       expect(mockCreatePost).toHaveBeenCalledTimes(1);
       const [, , postInput] = mockCreatePost.mock.calls[0];
-      expect(postInput.mediaIds).toBeUndefined();
+      expect(postInput.mediaIds).toEqual([]);
     });
 
     it('PATCH /api/posts/:id passes mediaIds to updatePost service', async () => {
@@ -572,7 +580,12 @@ describe('posts API integration', () => {
 
       const res = await agent
         .patch(`/api/posts/${POST_ID}`)
-        .send({ postVersion: 1, mediaIds: [MEDIA_ID_3] });
+        .send({
+          platform: 'twitter',
+          text: 'Post with media',
+          postVersion: 1,
+          mediaIds: [MEDIA_ID_3],
+        });
 
       expect(res.status).toBe(200);
       expect(mockUpdatePost).toHaveBeenCalledWith(
@@ -590,7 +603,12 @@ describe('posts API integration', () => {
 
       const res = await agent
         .patch(`/api/posts/${POST_ID}`)
-        .send({ postVersion: 1, mediaIds: [] });
+        .send({
+          platform: 'twitter',
+          text: 'Post with media',
+          postVersion: 1,
+          mediaIds: [],
+        });
 
       expect(res.status).toBe(200);
       expect(mockUpdatePost).toHaveBeenCalledWith(

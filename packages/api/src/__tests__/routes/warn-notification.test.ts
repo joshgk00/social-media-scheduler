@@ -78,12 +78,41 @@ vi.mock('../../services/post.service.js', async () => {
 
 // Mock the rate-limit service so tests can drive wouldExceed / warnThresholdHit
 // without a real DB. The real wrapper is covered by its own unit tests.
+//
+// Phase 8: routes/posts.ts now dispatches via checkPlatformBudgetWithDb. The
+// dispatcher mock translates the legacy Twitter mock's outputs to the new
+// uniform shape (blockThresholdHit / warnThresholdHit / budget / currentUsage).
 const mockCheckTwitterBudgetWithDb = vi.fn();
 vi.mock('../../services/rate-limit.service.js', () => ({
   loadTwitterUsage: vi.fn(),
+  loadLinkedInUsage: vi.fn(),
+  loadFacebookUsage: vi.fn(),
   checkTwitterBudgetWithDb: (...args: unknown[]) =>
     mockCheckTwitterBudgetWithDb(...args),
   checkBulkBudgetWithDb: vi.fn(),
+  checkLinkedInBudgetWithDb: vi.fn(),
+  checkFacebookBudgetWithDb: vi.fn(),
+  checkPlatformBudgetWithDb: async (
+    _db: unknown,
+    args: { profileId: string; platform: string; additionalCount: number },
+  ) => {
+    if (args.platform !== 'twitter') {
+      // Tests in this file only exercise Twitter; non-twitter callers in
+      // production have their own dedicated test file.
+      return { blockThresholdHit: false, warnThresholdHit: false };
+    }
+    const result = await mockCheckTwitterBudgetWithDb({
+      profileId: args.profileId,
+      additionalPostCount: args.additionalCount,
+    });
+    return {
+      blockThresholdHit: result.wouldExceed ?? result.blockThresholdHit ?? false,
+      warnThresholdHit: result.warnThresholdHit ?? false,
+      budget: result.budget,
+      currentUsage: result.currentUsage,
+      warnThresholdPercent: result.warnThresholdPercent,
+    };
+  },
 }));
 
 const PROFILE_ID = '550e8400-e29b-41d4-a716-446655440042';
@@ -195,6 +224,10 @@ async function authenticatedAgent(app: ReturnType<typeof createTestApp>) {
 }
 
 const BODY = {
+  // Phase 8: createPostSchema is a discriminated union over `platform`.
+  // The fixture body now carries the platform tag explicitly so the warn
+  // notification flow exercises the same Zod path as production.
+  platform: 'twitter',
   profileId: PROFILE_ID,
   text: 'Hello from a near-threshold Twitter profile',
   status: 'scheduled',

@@ -141,17 +141,35 @@ export const createPostSchema = z
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 
-// updatePostSchema mirrors create but adds `postVersion` for optimistic-concurrency
-// enforcement. Each variant remains `.strict()`; the same cross-field rules apply.
-const twitterUpdateObject = twitterPostObject.extend({
-  postVersion: z.number().int().min(1),
-});
-const linkedinUpdateObject = linkedinPostObject.extend({
-  postVersion: z.number().int().min(1),
-});
-const facebookUpdateObject = facebookPostObject.extend({
-  postVersion: z.number().int().min(1),
-});
+// updatePostSchema mirrors create but represents PARTIAL updates: every field
+// other than the discriminator (`platform`) and the optimistic-concurrency
+// guard (`postVersion`) is optional, so a PATCH can change just text or just
+// scheduledAt without resending the full body. Each variant remains `.strict()`
+// — cross-platform fields are still rejected. The discriminator-level
+// `superRefine` only fires its content-required rule when the relevant fields
+// are actually present (see `requireLinkedInContent` / `requireFacebookContent`
+// guards below).
+const twitterUpdateObject = twitterPostObject
+  .partial()
+  .extend({
+    platform: z.literal('twitter'),
+    postVersion: z.number().int().min(1),
+  })
+  .strict();
+const linkedinUpdateObject = linkedinPostObject
+  .partial()
+  .extend({
+    platform: z.literal('linkedin'),
+    postVersion: z.number().int().min(1),
+  })
+  .strict();
+const facebookUpdateObject = facebookPostObject
+  .partial()
+  .extend({
+    platform: z.literal('facebook'),
+    postVersion: z.number().int().min(1),
+  })
+  .strict();
 
 export const updatePostSchema = z
   .discriminatedUnion('platform', [
@@ -160,11 +178,44 @@ export const updatePostSchema = z
     facebookUpdateObject,
   ])
   .superRefine((data, ctx) => {
-    requireScheduledAtWhenScheduled(data, ctx);
-    if (data.platform === 'linkedin') {
-      requireLinkedInContent(data, ctx);
-    } else if (data.platform === 'facebook') {
-      requireFacebookContent(data, ctx);
+    // Only enforce the scheduled-needs-scheduledAt rule when the caller
+    // actually included status in the patch. A partial update that only
+    // touches `text` should not be rejected for missing scheduledAt.
+    if (data.status === 'scheduled' && !data.scheduledAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'scheduledAt is required when status is scheduled',
+        path: ['scheduledAt'],
+      });
+    }
+    // Same for content rules — only check if both text + mediaIds were supplied
+    // in this patch (i.e. the caller is changing both).
+    if (
+      data.platform === 'linkedin' &&
+      data.text !== undefined &&
+      data.mediaIds !== undefined &&
+      data.text.length === 0 &&
+      data.mediaIds.length === 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'LinkedIn share requires text or an image',
+        path: ['text'],
+      });
+    }
+    if (
+      data.platform === 'facebook' &&
+      data.text !== undefined &&
+      data.mediaIds !== undefined &&
+      data.text.length === 0 &&
+      data.mediaIds.length === 0 &&
+      !data.linkUrl
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Facebook post requires text, media, or a link',
+        path: ['text'],
+      });
     }
   });
 export type UpdatePostInput = z.infer<typeof updatePostSchema>;
