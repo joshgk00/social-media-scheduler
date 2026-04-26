@@ -17,14 +17,57 @@ export const rateLimitUpdateSchema = z
 
 export type RateLimitUpdate = z.infer<typeof rateLimitUpdateSchema>;
 
-export const rateLimitStateSchema = z.object({
-  profileId: z.string().uuid(),
-  currentCount: z.number().int().nonnegative(),
-  budget: z.number().int().positive(),
+// rateLimitStateSchema is a discriminated union over `platform`. Each variant
+// carries the platform-specific shape:
+//   - twitter:  monthly budget keyed by `monthStartUtc` (LIMIT-01..05)
+//   - linkedin: rolling daily limit keyed by `windowStartUtc` + `windowResetAt` (LIMIT-07)
+//   - facebook: rolling hourly limit keyed by `windowStartUtc` + `windowResetAt` (LIMIT-06)
+
+const sharedThresholds = {
   warnThresholdPercent: z.number().int().min(1).max(99),
   warnThresholdHit: z.boolean(),
   blockThresholdHit: z.boolean(),
-  monthStartUtc: z.string(), // ISO-8601
-});
+};
+
+const twitterRateLimitState = z
+  .object({
+    platform: z.literal('twitter'),
+    profileId: z.string().uuid(),
+    currentCount: z.number().int().nonnegative(),
+    budget: z.number().int().positive(),
+    monthStartUtc: z.string().datetime(),
+    ...sharedThresholds,
+  })
+  .strict();
+
+const linkedinRateLimitState = z
+  .object({
+    platform: z.literal('linkedin'),
+    profileId: z.string().uuid(),
+    currentCount: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    windowStartUtc: z.string().datetime(),
+    windowResetAt: z.string().datetime(),
+    ...sharedThresholds,
+  })
+  .strict();
+
+const facebookRateLimitState = z
+  .object({
+    platform: z.literal('facebook'),
+    profileId: z.string().uuid(),
+    currentCount: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    windowStartUtc: z.string().datetime(),
+    windowResetAt: z.string().datetime(),
+    ...sharedThresholds,
+  })
+  .strict();
+
+export const rateLimitStateSchema = z.discriminatedUnion('platform', [
+  twitterRateLimitState,
+  linkedinRateLimitState,
+  facebookRateLimitState,
+]);
 
 export type RateLimitState = z.infer<typeof rateLimitStateSchema>;
