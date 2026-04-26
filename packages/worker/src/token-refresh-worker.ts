@@ -58,6 +58,23 @@ export { tokenRefreshBackoffStrategy };
 
 const logger = createLogger('token-refresh-worker');
 
+// Server-misconfiguration sentinel — thrown when an env var the worker needs
+// to talk to a provider is unset. Extends UnrecoverableError so BullMQ stops
+// the retry chain immediately (re-attempting with the same missing env var
+// would just fail again), and the failed listener short-circuits BEFORE the
+// needs_reauth transition: a missing LINKEDIN_CLIENT_SECRET is an ops
+// problem, not a user-token problem, and silently flipping the user's
+// profile to needs_reauth would mask the real cause.
+export class OAuthProviderConfigError extends UnrecoverableError {
+  public readonly missingEnvVar: string;
+
+  constructor(missingEnvVar: string) {
+    super(`OAuth provider misconfigured: ${missingEnvVar} is not set`);
+    this.name = 'OAuthProviderConfigError';
+    this.missingEnvVar = missingEnvVar;
+  }
+}
+
 export interface RefreshOrPingTokenPayload {
   profileId: string;
   correlationId: string;
@@ -131,6 +148,23 @@ export function createTokenRefreshWorker(
   // failures: UnrecoverableError, or attemptsMade >= configured cap.
   worker.on('failed', async (job, err) => {
     if (!job) return;
+
+    // Server-misconfiguration: provider env vars unset. Log loudly for ops
+    // and skip the needs_reauth transition + notification — the user's
+    // token is fine, the worker just can't reach the provider until ops
+    // sets the env var and restarts the worker.
+    if (err instanceof OAuthProviderConfigError || err?.name === 'OAuthProviderConfigError') {
+      logger.error(
+        {
+          missingEnvVar: (err as OAuthProviderConfigError).missingEnvVar,
+          profileId: job.data.profileId,
+          correlationId: job.data.correlationId,
+        },
+        'OAuth provider misconfigured — token-refresh skipped, profile NOT marked as needs_reauth',
+      );
+      return;
+    }
+
     const attemptsCap = (job.opts?.attempts as number | undefined) ?? TOKEN_REFRESH_CONFIG.attempts;
     const isUnrecoverable =
       err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
@@ -234,10 +268,20 @@ async function handleLinkedInRefresh(
   const encryptionKey = validateEncryptionKey(process.env.ENCRYPTION_KEY ?? '');
   const refreshToken = decrypt(refreshCt, refreshIv, refreshTag, encryptionKey);
 
+  // Fail fast on missing provider config. Empty-string fallbacks would have
+  // produced a 4xx from LinkedIn that the failed listener interpreted as a
+  // bad user token and flipped the profile to needs_reauth — masking the
+  // real ops problem. OAuthProviderConfigError extends UnrecoverableError so
+  // BullMQ stops retrying, and the failed listener skips the transition.
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+  if (!clientId) throw new OAuthProviderConfigError('LINKEDIN_CLIENT_ID');
+  if (!clientSecret) throw new OAuthProviderConfigError('LINKEDIN_CLIENT_SECRET');
+
   const response = await callLinkedInRefresh({
     refreshToken,
-    clientId: process.env.LINKEDIN_CLIENT_ID ?? '',
-    clientSecret: process.env.LINKEDIN_CLIENT_SECRET ?? '',
+    clientId,
+    clientSecret,
   });
 
   // Re-encrypt new access token. Refresh token ciphertext remains UNCHANGED

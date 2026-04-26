@@ -94,6 +94,7 @@ vi.stubGlobal('fetch', fetchMock);
 import {
   createTokenRefreshWorker,
   tokenRefreshBackoffStrategy,
+  OAuthProviderConfigError,
 } from '../token-refresh-worker.js';
 import { tokenRefreshBackoffStrategy as exportedBackoff } from '../backoff.js';
 import { JOB_NAMES } from '@sms/shared';
@@ -314,6 +315,40 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     ).rejects.toSatisfy((err: unknown) => err instanceof Error && !(err instanceof UnrecoverableError));
   });
 
+  it('throws OAuthProviderConfigError (extends UnrecoverableError) when LINKEDIN_CLIENT_ID is unset', async () => {
+    delete process.env.LINKEDIN_CLIENT_ID;
+    const { db, pushSelectResult } = createMockDb();
+    pushSelectResult([makeLinkedInProfile()]);
+
+    const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
+    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+
+    const { UnrecoverableError } = await import('bullmq');
+    await expect(
+      capturedHandler!(fakeJob({ profileId: 'profile-li-1', correlationId: 'corr-cfg' })),
+    ).rejects.toBeInstanceOf(OAuthProviderConfigError);
+    await expect(
+      capturedHandler!(fakeJob({ profileId: 'profile-li-1', correlationId: 'corr-cfg' })),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+
+    // No HTTP call attempted with empty credentials.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('throws OAuthProviderConfigError when LINKEDIN_CLIENT_SECRET is unset', async () => {
+    delete process.env.LINKEDIN_CLIENT_SECRET;
+    const { db, pushSelectResult } = createMockDb();
+    pushSelectResult([makeLinkedInProfile()]);
+
+    const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
+    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+
+    await expect(
+      capturedHandler!(fakeJob({ profileId: 'profile-li-1', correlationId: 'corr-cfg2' })),
+    ).rejects.toBeInstanceOf(OAuthProviderConfigError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('throws UnrecoverableError when profile has no refresh-token ciphertext', async () => {
     const { db, pushSelectResult } = createMockDb();
     pushSelectResult([makeLinkedInProfile({ oauth2RefreshTokenCiphertext: null })]);
@@ -491,6 +526,34 @@ describe("createTokenRefreshWorker — on('failed') listener", () => {
     expect(db.updateSets.length).toBe(1);
     // But no notification — dedupe works
     expect(notificationQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('OAuthProviderConfigError does NOT flip tokenStatus and does NOT emit a notification (server-misconfig path)', async () => {
+    const db = createMockDb();
+    const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) };
+    // Even seed an updateReturning row — if the listener wrongly ran the
+    // UPDATE, it would consume this and we'd see updateSets.length === 1.
+    db.pushUpdateReturning([{ id: 'profile-li-cfg' }]);
+
+    await invokeFailedListener(db, notificationQueue, {
+      job: {
+        id: 'job-cfg',
+        data: { profileId: 'profile-li-cfg', correlationId: 'corr-cfg' },
+        attemptsMade: 1,
+        opts: { attempts: 4 },
+      },
+      err: new OAuthProviderConfigError('LINKEDIN_CLIENT_ID'),
+    });
+
+    // Server-misconfig: no DB transition, no notification. Ops must fix env.
+    expect(db.updateSets.length).toBe(0);
+    expect(notificationQueue.add).not.toHaveBeenCalled();
+
+    // A loud error log carrying missingEnvVar so on-call can grep for it.
+    const errorLog = logCalls.find(
+      (c) => c.level === 'error' && (c.bindings as Record<string, unknown>)?.missingEnvVar === 'LINKEDIN_CLIENT_ID',
+    );
+    expect(errorLog).toBeTruthy();
   });
 
   it('does not fire notification logic on non-final failures (attemptsMade < attempts and no UnrecoverableError)', async () => {
