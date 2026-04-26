@@ -2,20 +2,21 @@
 
 Items discovered during plan execution that fall outside the scope of the current plan but must be addressed by a future plan.
 
-## From Plan 02 (schema-shared-and-migration)
+## From Plan 02 (schema-shared-and-migration) — RESOLVED in Plan 05a (2026-04-26)
 
-### Web type errors from discriminated-union upgrade
+### Web type errors from discriminated-union upgrade — RESOLVED
 
-After upgrading `createPostSchema`, `updatePostSchema`, and `rateLimitStateSchema` to discriminated unions, several pre-existing web pages and components no longer typecheck because they were authored against the previous single-shape schemas. These are expected — Plans 05a / 05b will refactor the web layer to discriminate on `platform`. Tracking here so they are not silently masked.
+After upgrading `createPostSchema`, `updatePostSchema`, and `rateLimitStateSchema` to discriminated unions, several pre-existing web pages and components no longer typecheck. Plan 05a resolved every entry below; Plan 05b will replace the temporary narrowing in the rate-limit components with full per-platform copy.
 
-| File | Symptom | Owning plan |
+| File | Symptom | Resolution |
 |---|---|---|
-| `packages/web/src/components/profiles/ProfileRateLimitIndicator.tsx` | Reads `state.budget` directly; needs `platform === 'twitter'` narrow | 05b |
-| `packages/web/src/components/profiles/RateLimitSettingsDialog.tsx` | Same `budget` access pattern | 05b |
-| `packages/web/src/pages/posts/EditPostPage.tsx` | `updatePostSchema` no longer accepts `isThread` outside the twitter variant | 05a |
-| `packages/web/src/pages/posts/NewPostPage.tsx` | Submits without `platform` field; needs platform tag | 05a |
+| `packages/web/src/components/profiles/ProfileRateLimitIndicator.tsx` | Reads `state.budget` directly | Plan 05a: narrowed on `platform === 'twitter'`, returns placeholder for LI/FB. Plan 05b will add the per-platform chip. |
+| `packages/web/src/components/profiles/RateLimitSettingsDialog.tsx` | Same `budget` access pattern | Plan 05a: narrowed on `platform === 'twitter'`. Plan 05b will add LI/FB settings if those become user-configurable. |
+| `packages/web/src/pages/posts/EditPostPage.tsx` | `updatePostSchema` no longer accepts `isThread` outside the twitter variant | Plan 05a: refactored to platform-aware submit body via `buildUpdatePayload`. |
+| `packages/web/src/pages/posts/NewPostPage.tsx` | Submits without `platform` field | Plan 05a: refactored to platform-aware submit body via `buildPlatformPayload`. |
+| `packages/web/src/components/posts/RateLimitBanner.tsx` | Reads `state.budget` directly | Plan 05a: narrowed on `platform === 'twitter'`. Plan 05b will add LI/FB banner copy. |
 
-`pnpm --filter @sms/api build` and `pnpm --filter @sms/shared build` pass — only the web layer needs the follow-up. Tests for the affected web components were shipped in Plan 01 and remain RED (intended).
+`pnpm --filter @sms/web build` exits 0. Plan 01 RED tests in scope (cross-platform-switch, VisibilitySelector, LinkedInPreview, FacebookPreview) are GREEN. The lone remaining RED test, `RateLimitsCard.test.tsx`, is Plan 05b's responsibility — Plan 05a created stub modules so `tsc -b` succeeds.
 
 ## From Plan 03 (api-routes-and-rate-limit)
 

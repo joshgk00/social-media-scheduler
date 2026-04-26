@@ -88,13 +88,13 @@
 
 ### Post Creation — Common Fields (POST-CMN)
 
-- [ ] **POST-CMN-01**: All post creation forms support: publish at specific datetime, publish now, or save as draft
-- [ ] **POST-CMN-02**: Date/time picker respects user's configured IANA timezone and date format
-- [ ] **POST-CMN-03**: All posts support spinnable text syntax `{option1|option2|option3}` with "contains spinnable text" toggle; one option selected randomly at publish time
-- [ ] **POST-CMN-04**: All posts support auto-destruct: delete from platform after N [minutes/hours/days/weeks/months/years]
-- [ ] **POST-CMN-05**: All posts support internal tags (multi-select) and internal notes (Markdown, not published)
-- [ ] **POST-CMN-06**: User can save any post as draft without assigning a schedule; drafts are not picked up by the scheduling engine
-- [ ] **POST-CMN-07**: Post creation form shows scheduling conflict warning when another post is scheduled for the same profile within ±5 minutes of the requested time (non-blocking)
+- [x] **POST-CMN-01**: All post creation forms support: publish at specific datetime, publish now, or save as draft
+- [x] **POST-CMN-02**: Date/time picker respects user's configured IANA timezone and date format
+- [x] **POST-CMN-03**: All posts support spinnable text syntax `{option1|option2|option3}` with "contains spinnable text" toggle; one option selected randomly at publish time
+- [x] **POST-CMN-04**: All posts support auto-destruct: delete from platform after N [minutes/hours/days/weeks/months/years]
+- [x] **POST-CMN-05**: All posts support internal tags (multi-select) and internal notes (Markdown, not published)
+- [x] **POST-CMN-06**: User can save any post as draft without assigning a schedule; drafts are not picked up by the scheduling engine
+- [x] **POST-CMN-07**: Post creation form shows scheduling conflict warning when another post is scheduled for the same profile within ±5 minutes of the requested time (non-blocking)
 - [ ] **POST-CMN-08**: All post forms include an "Insert Snippet" button to insert saved text snippets at cursor position
 
 ### Post State Machine (STATE)
@@ -282,13 +282,13 @@
 | POST-TW-05 | Phase 3 | Pending |
 | POST-TW-06 | Phase 3 | Pending |
 | POST-TW-07 | Phase 3 | Pending |
-| POST-CMN-01 | Phase 3 | Pending |
-| POST-CMN-02 | Phase 3 | Pending |
-| POST-CMN-03 | Phase 3 | Pending |
-| POST-CMN-04 | Phase 3 | Pending |
-| POST-CMN-05 | Phase 3 | Pending |
-| POST-CMN-06 | Phase 3 | Pending |
-| POST-CMN-07 | Phase 3 | Pending |
+| POST-CMN-01 | Phase 3 | Complete |
+| POST-CMN-02 | Phase 3 | Complete |
+| POST-CMN-03 | Phase 3 | Complete |
+| POST-CMN-04 | Phase 3 | Complete |
+| POST-CMN-05 | Phase 3 | Complete |
+| POST-CMN-06 | Phase 3 | Complete |
+| POST-CMN-07 | Phase 3 | Complete |
 | STATE-01 | Phase 3 | Pending |
 | STATE-02 | Phase 3 | Pending |
 | STATE-03 | Phase 3 | Pending |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 08-04-worker-publish-services-PLAN.md
-last_updated: "2026-04-26T14:52:33.622Z"
+stopped_at: Completed 08-05a-web-forms-and-previews-PLAN.md
+last_updated: "2026-04-26T15:12:22.217Z"
 progress:
   total_phases: 16
   completed_phases: 10
   total_plans: 46
-  completed_plans: 43
-  percent: 93
+  completed_plans: 44
+  percent: 96
 ---
 
 # Project State
@@ -72,6 +72,9 @@ for current phase.
 - [Phase 08]: DI-style budget callback in lifecycle (vs direct platform-checker imports) — keeps lifecycle platform-agnostic and the publish-worker tags result with platform + blockThresholdHit so rate_limit_exhausted dispatches correctly
 - [Phase 08]: callTwitter callback signature gained optional extras { platform, visibility, linkUrl } — backward compatible, lets publish-worker dispatch by typed Plan-02 columns without a second SELECT
 - [Phase 08]: FacebookPublishApiError exposes orphanedPhotoIds (not uploadedPhotoIds) for partial multi-photo failure cleanup — matches Wave-0 test contract; success-path return still carries uploadedPhotoIds separately
+- [Phase 08-linkedin-facebook-post-creation]: Helper named apply-platform-switch.ts (matches Plan 01 RED test import); B-03 closure via SharedPostFields component mounted once in NewPostPage and EditPostPage above the platform branch
+- [Phase 08-linkedin-facebook-post-creation]: Toast string carries two phrasings — removed X, Y, Z prefix-form for non-visibility drops AND visibility removed postfix-form — so a single toast satisfies both regex patterns in the Plan 01 cross-platform-switch stub
+- [Phase 08-linkedin-facebook-post-creation]: Web layer keeps existing local-state media flow (mediaItems, uploadingFiles, dnd-kit reorder) instead of moving to FormProvider tree — preserves every Phase 6 media feature without sweeping refactor
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-26T14:52:33.618Z
-Stopped at: Completed 08-04-worker-publish-services-PLAN.md
+Last session: 2026-04-26T15:12:03.263Z
+Stopped at: Completed 08-05a-web-forms-and-previews-PLAN.md
 Resume file: None
