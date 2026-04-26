@@ -38,6 +38,14 @@ import type { WorkerDb } from './db.js';
 
 const logger = createLogger('post-lifecycle');
 
+// UTC midnight of "today" — the LinkedIn daily window resets here per
+// LIMIT-07. Mirrors the same helper used in @sms/api rate-limit.service.ts.
+function utcDayStart(now: Date = new Date()): Date {
+  const dayStart = new Date(now);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  return dayStart;
+}
+
 export type LifecycleAbortReason =
   | 'version_mismatch'
   | 'already_published'
@@ -45,7 +53,11 @@ export type LifecycleAbortReason =
   | 'budget_exhausted'
   | 'thread_unsupported'
   | 'media_pending'
-  | 'token_unhealthy';
+  | 'token_unhealthy'
+  // Phase 8 (D-05, D-07): per-platform rate-limit pre-flight failed. Mirrors
+  // budget_exhausted (Twitter) — post stays in `scheduled`, no retry budget
+  // consumed, scanner re-evaluates once the platform window resets.
+  | 'rate_limit_exhausted';
 
 export class PostLifecycleAbort extends Error {
   constructor(public readonly reason: LifecycleAbortReason) {
@@ -74,7 +86,18 @@ export interface PublishContext {
     postText: string,
     isThread: boolean,
   ) => Promise<{ platformPostId: string }>;
-  checkBudget: (profileId: string) => Promise<{ wouldExceed: boolean }>;
+  // Phase 8 (D-05, D-07): callers may now annotate the result with the
+  // platform whose window was checked. When `platform` is `linkedin` or
+  // `facebook` AND `blockThresholdHit` is true, the lifecycle aborts with
+  // `rate_limit_exhausted` instead of `budget_exhausted` — same graceful-
+  // skip semantics, distinct enum so the dashboard can route correctly.
+  checkBudget: (
+    profileId: string,
+  ) => Promise<{
+    wouldExceed: boolean;
+    blockThresholdHit?: boolean;
+    platform?: 'twitter' | 'linkedin' | 'facebook';
+  }>;
   // Phase 07-04 (TOKEN-04): the failure path emits `token_revoked`
   // notifications AFTER the permanent_fail transaction commits so an orphan
   // notification can never escape a rolled-back state change.
@@ -174,7 +197,30 @@ export async function publishPost(
 
       // D-26 runtime budget re-check (LIMIT-03): leaves post scheduled so the
       // scanner re-evaluates once the month boundary resets.
+      // Phase 8 (D-05 / D-07 / LIMIT-06 / LIMIT-07): the worker-side checker
+      // returns the platform discriminator so non-twitter posts that hit the
+      // per-platform window emit `rate_limit_exhausted` rather than
+      // `budget_exhausted` — same graceful-skip semantics, distinct enum.
       const budget = await ctx.checkBudget(post.profile_id);
+      const isPlatformRateLimit =
+        (budget.platform === 'linkedin' || budget.platform === 'facebook') &&
+        budget.blockThresholdHit === true;
+      if (isPlatformRateLimit) {
+        await tx.insert(postAttempts).values({
+          postId: ctx.postId,
+          attemptNum: ctx.currentAttemptNum,
+          startedAt: attemptStart,
+          finishedAt: new Date(),
+          outcome: 'cancelled',
+          errorCode: 'rate_limit_exhausted',
+          errorMessage: `${budget.platform} rate limit reached`,
+        });
+        lifecycleLogger.warn(
+          { platform: budget.platform },
+          'Rate limit exhausted at runtime — leaving post scheduled',
+        );
+        throw new PostLifecycleAbort('rate_limit_exhausted');
+      }
       if (budget.wouldExceed) {
         lifecycleLogger.warn('Budget exhausted at runtime — leaving post scheduled');
         throw new PostLifecycleAbort('budget_exhausted');
@@ -294,7 +340,8 @@ export async function publishPost(
     throw twitterErr;
   }
 
-  // PHASE 3 — success: insert attempt row + transition to published.
+  // PHASE 3 — success: insert attempt row + transition to published + advance
+  // per-platform window counter atomically (T-API-02 / T-LIMITS-01).
   await db.transaction(async (tx) => {
     await tx.insert(postAttempts).values({
       postId: ctx.postId,
@@ -315,6 +362,56 @@ export async function publishPost(
         updatedAt: new Date(),
       })
       .where(eq(posts.id, ctx.postId));
+
+    // Phase 8: atomic per-platform window counter increment (T-API-02,
+    // T-LIMITS-01). Single-statement CASE-WHEN UPDATE — concurrent writers
+    // serialize on the row lock so the second observer's count correctly
+    // reflects the first's bump. Idempotency: this branch only runs in
+    // Phase 3 (post `platform_post_id` set), so a stalled-job retry that
+    // finds platform_post_id non-null short-circuits in `already_published`
+    // BEFORE reaching here (Pitfall 12).
+    if (lockedProfile.platform === 'linkedin') {
+      const dayStart = utcDayStart();
+      await tx
+        .update(socialProfiles)
+        .set({
+          linkedinDailyCount: sql`CASE
+            WHEN ${socialProfiles.linkedinWindowStartUtc} IS NULL
+              OR ${socialProfiles.linkedinWindowStartUtc} < ${dayStart}
+              THEN 1
+            ELSE ${socialProfiles.linkedinDailyCount} + 1
+          END`,
+          linkedinWindowStartUtc: sql`CASE
+            WHEN ${socialProfiles.linkedinWindowStartUtc} IS NULL
+              OR ${socialProfiles.linkedinWindowStartUtc} < ${dayStart}
+              THEN ${dayStart}
+            ELSE ${socialProfiles.linkedinWindowStartUtc}
+          END`,
+          updatedAt: new Date(),
+        })
+        .where(eq(socialProfiles.id, lockedProfile.id));
+    } else if (lockedProfile.platform === 'facebook') {
+      const now = new Date();
+      const hourThreshold = new Date(now.getTime() - 60 * 60 * 1000);
+      await tx
+        .update(socialProfiles)
+        .set({
+          facebookHourlyCount: sql`CASE
+            WHEN ${socialProfiles.facebookWindowStartUtc} IS NULL
+              OR ${socialProfiles.facebookWindowStartUtc} < ${hourThreshold}
+              THEN 1
+            ELSE ${socialProfiles.facebookHourlyCount} + 1
+          END`,
+          facebookWindowStartUtc: sql`CASE
+            WHEN ${socialProfiles.facebookWindowStartUtc} IS NULL
+              OR ${socialProfiles.facebookWindowStartUtc} < ${hourThreshold}
+              THEN ${now}
+            ELSE ${socialProfiles.facebookWindowStartUtc}
+          END`,
+          updatedAt: new Date(),
+        })
+        .where(eq(socialProfiles.id, lockedProfile.id));
+    }
   });
 
   lifecycleLogger.info({ platformPostId }, 'Publish lifecycle succeeded');

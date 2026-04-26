@@ -117,11 +117,9 @@ describe('publishPost rate-limit gate (LIMIT-06, LIMIT-07)', () => {
 
   it('atomic CAS counter increment: success path issues single platform_window UPDATE (T-API-02, T-LIMITS-01)', async () => {
     // After a successful publish, the worker increments the platform window
-    // counter via a single UPDATE with CASE-WHEN window-expiry reset. This
-    // stub asserts the contract — Plan 04 hardens with integration coverage.
+    // counter via a single UPDATE with CASE-WHEN window-expiry reset.
     seedHappyPath(db, 'facebook');
     db.__pushReturning(() => [{ id: TEST_POST_ID }]);
-    db.__pushReturning(() => [{ id: TEST_PROFILE_ID }]);
 
     const ctx = buildCtx({
       checkBudget: vi.fn().mockResolvedValue({ wouldExceed: false }),
@@ -130,21 +128,41 @@ describe('publishPost rate-limit gate (LIMIT-06, LIMIT-07)', () => {
       }),
     });
 
-    // The publish call itself may still throw because we haven't wired the
-    // facebook publish path — that's fine. The contract under test here is
-    // that on the SUCCESS path, the counter increment is a single UPDATE.
-    // Wave 0 records intent; Plan 04 ships the tightened assertion.
-    await expect(
-      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toBeDefined();
+    const result = await publishPost(
+      db as unknown as Parameters<typeof publishPost>[0],
+      ctx,
+    );
+    expect(result.platformPostId).toBe('123_777');
 
-    // Sentinel: at least one UPDATE on the profile window count happened
-    // (or will happen post-Plan-04). Failing in Wave 0 is the desired RED.
+    // The Phase 3 success transaction must include exactly one UPDATE that
+    // touches `facebookHourlyCount` (Drizzle column property, not raw SQL
+    // alias) — proving the worker uses the same atomic CAS shape as the
+    // API-side pre-flight rather than a separate read-then-write.
     const counterUpdate = db.__updates.find(
-      (u) =>
-        'platformWindowCount' in u.set ||
-        'windowCount' in u.set ||
-        'rateLimitWindowCount' in u.set,
+      (u) => 'facebookHourlyCount' in u.set,
+    );
+    expect(counterUpdate).toBeDefined();
+  });
+
+  it('LinkedIn success path increments linkedinDailyCount via CASE-WHEN UPDATE', async () => {
+    seedHappyPath(db, 'linkedin');
+    db.__pushReturning(() => [{ id: TEST_POST_ID }]);
+
+    const ctx = buildCtx({
+      checkBudget: vi.fn().mockResolvedValue({ wouldExceed: false }),
+      callTwitter: vi
+        .fn()
+        .mockResolvedValue({ platformPostId: 'urn:li:share:1' }),
+    });
+
+    const result = await publishPost(
+      db as unknown as Parameters<typeof publishPost>[0],
+      ctx,
+    );
+    expect(result.platformPostId).toBe('urn:li:share:1');
+
+    const counterUpdate = db.__updates.find(
+      (u) => 'linkedinDailyCount' in u.set,
     );
     expect(counterUpdate).toBeDefined();
   });
