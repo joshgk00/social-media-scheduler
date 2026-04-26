@@ -29,6 +29,20 @@ export const socialProfiles = pgTable('social_profiles', {
   tokenEncryptionVersion: integer('token_encryption_version').notNull().default(1),
   monthlyTweetBudget: integer('monthly_tweet_budget').notNull().default(500),
   warnThresholdPercent: integer('warn_threshold_percent').notNull().default(80),
+
+  // Phase 8 — per-platform rate-limit windows.
+  // LIMIT-07 (LinkedIn ~100/day, UTC midnight reset).
+  linkedinDailyLimit: integer('linkedin_daily_limit').notNull().default(100),
+  linkedinDailyCount: integer('linkedin_daily_count').notNull().default(0),
+  linkedinWindowStartUtc: timestamp('linkedin_window_start_utc', { withTimezone: true }),
+  // LIMIT-06 (Facebook 200/hour rolling).
+  facebookHourlyLimit: integer('facebook_hourly_limit').notNull().default(200),
+  facebookHourlyCount: integer('facebook_hourly_count').notNull().default(0),
+  facebookWindowStartUtc: timestamp('facebook_window_start_utc', { withTimezone: true }),
+  // Disambiguates person vs organization URN at LinkedIn publish (Pitfall 9).
+  // Phase 7 did not add this column; Phase 8 absorbs the gap (Pitfall 1 escape hatch).
+  linkedinAccountType: varchar('linkedin_account_type', { length: 16 }).notNull().default('person'),
+
   connectedAt: timestamp('connected_at', { withTimezone: true }).notNull().defaultNow(),
   lastPublishedAt: timestamp('last_published_at', { withTimezone: true }),
 
