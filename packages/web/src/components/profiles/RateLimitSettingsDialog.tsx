@@ -47,7 +47,11 @@ export function RateLimitSettingsDialog({
   });
 
   useEffect(() => {
-    if (rateLimitQuery.data) {
+    // Settings dialog only configures the Twitter monthly budget — Plan 05b
+    // adds LI/FB rate-limit settings (when the daily/hourly limits become
+    // user-configurable). Narrow on the discriminator so we read `.budget`
+    // safely; LI/FB data shapes carry `.limit` instead and are skipped here.
+    if (rateLimitQuery.data && rateLimitQuery.data.platform === 'twitter') {
       reset({
         monthlyTweetBudget: rateLimitQuery.data.budget,
         warnThresholdPercent: rateLimitQuery.data.warnThresholdPercent,
@@ -66,8 +70,10 @@ export function RateLimitSettingsDialog({
     }
   }
 
-  const currentCount = rateLimitQuery.data?.currentCount ?? 0;
-  const budget = rateLimitQuery.data?.budget ?? 0;
+  const twitterRateLimit =
+    rateLimitQuery.data?.platform === 'twitter' ? rateLimitQuery.data : null;
+  const currentCount = twitterRateLimit?.currentCount ?? 0;
+  const budget = twitterRateLimit?.budget ?? 0;
   const percent = budget > 0 ? Math.round((currentCount / budget) * 100) : 0;
 
   return (

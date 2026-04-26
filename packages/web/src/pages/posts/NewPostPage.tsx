@@ -1,53 +1,48 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { useForm } from 'react-hook-form';
 import { DateTime } from 'luxon';
 import { toast } from 'sonner';
 import { PLATFORM_MEDIA_LIMITS } from '@sms/shared';
+import type { Platform } from '../../hooks/use-profiles';
 import { useAuth } from '../../hooks/use-auth';
 import { useProfiles } from '../../hooks/use-profiles';
-import { useTags } from '../../hooks/use-tags';
-import { useCreatePost, useCheckConflicts } from '../../hooks/use-posts';
+import { useCreatePost } from '../../hooks/use-posts';
 import { useQueue } from '../../hooks/use-queues';
 import { useAddToQueue } from '../../hooks/use-queue-posts';
 import { useMediaUpload } from '../../hooks/use-media-upload';
 import { useDeleteMedia, useRetryTranscode } from '../../hooks/use-media';
-import { utcToLocalInput, localInputToUtc } from '../../lib/timezone';
+import { applyPlatformSwitch } from '../../lib/apply-platform-switch';
 import { serializeThread, deserializeThread, type TweetSegment } from '../../lib/thread';
-import { ThreadEditor } from '../../components/posts/ThreadEditor';
+import { ProfilePicker } from '../../components/posts/ProfilePicker';
+import { SharedPostFields } from '../../components/posts/SharedPostFields';
+import { TwitterPostFields } from '../../components/posts/TwitterPostFields';
+import { LinkedInPostFields } from '../../components/posts/LinkedInPostFields';
+import { FacebookPostFields } from '../../components/posts/FacebookPostFields';
 import { TweetPreview } from '../../components/posts/TweetPreview';
+import { LinkedInPreview } from '../../components/posts/LinkedInPreview';
+import { FacebookPreview } from '../../components/posts/FacebookPreview';
 import { CharacterCountRing } from '../../components/posts/CharacterCountRing';
 import { SplitButton } from '../../components/posts/SplitButton';
-import { TagSelector } from '../../components/posts/TagSelector';
-import { AutoDestructPicker } from '../../components/posts/AutoDestructPicker';
-import { ScheduleConflictBanner } from '../../components/posts/ScheduleConflictBanner';
 import { TagManagementDialog } from '../../components/posts/TagManagementDialog';
 import { RateLimitBanner } from '../../components/posts/RateLimitBanner';
 import { RateLimitBlockError, type RateLimitBlockErrorDetail } from '../../components/posts/RateLimitBlockError';
 import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
-import { MediaDropZone } from '../../components/posts/MediaDropZone';
-import { MediaThumbnailGrid } from '../../components/posts/MediaThumbnailGrid';
 import type { MediaItem } from '../../components/posts/MediaThumbnail';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
-import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Switch } from '../../components/ui/switch';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '../../components/ui/tooltip';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../components/ui/select';
 
-interface PostFormValues {
+const SPINNABLE_PATTERN = /\{[^{}|]+\|[^{}|]+\}/;
+const URL_REGEX = /^https?:\/\/.+/i;
+
+interface PostFormState {
+  platform: Platform;
   profileId: string;
   text: string;
   scheduledAt: string | null;
@@ -55,7 +50,24 @@ interface PostFormValues {
   autoDestructAfter: string | null;
   notes: string;
   tagIds: string[];
+  visibility: 'PUBLIC' | 'CONNECTIONS';
+  linkUrl: string;
+  isThread: boolean;
 }
+
+const INITIAL_FORM_STATE: PostFormState = {
+  platform: 'twitter',
+  profileId: '',
+  text: '',
+  scheduledAt: null,
+  hasSpinnableText: false,
+  autoDestructAfter: null,
+  notes: '',
+  tagIds: [],
+  visibility: 'PUBLIC',
+  linkUrl: '',
+  isThread: false,
+};
 
 export default function NewPostPage() {
   const navigate = useNavigate();
@@ -66,12 +78,11 @@ export default function NewPostPage() {
   const { data: authUser } = useAuth();
   const userTimezone = authUser?.timezone ?? 'UTC';
   const { data: profiles } = useProfiles();
-  const { data: tagList } = useTags();
   const createPostMutation = useCreatePost();
   const { data: queueData } = useQueue(queueId ?? '');
   const addToQueueMutation = useAddToQueue(queueId ?? '');
 
-  const [isThread, setIsThread] = useState(false);
+  const [formState, setFormState] = useState<PostFormState>(INITIAL_FORM_STATE);
   const [tweets, setTweets] = useState<TweetSegment[]>([
     { id: crypto.randomUUID(), text: '' },
   ]);
@@ -84,45 +95,23 @@ export default function NewPostPage() {
   const deleteMediaMutation = useDeleteMedia();
   const retryTranscodeMutation = useRetryTranscode();
 
-  const form = useForm<PostFormValues>({
-    defaultValues: {
-      profileId: '',
-      text: '',
-      scheduledAt: null,
-      hasSpinnableText: false,
-      autoDestructAfter: null,
-      notes: '',
-      tagIds: [],
-    },
-  });
+  const updateForm = useCallback(<K extends keyof PostFormState>(key: K, value: PostFormState[K]) => {
+    setFormState((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
-  const watchedProfileId = form.watch('profileId');
-  const watchedScheduledAt = form.watch('scheduledAt');
-  const watchedText = form.watch('text');
-  const watchedTagIds = form.watch('tagIds');
-  const watchedNotes = form.watch('notes');
-  const watchedHasSpinnableText = form.watch('hasSpinnableText');
-  const watchedAutoDestructAfter = form.watch('autoDestructAfter');
-
-  const SPINNABLE_PATTERN = /\{[^{}|]+\|[^{}|]+\}/;
+  // Auto-enable spinnable detection on text change.
   useEffect(() => {
-    const hasSpinSyntax = SPINNABLE_PATTERN.test(watchedText);
-    if (hasSpinSyntax && !watchedHasSpinnableText) {
-      form.setValue('hasSpinnableText', true);
+    const hasSpinSyntax = SPINNABLE_PATTERN.test(formState.text);
+    if (hasSpinSyntax && !formState.hasSpinnableText) {
+      setFormState((prev) => ({ ...prev, hasSpinnableText: true }));
     }
-  }, [watchedText]); // eslint-disable-line react-hooks/exhaustive-deps -- only auto-enable, never auto-disable
+  }, [formState.text, formState.hasSpinnableText]);
 
-  const effectiveProfileId = isQueueMode ? (queueData?.profileId ?? '') : watchedProfileId;
+  const effectiveProfileId = isQueueMode ? (queueData?.profileId ?? '') : formState.profileId;
+  const selectedProfile = profiles?.find((p) => p.id === effectiveProfileId) ?? null;
+  const platform = selectedProfile?.platform ?? formState.platform;
 
-  const selectedProfilePlatform = (() => {
-    const profile = profiles?.find((p) => p.id === effectiveProfileId);
-    return profile?.platform ?? null;
-  })();
-
-  const platformLimits = selectedProfilePlatform
-    ? PLATFORM_MEDIA_LIMITS[selectedProfilePlatform]
-    : null;
-
+  const platformLimits = PLATFORM_MEDIA_LIMITS[platform];
   const maxFilesForPlatform = (() => {
     if (!platformLimits) return 4;
     const hasVideo = mediaItems.some((m) => m.mimeType.startsWith('video/'));
@@ -132,17 +121,44 @@ export default function NewPostPage() {
   const hasTranscodingMedia = mediaItems.some(
     (m) => m.transcodeStatus === 'pending' || m.transcodeStatus === 'processing',
   );
-  const hasFailedMedia = mediaItems.some(
-    (m) => m.transcodeStatus === 'failed',
-  );
+  const hasFailedMedia = mediaItems.some((m) => m.transcodeStatus === 'failed');
   const isMediaBlocking = hasTranscodingMedia || hasFailedMedia;
+
+  function handleProfileChange(profileId: string, newPlatform: Platform) {
+    const oldPlatform = formState.platform;
+    const result = applyPlatformSwitch(oldPlatform, newPlatform, {
+      text: formState.text,
+      visibility: formState.visibility,
+      linkUrl: formState.linkUrl ? formState.linkUrl : null,
+      isThread: formState.isThread,
+      threadContinuation: formState.isThread ? serializeThread(tweets) : '',
+      mediaIds: mediaItems.map((m) => m.id),
+    });
+    setFormState((prev) => ({
+      ...prev,
+      profileId,
+      platform: newPlatform,
+      text: result.state.text,
+      visibility: result.state.visibility ?? 'PUBLIC',
+      linkUrl: result.state.linkUrl ?? '',
+      isThread: result.state.isThread ?? false,
+    }));
+    if (result.state.mediaIds.length !== mediaItems.length) {
+      const keepIds = new Set(result.state.mediaIds);
+      setMediaItems((prev) => prev.filter((m) => keepIds.has(m.id)));
+    }
+    if (!result.state.isThread) {
+      setTweets([{ id: crypto.randomUUID(), text: result.state.text }]);
+    }
+    if (result.toast) toast.info(result.toast);
+  }
 
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
-      if (!selectedProfilePlatform) return;
+      if (!platform) return;
       for (const file of files) {
         try {
-          const response = await upload(file, effectiveProfileId, selectedProfilePlatform);
+          const response = await upload(file, effectiveProfileId, platform);
           setMediaItems((prev) => [
             ...prev,
             {
@@ -161,7 +177,7 @@ export default function NewPostPage() {
         }
       }
     },
-    [effectiveProfileId, selectedProfilePlatform, upload],
+    [effectiveProfileId, platform, upload],
   );
 
   function handleRemoveMedia(mediaId: string) {
@@ -199,32 +215,38 @@ export default function NewPostPage() {
     });
   }
 
-  const { data: conflicts } = useCheckConflicts(
-    effectiveProfileId,
-    watchedScheduledAt ?? '',
-  );
-
-  const selectedProfile = profiles?.find((p) => p.id === effectiveProfileId);
-  const previewProfile = selectedProfile
-    ? { displayName: selectedProfile.displayName, handle: `@${selectedProfile.handle}`, avatarUrl: selectedProfile.avatarUrl ?? '' }
-    : null;
-
   function handleThreadToggle(checked: boolean) {
     if (checked) {
-      const currentText = form.getValues('text');
+      const currentText = formState.text;
       if (currentText.includes('[[tweet]]')) {
         setTweets(deserializeThread(currentText));
       } else {
         setTweets([{ id: crypto.randomUUID(), text: currentText }]);
       }
     } else {
-      form.setValue('text', serializeThread(tweets));
+      updateForm('text', serializeThread(tweets));
     }
-    setIsThread(checked);
+    updateForm('isThread', checked);
   }
 
+  function handleScheduledAtChange(utcIso: string | null, wasAdjusted: boolean) {
+    updateForm('scheduledAt', utcIso);
+    if (utcIso && wasAdjusted) {
+      const adjustedLocal = DateTime.fromISO(utcIso).setZone(userTimezone).toFormat('h:mm a');
+      toast.info(`Adjusted to ${adjustedLocal} due to daylight saving time change.`);
+    }
+  }
+
+  const previewProfile = selectedProfile
+    ? {
+        displayName: selectedProfile.displayName,
+        handle: `@${selectedProfile.handle}`,
+        avatarUrl: selectedProfile.avatarUrl ?? '',
+      }
+    : null;
+
   function getSubmitText(): string {
-    return isThread ? serializeThread(tweets) : form.getValues('text');
+    return formState.isThread ? serializeThread(tweets) : formState.text;
   }
 
   const isSubmitting = createPostMutation.isPending || addToQueueMutation.isPending || isUploading;
@@ -232,23 +254,78 @@ export default function NewPostPage() {
   function getSubmitDisabledReason(): string | null {
     if (hasTranscodingMedia) return 'Video is still transcoding.';
     if (hasFailedMedia) return 'Fix or remove failed media before submitting.';
+    if (formState.platform === 'facebook' && formState.linkUrl && !URL_REGEX.test(formState.linkUrl)) {
+      return 'Enter a valid http or https URL.';
+    }
     return null;
+  }
+
+  function buildBasePayload(text: string) {
+    return {
+      profileId: formState.profileId,
+      text,
+      hasSpinnableText: formState.hasSpinnableText,
+      autoDestructAfter: formState.autoDestructAfter,
+      notes: formState.notes || null,
+      tagIds: formState.tagIds,
+      mediaIds: mediaItems.map((m) => m.id),
+    };
+  }
+
+  function buildPlatformPayload(action: 'schedule' | 'draft', text: string) {
+    const base = buildBasePayload(text);
+    const status = action === 'draft' ? ('draft' as const) : ('scheduled' as const);
+    const scheduledAt = action === 'schedule' ? formState.scheduledAt ?? undefined : undefined;
+
+    if (formState.platform === 'twitter') {
+      return {
+        platform: 'twitter' as const,
+        ...base,
+        status,
+        scheduledAt,
+        isThread: formState.isThread,
+      };
+    }
+    if (formState.platform === 'linkedin') {
+      return {
+        platform: 'linkedin' as const,
+        ...base,
+        status,
+        scheduledAt,
+        visibility: formState.visibility,
+      };
+    }
+    return {
+      platform: 'facebook' as const,
+      ...base,
+      status,
+      scheduledAt,
+      linkUrl: formState.linkUrl ? formState.linkUrl : null,
+    };
   }
 
   function validateAndSubmit(action: 'schedule' | 'draft' | 'queue') {
     const text = getSubmitText();
-    if (!text.trim()) {
-      toast.error('Tweet text is required.');
-      return;
-    }
+    const profileId = isQueueMode ? queueData?.profileId : formState.profileId;
 
-    if (action !== 'queue' && !form.getValues('profileId')) {
-      toast.error('Please select a profile.');
-      return;
+    if (action === 'queue') {
+      if (!text.trim() && mediaItems.length === 0) {
+        toast.error('Add text or media before saving.');
+        return;
+      }
+    } else {
+      if (!profileId) {
+        toast.error('Please select a profile.');
+        return;
+      }
+      if (!text.trim() && mediaItems.length === 0 && !(formState.platform === 'facebook' && formState.linkUrl)) {
+        toast.error('Add text, media, or a link before publishing.');
+        return;
+      }
     }
 
     if (action === 'schedule') {
-      const scheduledAt = form.getValues('scheduledAt');
+      const scheduledAt = formState.scheduledAt;
       if (!scheduledAt) {
         toast.error('Please select a scheduled time.');
         return;
@@ -272,98 +349,77 @@ export default function NewPostPage() {
     if (!queueId || !queueData) return;
 
     setRateLimitBlockError(null);
-    createPostMutation.mutate(
-      {
-        profileId: queueData.profileId,
-        text,
-        isThread,
-        status: 'draft',
-        hasSpinnableText: form.getValues('hasSpinnableText'),
-        autoDestructAfter: form.getValues('autoDestructAfter'),
-        notes: form.getValues('notes') || null,
-        tagIds: form.getValues('tagIds'),
-        mediaIds: mediaItems.map((m) => m.id),
+    // Queue posts always save as draft regardless of platform; queue cadence
+    // promotes them to scheduled at runtime.
+    const draftPayload = (() => {
+      const payload = buildPlatformPayload('draft', text);
+      // Override profileId with queue's profile.
+      return { ...payload, profileId: queueData.profileId };
+    })();
+
+    createPostMutation.mutate(draftPayload, {
+      onSuccess: (createdPost) => {
+        addToQueueMutation.mutate(createdPost.id, {
+          onSuccess: () => {
+            toast.success('Post added to queue.');
+            navigate(`/queues/${queueId}/posts`);
+          },
+          onError: (addError: Error) => {
+            toast.error(addError.message || 'Post created but failed to add to queue.');
+          },
+        });
       },
-      {
-        onSuccess: (createdPost) => {
-          addToQueueMutation.mutate(createdPost.id, {
-            onSuccess: () => {
-              toast.success('Post added to queue.');
-              navigate(`/queues/${queueId}/posts`);
-            },
-            onError: (addError: Error) => {
-              toast.error(addError.message || 'Post created but failed to add to queue.');
-            },
-          });
-        },
-        onError: (error: Error & { status?: number; body?: Record<string, unknown> }) => {
-          if (error.status === 409 && error.body?.code === 'twitter_budget_exceeded') {
-            setRateLimitBlockError({
-              code: 'twitter_budget_exceeded',
-              budget: Number(error.body.budget ?? 0),
-              currentCount: Number(error.body.currentCount ?? 0),
-            });
-            return;
-          }
-          toast.error(error.message || 'Failed to create post.');
-        },
-      },
-    );
+      onError: handleSubmitError,
+    });
   }
 
   function submitPost(action: 'schedule' | 'draft', text: string) {
-    const scheduledAt = action === 'schedule'
-      ? form.getValues('scheduledAt')
-      : null;
-
     setRateLimitBlockError(null);
-    createPostMutation.mutate(
-      {
-        profileId: form.getValues('profileId'),
-        text,
-        isThread,
-        status: action === 'draft' ? 'draft' : 'scheduled',
-        scheduledAt: scheduledAt ?? undefined,
-        hasSpinnableText: form.getValues('hasSpinnableText'),
-        autoDestructAfter: form.getValues('autoDestructAfter'),
-        notes: form.getValues('notes') || null,
-        tagIds: form.getValues('tagIds'),
-        mediaIds: mediaItems.map((m) => m.id),
+    const payload = buildPlatformPayload(action, text);
+
+    createPostMutation.mutate(payload, {
+      onSuccess: () => {
+        toast.success(action === 'draft' ? 'Draft saved.' : 'Post scheduled.');
+        navigate('/posts');
       },
-      {
-        onSuccess: () => {
-          toast.success(action === 'draft' ? 'Draft saved.' : 'Post scheduled.');
-          navigate('/posts');
-        },
-        onError: (error: Error & { status?: number; body?: Record<string, unknown> }) => {
-          if (error.status === 409 && error.body?.code === 'twitter_budget_exceeded') {
-            setRateLimitBlockError({
-              code: 'twitter_budget_exceeded',
-              budget: Number(error.body.budget ?? 0),
-              currentCount: Number(error.body.currentCount ?? 0),
-            });
-            return;
-          }
-          toast.error(error.message || 'Failed to create post.');
-        },
-      },
-    );
+      onError: handleSubmitError,
+    });
   }
 
-  function handleScheduledAtChange(localValue: string) {
-    if (localValue) {
-      const { utcIso, wasAdjusted } = localInputToUtc(localValue, userTimezone);
-      form.setValue('scheduledAt', utcIso);
-      if (wasAdjusted) {
-        const adjustedLocal = DateTime.fromISO(utcIso).setZone(userTimezone).toFormat('h:mm a');
-        toast.info(`Adjusted to ${adjustedLocal} due to daylight saving time change.`);
+  function handleSubmitError(
+    error: Error & { status?: number; body?: Record<string, unknown> },
+  ) {
+    if (error.status === 409) {
+      const code = error.body?.code;
+      if (code === 'twitter_budget_exceeded') {
+        setRateLimitBlockError({
+          code: 'twitter_budget_exceeded',
+          budget: Number(error.body?.budget ?? 0),
+          currentCount: Number(error.body?.currentCount ?? 0),
+        });
+        return;
       }
-    } else {
-      form.setValue('scheduledAt', null);
+      if (code === 'linkedin_rate_limit_exceeded' || code === 'facebook_rate_limit_exceeded') {
+        toast.error(
+          `${formState.platform === 'linkedin' ? 'LinkedIn' : 'Facebook'} rate limit reached. Save as draft instead.`,
+        );
+        return;
+      }
     }
+    toast.error(error.message || 'Failed to create post.');
   }
 
-  const previewText = isThread ? '' : watchedText;
+  // Derive the preview text. Threads are rendered via TweetPreview's threading
+  // UI rather than a single text block, so we pass empty text in that branch.
+  const previewText = formState.isThread ? '' : formState.text;
+  const previewMediaFiles = mediaItems.map((m) => ({
+    url: m.thumbnailUrl ?? '',
+    type: m.mimeType,
+  }));
+  const previewImageUrls = mediaItems
+    .filter((m) => m.mimeType.startsWith('image/'))
+    .map((m) => m.thumbnailUrl ?? '');
+  const previewVideoUrl = mediaItems.find((m) => m.mimeType.startsWith('video/'))?.thumbnailUrl ?? null;
 
   return (
     <main>
@@ -378,149 +434,125 @@ export default function NewPostPage() {
             onEditBudget={() => setIsRateLimitDialogOpen(true)}
           />
 
-          {/* Profile selector -- hidden in queue mode */}
+          {/* ProfilePicker drives platform selection (D-04). */}
           {!isQueueMode && (
-            <div className="space-y-2">
-              <Label htmlFor="profile-select">Profile</Label>
-              <Select
-                value={watchedProfileId}
-                onValueChange={(value) => form.setValue('profileId', value)}
-              >
-                <SelectTrigger id="profile-select">
-                  <SelectValue placeholder="Select a profile..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {profiles?.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.displayName} (@{profile.handle})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Single/Thread toggle */}
-          <div className="flex items-center gap-3">
-            <Switch
-              id="thread-toggle"
-              checked={isThread}
-              onCheckedChange={handleThreadToggle}
+            <ProfilePicker
+              value={formState.profileId}
+              onValueChange={handleProfileChange}
             />
-            <Label htmlFor="thread-toggle">Thread mode</Label>
-          </div>
-
-          {/* Text area or ThreadEditor */}
-          {isThread ? (
-            <ThreadEditor tweets={tweets} onChange={setTweets} />
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="tweet-text">Tweet text</Label>
-              <div className="relative">
-                <Textarea
-                  id="tweet-text"
-                  placeholder="What's happening?"
-                  value={watchedText}
-                  onChange={(e) => form.setValue('text', e.target.value)}
-                  rows={5}
-                />
-                <div className="absolute bottom-2 right-2">
-                  <CharacterCountRing text={watchedText} />
-                </div>
-              </div>
-            </div>
           )}
 
-          {/* Media upload */}
-          <MediaDropZone
-            platform={selectedProfilePlatform}
-            existingMediaCount={mediaItems.length}
-            maxFiles={maxFilesForPlatform}
-            onFilesSelected={handleFilesSelected}
-            disabled={isSubmitting}
-            hasVideo={mediaItems.some((m) => m.mimeType.startsWith('video/'))}
-          />
-          {mediaItems.length > 0 && (
-            <MediaThumbnailGrid
+          {/* Platform-specific subform */}
+          {formState.platform === 'twitter' && (
+            <TwitterPostFields
+              text={formState.text}
+              onTextChange={(value) => updateForm('text', value)}
+              isThread={formState.isThread}
+              onThreadToggle={handleThreadToggle}
+              tweets={tweets}
+              onTweetsChange={setTweets}
               mediaItems={mediaItems}
               uploadingFiles={uploadingFiles}
-              onRemove={handleRemoveMedia}
-              onReorder={handleReorderMedia}
+              maxFiles={maxFilesForPlatform}
+              onFilesSelected={handleFilesSelected}
+              onRemoveMedia={handleRemoveMedia}
+              onReorderMedia={handleReorderMedia}
               onRetryTranscode={handleRetryTranscode}
-              readOnly={false}
+              disabled={isSubmitting}
             />
           )}
-
-          {/* Schedule datetime picker -- hidden in queue mode */}
-          {!isQueueMode && (
-            <div className="space-y-2">
-              <Label htmlFor="schedule-datetime">Schedule</Label>
-              <Input
-                id="schedule-datetime"
-                type="datetime-local"
-                value={watchedScheduledAt ? utcToLocalInput(watchedScheduledAt, userTimezone) : ''}
-                onChange={(e) => handleScheduledAtChange(e.target.value)}
+          {formState.platform === 'linkedin' && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="post-text">Post text</Label>
+                <div className="relative">
+                  <Textarea
+                    id="post-text"
+                    placeholder="Share something with your network..."
+                    value={formState.text}
+                    onChange={(event) => updateForm('text', event.target.value)}
+                    rows={5}
+                  />
+                  <div className="absolute bottom-2 right-2">
+                    <CharacterCountRing text={formState.text} />
+                  </div>
+                </div>
+              </div>
+              <LinkedInPostFields
+                visibility={formState.visibility}
+                onVisibilityChange={(value) => updateForm('visibility', value)}
+                mediaItems={mediaItems}
+                uploadingFiles={uploadingFiles}
+                onFilesSelected={handleFilesSelected}
+                onRemoveMedia={handleRemoveMedia}
+                onReorderMedia={handleReorderMedia}
+                onRetryTranscode={handleRetryTranscode}
+                disabled={isSubmitting}
               />
-              <p className="text-xs text-muted-foreground">
-                Times shown in {userTimezone.replace(/_/g, ' ')}
-              </p>
-              {conflicts && conflicts.length > 0 && (
-                <ScheduleConflictBanner conflicts={conflicts} />
-              )}
-              {rateLimitBlockError && (
-                <RateLimitBlockError
-                  error={rateLimitBlockError}
-                  onRaiseBudget={() => setIsRateLimitDialogOpen(true)}
-                />
-              )}
-            </div>
+            </>
+          )}
+          {formState.platform === 'facebook' && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="post-text">Post text</Label>
+                <div className="relative">
+                  <Textarea
+                    id="post-text"
+                    placeholder="What's on your mind?"
+                    value={formState.text}
+                    onChange={(event) => updateForm('text', event.target.value)}
+                    rows={5}
+                  />
+                  <div className="absolute bottom-2 right-2">
+                    <CharacterCountRing text={formState.text} />
+                  </div>
+                </div>
+              </div>
+              <FacebookPostFields
+                linkUrl={formState.linkUrl}
+                onLinkUrlChange={(value) => updateForm('linkUrl', value)}
+                linkUrlError={
+                  formState.linkUrl && !URL_REGEX.test(formState.linkUrl)
+                    ? 'Enter a valid http or https URL.'
+                    : null
+                }
+                mediaItems={mediaItems}
+                uploadingFiles={uploadingFiles}
+                onFilesSelected={handleFilesSelected}
+                onRemoveMedia={handleRemoveMedia}
+                onReorderMedia={handleReorderMedia}
+                onRetryTranscode={handleRetryTranscode}
+                disabled={isSubmitting}
+              />
+            </>
           )}
 
-          {/* Tags selector */}
-          <div className="space-y-2">
-            <Label>Tags</Label>
-            <TagSelector
-              selected={watchedTagIds}
-              onChange={(ids) => form.setValue('tagIds', ids)}
-              onManage={() => setIsTagManageOpen(true)}
-              tags={tagList ?? []}
-            />
-          </div>
-
-          {/* Notes textarea */}
-          <div className="space-y-2">
-            <Label htmlFor="post-notes">Notes</Label>
-            <Textarea
-              id="post-notes"
-              placeholder="Internal notes (not published)..."
-              value={watchedNotes}
-              onChange={(e) => form.setValue('notes', e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          {/* Spinnable text toggle */}
-          <div className="flex items-center gap-3">
-            <Switch
-              id="spinnable-toggle"
-              checked={watchedHasSpinnableText}
-              onCheckedChange={(checked) => form.setValue('hasSpinnableText', checked)}
-            />
-            <div>
-              <Label htmlFor="spinnable-toggle">Spinnable text</Label>
-              <p className="text-xs text-muted-foreground">
-                Use {'{'}option1|option2{'}'} syntax. One variant is randomly chosen at publish time.
-              </p>
-            </div>
-          </div>
-
-          {/* Auto-destruct picker */}
-          <AutoDestructPicker
-            value={watchedAutoDestructAfter}
-            onChange={(value) => form.setValue('autoDestructAfter', value)}
+          {/* SHARED POST-CMN BLOCK (B-03) — every common control lives here */}
+          <SharedPostFields
+            mode={isQueueMode ? 'queue' : 'new'}
+            userTimezone={userTimezone}
+            effectiveProfileId={effectiveProfileId}
+            scheduledAt={formState.scheduledAt}
+            onScheduledAtChange={handleScheduledAtChange}
+            tagIds={formState.tagIds}
+            onTagIdsChange={(ids) => updateForm('tagIds', ids)}
+            onOpenTagManagement={() => setIsTagManageOpen(true)}
+            notes={formState.notes}
+            onNotesChange={(value) => updateForm('notes', value)}
+            hasSpinnableText={formState.hasSpinnableText}
+            onHasSpinnableTextChange={(value) => updateForm('hasSpinnableText', value)}
+            autoDestructAfter={formState.autoDestructAfter}
+            onAutoDestructAfterChange={(value) => updateForm('autoDestructAfter', value)}
           />
 
-          {/* Submit controls */}
+          {rateLimitBlockError && (
+            <RateLimitBlockError
+              error={rateLimitBlockError}
+              onRaiseBudget={() => setIsRateLimitDialogOpen(true)}
+            />
+          )}
+
+          {/* POST-CMN-06: Save as Draft is delivered by SplitButton's draft option. */}
           {(() => {
             const disabledReason = getSubmitDisabledReason();
             const scheduleDisabled = isSubmitting || !!disabledReason;
@@ -569,12 +601,36 @@ export default function NewPostPage() {
 
         {/* Right column: live preview */}
         <div className="lg:w-[40%]">
-          <TweetPreview
-            text={previewText}
-            profile={previewProfile}
-            isThread={isThread}
-            tweets={isThread ? tweets : undefined}
-          />
+          {formState.platform === 'twitter' && (
+            <TweetPreview
+              text={previewText}
+              profile={previewProfile}
+              isThread={formState.isThread}
+              tweets={formState.isThread ? tweets : undefined}
+              mediaFiles={previewMediaFiles}
+            />
+          )}
+          {formState.platform === 'linkedin' && (
+            <LinkedInPreview
+              text={formState.text}
+              visibility={formState.visibility}
+              profileName={selectedProfile?.displayName}
+              profileAvatarUrl={selectedProfile?.avatarUrl}
+              imageUrl={previewImageUrls[0] ?? null}
+              scheduledAt={formState.scheduledAt}
+            />
+          )}
+          {formState.platform === 'facebook' && (
+            <FacebookPreview
+              text={formState.text}
+              imageUrls={previewImageUrls}
+              linkUrl={formState.linkUrl ? formState.linkUrl : null}
+              videoUrl={previewVideoUrl}
+              profileName={selectedProfile?.displayName}
+              profileAvatarUrl={selectedProfile?.avatarUrl}
+              scheduledAt={formState.scheduledAt}
+            />
+          )}
         </div>
       </div>
 

@@ -14,6 +14,11 @@ export function RateLimitBanner({ profileId, onEditBudget }: RateLimitBannerProp
     return null;
   }
 
+  // Twitter-specific banner. Plan 05b will add per-platform copy + the daily/
+  // hourly variants; for now this banner only fires for Twitter (the existing
+  // monthly budget flow), so we narrow on the discriminator.
+  if (data.platform !== 'twitter') return null;
+
   const percent = data.budget > 0
     ? Math.round((data.currentCount / data.budget) * 100)
     : 0;
