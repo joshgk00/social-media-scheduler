@@ -32,4 +32,5 @@ export * from './schemas/media.js';
 export * from './lib/error-classifier.js';
 export * from './lib/spinnable-text.js';
 export * from './lib/schedule-evaluation.js';
+export * from './lib/platform-text-limits.js';
 export * from './rate-limit/check-budget.js';
