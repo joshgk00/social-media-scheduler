@@ -324,12 +324,17 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
 
     const { UnrecoverableError } = await import('bullmq');
-    await expect(
-      capturedHandler!(fakeJob({ profileId: 'profile-li-1', correlationId: 'corr-cfg' })),
-    ).rejects.toBeInstanceOf(OAuthProviderConfigError);
-    await expect(
-      capturedHandler!(fakeJob({ profileId: 'profile-li-1', correlationId: 'corr-cfg' })),
-    ).rejects.toBeInstanceOf(UnrecoverableError);
+    // Catch once and assert both shapes (OAuthProviderConfigError extends
+    // UnrecoverableError so BullMQ stops retrying immediately).
+    const err = await capturedHandler!(
+      fakeJob({ profileId: 'profile-li-1', correlationId: 'corr-cfg' }),
+    ).then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(OAuthProviderConfigError);
+    expect(err).toBeInstanceOf(UnrecoverableError);
+    expect((err as OAuthProviderConfigError).missingEnvVar).toBe('LINKEDIN_CLIENT_ID');
 
     // No HTTP call attempted with empty credentials.
     expect(fetchMock).not.toHaveBeenCalled();
