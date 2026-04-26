@@ -1,6 +1,4 @@
 ALTER TABLE "social_profiles" DROP CONSTRAINT "social_profiles_user_platform_account";--> statement-breakpoint
-ALTER TABLE "post_media" DROP CONSTRAINT "post_media_post_id_posts_id_fk";
---> statement-breakpoint
 ALTER TABLE "social_profiles" ADD COLUMN "platform_account_id" varchar(255);--> statement-breakpoint
 ALTER TABLE "social_profiles" ADD COLUMN "oauth2_access_token_ciphertext" text;--> statement-breakpoint
 ALTER TABLE "social_profiles" ADD COLUMN "oauth2_access_token_iv" varchar(64);--> statement-breakpoint
@@ -13,5 +11,4 @@ ALTER TABLE "social_profiles" ADD COLUMN "refresh_token_expires_at" timestamp wi
 ALTER TABLE "social_profiles" ADD COLUMN "token_status" varchar(20) DEFAULT 'active' NOT NULL;--> statement-breakpoint
 ALTER TABLE "social_profiles" ADD COLUMN "token_health_checked_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "social_profiles" ADD COLUMN "notes" text;--> statement-breakpoint
-ALTER TABLE "post_media" ADD CONSTRAINT "post_media_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "social_profiles" ADD CONSTRAINT "social_profiles_user_platform_account" UNIQUE NULLS NOT DISTINCT("user_id","platform","platform_user_id","platform_account_id");
