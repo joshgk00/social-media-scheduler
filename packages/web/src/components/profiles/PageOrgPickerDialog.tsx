@@ -29,8 +29,11 @@ export interface MismatchPayload {
   // mismatch was detected — threaded through so "Connect as a new profile"
   // persists the originally-chosen account instead of falling back to
   // `accounts[0]` (which is always Personal Profile for LinkedIn and the
-  // first page for Facebook). See CR-01 in REVIEW.md.
-  platformAccountId: string | null;
+  // first page for Facebook). See CR-01 in REVIEW.md. CR-08: non-null here
+  // because the picker only emits a mismatch AFTER the user picks an
+  // account; the entry-point flow (no selection context) goes through
+  // ProfilesPage with a null sentinel handled by ReconnectMismatchDialog.
+  platformAccountId: string;
 }
 
 interface PageOrgPickerDialogProps {
@@ -97,7 +100,7 @@ export function PageOrgPickerDialog({
   useEffect(() => {
     if (accounts.length === 1 && selectedId === null) {
       // Auto-select the single option so Finalize is immediately actionable.
-      setSelectedId(accounts[0].platformAccountId ?? '__personal__');
+      setSelectedId(accounts[0].platformAccountId);
     }
   }, [accounts, selectedId]);
 
@@ -113,12 +116,14 @@ export function PageOrgPickerDialog({
 
   async function handleFinalize() {
     if (!tempToken || !selectedId) return;
-    const platformAccountId =
-      selectedId === '__personal__' ? null : selectedId;
+    // selectedId IS the platformAccountId — the previous '__personal__'
+    // sentinel was dead defensive code (the server always populates the
+    // personal account's id via userInfo.sub for LinkedIn). See CR-08.
+    const platformAccountId = selectedId;
     try {
       await finalize.mutateAsync({ tempToken, platformAccountId });
       const selected = accounts.find(
-        (a) => (a.platformAccountId ?? '__personal__') === selectedId,
+        (a) => a.platformAccountId === selectedId,
       );
       toast.success(`${selected?.displayName ?? 'Profile'} connected.`);
       onSuccess?.();
@@ -151,7 +156,7 @@ export function PageOrgPickerDialog({
     (pendingQuery.error as { status?: number } | null)?.status;
   const hasSessionDriftError = pendingErrorStatus === 403;
   const selectedAccount = accounts.find(
-    (a) => (a.platformAccountId ?? '__personal__') === selectedId,
+    (a) => a.platformAccountId === selectedId,
   );
   const finalizeLabel =
     selectedAccount !== undefined
@@ -203,7 +208,7 @@ export function PageOrgPickerDialog({
               aria-label="Account list"
             >
               {accounts.map((account) => {
-                const id = account.platformAccountId ?? '__personal__';
+                const id = account.platformAccountId;
                 const { title } = describeAccount(platform, account);
                 return (
                   <div

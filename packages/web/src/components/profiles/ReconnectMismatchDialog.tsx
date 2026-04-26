@@ -44,8 +44,15 @@ export function ReconnectMismatchDialog({
     // the first account only when no selection context exists (e.g. the
     // mismatch dialog was opened directly from an `oauth_error` query param).
     const accounts = pendingQuery.data?.accounts ?? [];
-    const resolvedAccountId =
-      platformAccountId ?? accounts[0]?.platformAccountId ?? null;
+    const resolvedAccountId = platformAccountId ?? accounts[0]?.platformAccountId;
+    // CR-08: server's finalizeAsNewSchema requires a non-empty
+    // platformAccountId. If neither the picker selection nor a fallback
+    // account is available we can't satisfy the contract — surface a toast
+    // instead of letting the request 400.
+    if (!resolvedAccountId) {
+      toast.error("Couldn't create profile: no account available to attach.");
+      return;
+    }
     try {
       await finalizeAsNew.mutateAsync({
         tempToken,

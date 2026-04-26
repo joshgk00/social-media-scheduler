@@ -50,7 +50,9 @@ describe('PageOrgPickerDialog', () => {
       platform: 'linkedin',
       accounts: [
         {
-          platformAccountId: null,
+          // CR-08: server populates platformAccountId for personal accounts
+          // via userInfo.sub — mirror that here.
+          platformAccountId: 'urn:li:person:josh',
           kind: 'personal',
           displayName: 'Josh Slaughter',
         },
@@ -105,7 +107,11 @@ describe('PageOrgPickerDialog', () => {
       platform: 'linkedin',
       accounts: [
         {
-          platformAccountId: null,
+          // CR-08: server populates platformAccountId for personal LinkedIn
+          // accounts via userInfo.sub. The picker now threads that id through
+          // (instead of a null sentinel) so finalizeAsNew has a non-empty id
+          // to satisfy the server schema.
+          platformAccountId: 'urn:li:person:josh',
           kind: 'personal',
           displayName: 'Josh Slaughter',
         },
@@ -140,7 +146,7 @@ describe('PageOrgPickerDialog', () => {
         existingHandle: 'oldhandle',
         incomingHandle: 'newhandle',
         tempToken: TEMP_TOKEN,
-        platformAccountId: null,
+        platformAccountId: 'urn:li:person:josh',
       });
     });
   });

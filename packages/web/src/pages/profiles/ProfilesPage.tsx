@@ -164,7 +164,10 @@ export default function ProfilesPage() {
     existingHandle: string;
     incomingHandle: string;
     tempToken: string;
-    platformAccountId: string | null;
+    // Picker emits non-null after a selection (CR-08). The mismatch-dialog
+    // state is the wider `string | null` union so the entry-point flow above
+    // (which has no selection) can also populate it.
+    platformAccountId: string;
   }) {
     setMismatchDialog({
       existingHandle: payload.existingHandle,

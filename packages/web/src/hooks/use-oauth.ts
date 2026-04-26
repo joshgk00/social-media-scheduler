@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { FinalizeOAuthInput } from '@sms/shared';
 import { apiClient } from '../lib/api-client';
 import type { Platform } from './use-profiles';
 
@@ -6,9 +7,11 @@ import type { Platform } from './use-profiles';
 // the previous interface declared `handle` and `avatarUrl`, which the API
 // never sends — they've been dropped so the type reflects the actual wire
 // contract and the picker's describeAccount() branches on fields that are
-// guaranteed to arrive.
+// guaranteed to arrive. CR-08: platformAccountId is now non-null because the
+// server always populates it (userInfo.sub / org.orgUrn / page.id) — leaving
+// it nullable hid the FinalizeOAuthInput drift Copilot flagged.
 export interface PendingAccountOption {
-  platformAccountId: string | null;
+  platformAccountId: string;
   displayName: string;
   subLabel?: string;
   kind?: 'personal' | 'organization' | 'page';
@@ -22,10 +25,10 @@ export interface PendingSelection {
   accounts: PendingAccountOption[];
 }
 
-export interface FinalizeOAuthInput {
-  tempToken: string;
-  platformAccountId: string | null;
-}
+// Re-export the validated server contract so call sites match the shape the
+// API enforces (z.string().min(1)) — the previous local declaration allowed
+// `string | null`, which would 400 if null ever made it to the wire.
+export type { FinalizeOAuthInput };
 
 // Thrown by `useFinalizeOAuthConnection` when the server returns HTTP 409
 // with `error: 'mismatched_account'`. Callers catch this to open
