@@ -42,7 +42,7 @@ const OUTCOME_META: Record<PostAttemptOutcome, OutcomeMeta> = {
   success: {
     label: 'Success',
     icon: CheckCircle2,
-    colorClass: 'text-[--color-success]',
+    colorClass: 'text-success',
   },
   transient_fail: {
     label: 'Transient failure — will retry',

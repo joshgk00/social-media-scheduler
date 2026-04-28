@@ -23,9 +23,9 @@ const STATUS_STYLES: Record<PostStatus, StatusStyle> = {
     withSpinner: true,
   },
   published: {
-    bg: 'bg-[--color-success]/10',
-    text: 'text-[--color-success]',
-    border: 'border-[--color-success]/30',
+    bg: 'bg-success/10',
+    text: 'text-success',
+    border: 'border-success/30',
     label: 'Published',
   },
   failed: {
@@ -41,9 +41,9 @@ const STATUS_STYLES: Record<PostStatus, StatusStyle> = {
     label: 'Auto-destructing',
   },
   destroyed: {
-    bg: 'bg-[--color-success]/10',
-    text: 'text-[--color-success]/70',
-    border: 'border-[--color-success]/20',
+    bg: 'bg-success/10',
+    text: 'text-success/70',
+    border: 'border-success/20',
     label: 'Destroyed',
   },
 };

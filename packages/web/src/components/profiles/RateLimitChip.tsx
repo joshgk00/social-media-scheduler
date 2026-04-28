@@ -7,7 +7,7 @@ import { formatResetTime, type Platform } from '../../lib/format-reset-time';
 // on ProfileCard" defines:
 //   - layout: `[dot] {used}/{limit} · Resets in {relative}`
 //   - bands:  ok  (< 50%) → green dot
-//             warn (50-80%) → yellow dot, numeric in `text-[--color-warning]`
+//             warn (50-80%) → yellow dot, numeric in `text-warning`
 //             block (> 80%) → red dot, numeric in `text-destructive`
 //
 // Twitter consumes the same chip but the reset string is "Resets {Mon DD}"
@@ -29,14 +29,14 @@ function resolveBand(percent: number): ChipState {
 }
 
 const DOT_CLASS: Record<ChipState, string> = {
-  ok: 'bg-[--color-success]',
-  warn: 'bg-[--color-warning]',
+  ok: 'bg-success',
+  warn: 'bg-warning',
   block: 'bg-destructive',
 };
 
 const NUMERIC_CLASS: Record<ChipState, string> = {
   ok: '',
-  warn: 'text-[--color-warning]',
+  warn: 'text-warning',
   block: 'text-destructive',
 };
 

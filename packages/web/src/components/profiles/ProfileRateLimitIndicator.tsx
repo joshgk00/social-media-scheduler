@@ -13,14 +13,14 @@ function resolveState(percent: number, warnThreshold: number): IndicatorState {
 }
 
 const DOT_CLASS: Record<IndicatorState, string> = {
-  ok: 'bg-[--color-success]',
-  warn: 'bg-[--color-warning]',
+  ok: 'bg-success',
+  warn: 'bg-warning',
   block: 'bg-destructive',
 };
 
 const TEXT_CLASS: Record<IndicatorState, string> = {
-  ok: 'text-[--color-success]',
-  warn: 'text-[--color-warning]',
+  ok: 'text-success',
+  warn: 'text-warning',
   block: 'text-destructive',
 };
 
