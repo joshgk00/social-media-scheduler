@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 08-05b-dashboard-and-rate-limit-chip-PLAN.md
-last_updated: "2026-04-26T15:23:20.768Z"
+stopped_at: "Phase 08-07 Task 1 complete (suite green); checkpoint:human-verify pending operator sign-off"
+last_updated: "2026-04-26T15:27:57.354Z"
 progress:
   total_phases: 16
   completed_phases: 10
@@ -77,6 +77,7 @@ for current phase.
 - [Phase 08-linkedin-facebook-post-creation]: Web layer keeps existing local-state media flow (mediaItems, uploadingFiles, dnd-kit reorder) instead of moving to FormProvider tree — preserves every Phase 6 media feature without sweeping refactor
 - [Phase 08-linkedin-facebook-post-creation]: useAllProfilesRateLimits uses TanStack Query select() to flatten {profiles: [...]} envelope into flat RateLimitState[] — matches Plan 01 RED test contract and real API in one hook
 - [Phase 08-linkedin-facebook-post-creation]: apiClient.getRateLimit re-routed to platform-aware /api/rate-limit/:profileId endpoint — keeps existing test mocks working while delivering discriminated RateLimitState shape
+- [Phase 08]: Web package test script added to package.json — pnpm -r test --run was silently skipping @sms/web; deviation Rule 2 closed at Plan 07 Task 1 to satisfy 08-VALIDATION.md per-task verification map
 
 ### Pending Todos
 
@@ -89,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-26T15:23:20.763Z
-Stopped at: Completed 08-05b-dashboard-and-rate-limit-chip-PLAN.md
+Last session: 2026-04-26T15:27:52.782Z
+Stopped at: Phase 08-07 Task 1 complete (suite green); checkpoint:human-verify pending operator sign-off
 Resume file: None
