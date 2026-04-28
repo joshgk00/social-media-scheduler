@@ -14,14 +14,14 @@ type BadgeState = 'ok' | 'warn' | 'block';
 // ProfileRateLimitIndicator. Class strings are copied verbatim so the two
 // components render identical dots.
 const DOT_CLASS: Record<BadgeState, string> = {
-  ok: 'bg-[--color-success]',
-  warn: 'bg-[--color-warning]',
+  ok: 'bg-success',
+  warn: 'bg-warning',
   block: 'bg-destructive',
 };
 
 const TEXT_CLASS: Record<BadgeState, string> = {
-  ok: 'text-[--color-success]',
-  warn: 'text-[--color-warning]',
+  ok: 'text-success',
+  warn: 'text-warning',
   block: 'text-destructive',
 };
 

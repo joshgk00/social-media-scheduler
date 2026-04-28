@@ -43,14 +43,14 @@ function resolveBand(percent: number): Band {
 }
 
 const BAND_BAR_CLASS: Record<Band, string> = {
-  green: 'bg-[--color-success]',
-  yellow: 'bg-[--color-warning]',
+  green: 'bg-success',
+  yellow: 'bg-warning',
   red: 'bg-destructive',
 };
 
 const BAND_DOT_CLASS: Record<Band, string> = {
-  green: 'bg-[--color-success]',
-  yellow: 'bg-[--color-warning]',
+  green: 'bg-success',
+  yellow: 'bg-warning',
   red: 'bg-destructive',
 };
 

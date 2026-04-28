@@ -78,9 +78,10 @@ describe('<RateLimitsCard />', () => {
     });
     expect(bar).toHaveAttribute('aria-valuenow', '30');
     expect(bar).toHaveAttribute('aria-valuemax', '100');
-    // Color band: green dot. Implementation uses `bg-[--color-success]`.
+    // Color band: green dot.
     const dot = bar.parentElement?.querySelector('[data-band="green"]');
     expect(dot).not.toBeNull();
+    expect(dot).toHaveClass('bg-success');
   });
 
   it('applies yellow band when usage 50-80% (75/100)', () => {
@@ -101,6 +102,7 @@ describe('<RateLimitsCard />', () => {
     renderWithQuery(<RateLimitsCard />);
     const dot = screen.getByLabelText(/usage band: yellow/i);
     expect(dot).toBeInTheDocument();
+    expect(dot).toHaveClass('bg-warning');
   });
 
   it('applies red band when usage >80% (95/100)', () => {
@@ -121,6 +123,7 @@ describe('<RateLimitsCard />', () => {
     renderWithQuery(<RateLimitsCard />);
     const dot = screen.getByLabelText(/usage band: red/i);
     expect(dot).toBeInTheDocument();
+    expect(dot).toHaveClass('bg-destructive');
   });
 
   it('progress bar exposes role="progressbar" with aria-valuenow + aria-valuemax + aria-label', () => {
