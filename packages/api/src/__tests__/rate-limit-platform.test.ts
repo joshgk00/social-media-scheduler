@@ -1,10 +1,9 @@
-// Wave 0 RED stubs for the per-platform pre-flight rate-limit checks.
-// LIMIT-06 (Facebook hourly window), LIMIT-07 (LinkedIn daily window),
-// T-API-02 (race protection via single CAS UPDATE), T-LIMITS-01 (window
-// reset atomicity).
-//
-// Plan 03 ships `checkLinkedInBudgetWithDb` / `checkFacebookBudgetWithDb`
-// in `../services/rate-limit.service.js`. These tests fail until then.
+// Per-platform pre-flight rate-limit checks (LIMIT-06 Facebook hourly,
+// LIMIT-07 LinkedIn daily). The API helpers are read-only — the worker's
+// post-publish path is the single writer for `linkedin_daily_count` /
+// `facebook_hourly_count`. T-API-02 / T-LIMITS-01 race protection is
+// enforced by the worker's atomic CASE-WHEN UPDATE (see PR #38 feedback);
+// the API pre-flight is best-effort UX gating.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
@@ -122,7 +121,12 @@ describe('checkLinkedInBudgetWithDb (LIMIT-07, daily window)', () => {
     expect(result.currentCount).toBeLessThanOrEqual(1);
   });
 
-  it('atomic CAS: the UPDATE statement runs once per call (T-API-02)', async () => {
+  it('does NOT mutate the DB — pre-flight is read-only (single-writer rule)', async () => {
+    // Regression guard for PR #38: API pre-flight previously incremented
+    // `linkedin_daily_count` here, and the worker's success path also
+    // incremented it on publish — double-counting every scheduled post and
+    // permanently consuming window capacity for drafts/cancellations.
+    // The worker is now the only writer.
     const db = buildProfileMockDb({
       platform: 'linkedin',
       dailyBudget: 100,
@@ -136,8 +140,7 @@ describe('checkLinkedInBudgetWithDb (LIMIT-07, daily window)', () => {
       now: new Date('2026-04-26T12:00:00Z'),
     });
 
-    // Only ONE update — separate read-then-write would fail T-API-02.
-    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(db.update).not.toHaveBeenCalled();
   });
 });
 
@@ -184,12 +187,15 @@ describe('checkFacebookBudgetWithDb (LIMIT-06, rolling 1-hour window, Pitfall 2)
     expect(result.currentCount).toBeLessThanOrEqual(1);
   });
 
-  it('window reset is a single atomic CAS UPDATE (T-LIMITS-01)', async () => {
+  it('does NOT mutate the DB — pre-flight is read-only (single-writer rule)', async () => {
+    // Regression guard for PR #38: API pre-flight previously incremented
+    // `facebook_hourly_count` here, doubling-up with the worker's success
+    // path. The worker is now the only writer.
     const db = buildProfileMockDb({
       platform: 'facebook',
       hourlyBudget: 25,
       windowCount: 20,
-      windowStartUtc: new Date('2026-04-26T10:00:00Z'), // 2h old
+      windowStartUtc: new Date('2026-04-26T10:00:00Z'),
     });
 
     await checkFacebookBudgetWithDb(db, {
@@ -198,36 +204,6 @@ describe('checkFacebookBudgetWithDb (LIMIT-06, rolling 1-hour window, Pitfall 2)
       now: new Date('2026-04-26T12:00:00Z'),
     });
 
-    // ONE statement that does both the reset and increment in CASE-WHEN form.
-    expect(db.update).toHaveBeenCalledTimes(1);
-  });
-
-  it('two concurrent calls do not double-increment counter (T-API-02 race protection)', async () => {
-    // Drives an integration-test follow-up. For Wave 0 this stub asserts the
-    // service exposes a CAS-shaped contract: a single UPDATE per call with
-    // a WHERE that includes the expected windowCount. Plan 03 hardens this
-    // with a real concurrency test against testcontainers.
-    const db = buildProfileMockDb({
-      platform: 'facebook',
-      hourlyBudget: 25,
-      windowCount: 0,
-      windowStartUtc: new Date('2026-04-26T11:30:00Z'),
-    });
-
-    await Promise.all([
-      checkFacebookBudgetWithDb(db, {
-        profileId: PROFILE_ID,
-        additionalCount: 1,
-        now: new Date('2026-04-26T12:00:00Z'),
-      }),
-      checkFacebookBudgetWithDb(db, {
-        profileId: PROFILE_ID,
-        additionalCount: 1,
-        now: new Date('2026-04-26T12:00:00Z'),
-      }),
-    ]);
-
-    // Each call issues exactly one UPDATE — total of 2.
-    expect(db.update).toHaveBeenCalledTimes(2);
+    expect(db.update).not.toHaveBeenCalled();
   });
 });

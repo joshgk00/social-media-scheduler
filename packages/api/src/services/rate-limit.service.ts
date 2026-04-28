@@ -267,23 +267,30 @@ export async function loadFacebookUsage(
 }
 
 export interface PlatformBudgetCheckOutcome extends PlatformBudgetCheckResult {
-  /** Post-CAS-update current count (already reflects `additionalCount` increment). */
+  /** Projected current count (snapshot.currentCount + additionalCount); NOT mutated in DB. */
   currentCount: number;
   /** Effective snapshot after window reset rules — useful for 409 bodies. */
   snapshot: PlatformRateLimitSnapshot;
 }
 
 /**
- * LinkedIn pre-flight (LIMIT-07). Loads the live snapshot (applying the
- * UTC-midnight reset rule), runs the pure budget projection, then issues a
- * single-statement CASE-WHEN UPDATE that atomically resets the window or
- * increments the counter.
+ * LinkedIn pre-flight (LIMIT-07). Read-only: loads the live snapshot
+ * (applying the UTC-midnight reset rule via `loadLinkedInUsage`) and runs
+ * the pure budget projection.
  *
- * The single-statement UPDATE is the T-API-02 / T-LIMITS-01 mitigation: two
- * concurrent UPDATEs serialize on the row lock, so even if both passed the
- * SELECT pre-flight, the second's count after increment correctly reflects
- * the first's bump (the worker's runtime re-check then catches the over-cap
- * second post and aborts).
+ * Single-writer rule: only the worker's post-publish success path
+ * (`packages/worker/src/post-lifecycle.service.ts` Phase 3) mutates
+ * `linkedin_daily_count` / `linkedin_window_start_utc`. If the API also
+ * incremented at schedule time, every scheduled post would be counted twice
+ * (once at API pre-flight, once at worker publish), and drafts/cancelled
+ * posts would permanently consume window capacity until reset.
+ *
+ * Race semantics: the API pre-flight is best-effort UX gating. The
+ * authoritative race protection (T-API-02 / T-LIMITS-01) is the worker's
+ * atomic CASE-WHEN UPDATE on publish — concurrent publishes serialize on
+ * the row lock, and the worker's runtime re-check (`ctx.checkBudget` ->
+ * `rate_limit_exhausted` abort) catches any post that slips past the
+ * relaxed API pre-flight.
  */
 export async function checkLinkedInBudgetWithDb(
   db: Db,
@@ -302,28 +309,10 @@ export async function checkLinkedInBudgetWithDb(
     args.additionalCount,
   );
 
-  // Atomic CAS-style increment. CASE-WHEN handles both reset (expired
-  // window) and increment in a single statement. The row lock held by this
-  // UPDATE is what serializes concurrent callers (T-API-02 / T-LIMITS-01).
-  const dayStart = utcDayStart(now);
-  await db
-    .update(socialProfiles)
-    .set({
-      linkedinDailyCount: sql`CASE
-        WHEN ${socialProfiles.linkedinWindowStartUtc} IS NULL
-          OR ${socialProfiles.linkedinWindowStartUtc} < ${dayStart}
-          THEN ${args.additionalCount}
-        ELSE ${socialProfiles.linkedinDailyCount} + ${args.additionalCount}
-      END`,
-      linkedinWindowStartUtc: sql`CASE
-        WHEN ${socialProfiles.linkedinWindowStartUtc} IS NULL
-          OR ${socialProfiles.linkedinWindowStartUtc} < ${dayStart}
-          THEN ${dayStart}
-        ELSE ${socialProfiles.linkedinWindowStartUtc}
-      END`,
-      updatedAt: new Date(),
-    })
-    .where(eq(socialProfiles.id, args.profileId));
+  // Read-only: counter mutation lives in the worker's success path (single
+  // writer rule — see docstring). The window-expiry reset already happens
+  // implicitly inside `loadLinkedInUsage`, which returns count=0 when the
+  // stored window is older than today's UTC midnight.
 
   return {
     ...projected,
@@ -333,8 +322,9 @@ export async function checkLinkedInBudgetWithDb(
 }
 
 /**
- * Facebook pre-flight (LIMIT-06). Same SELECT-then-CAS-UPDATE pattern as
- * LinkedIn; the window is rolling-hour instead of UTC-day.
+ * Facebook pre-flight (LIMIT-06). Read-only mirror of `checkLinkedInBudgetWithDb`
+ * with rolling-hour window semantics instead of UTC-day. Same single-writer
+ * rule applies: counter mutation lives only in the worker's success path.
  *
  * CRITICAL: callers must pass `mediaIds.length + 1` for multi-photo posts
  * because each photo POST counts against the hourly cap independently of
@@ -357,25 +347,9 @@ export async function checkFacebookBudgetWithDb(
     args.additionalCount,
   );
 
-  const hourThreshold = rollingHourThreshold(now);
-  await db
-    .update(socialProfiles)
-    .set({
-      facebookHourlyCount: sql`CASE
-        WHEN ${socialProfiles.facebookWindowStartUtc} IS NULL
-          OR ${socialProfiles.facebookWindowStartUtc} < ${hourThreshold}
-          THEN ${args.additionalCount}
-        ELSE ${socialProfiles.facebookHourlyCount} + ${args.additionalCount}
-      END`,
-      facebookWindowStartUtc: sql`CASE
-        WHEN ${socialProfiles.facebookWindowStartUtc} IS NULL
-          OR ${socialProfiles.facebookWindowStartUtc} < ${hourThreshold}
-          THEN ${now}
-        ELSE ${socialProfiles.facebookWindowStartUtc}
-      END`,
-      updatedAt: new Date(),
-    })
-    .where(eq(socialProfiles.id, args.profileId));
+  // Read-only: same single-writer rule as the LinkedIn helper. The window
+  // expiry reset already happens implicitly inside `loadFacebookUsage`,
+  // which returns count=0 when the stored window is older than `now - 1h`.
 
   return {
     ...projected,
@@ -387,7 +361,7 @@ export async function checkFacebookBudgetWithDb(
 /**
  * Platform dispatcher used by the POST /api/posts pre-flight. Twitter
  * delegates to the existing monthly-budget service; LinkedIn and Facebook
- * use the new atomic CAS pre-flights above.
+ * use the read-only per-platform pre-flights above.
  *
  * Returns a uniform shape: `blockThresholdHit` is the discriminator the
  * route reads to choose between 201 and 409. For Twitter, the legacy
