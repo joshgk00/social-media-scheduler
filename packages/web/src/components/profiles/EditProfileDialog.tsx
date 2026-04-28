@@ -116,7 +116,7 @@ export function EditProfileDialog({
     notesLength >= MAX_NOTES
       ? 'text-destructive'
       : notesLength >= WARN_THRESHOLD
-        ? 'text-[--color-warning]'
+        ? 'text-warning'
         : '';
 
   return (

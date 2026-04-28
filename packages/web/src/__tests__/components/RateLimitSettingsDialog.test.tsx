@@ -10,6 +10,7 @@ const SAMPLE_PROFILE_ID = '22222222-2222-2222-2222-222222222222';
 
 function buildRateLimitState(overrides: Partial<RateLimitState> = {}): RateLimitState {
   return {
+    platform: 'twitter',
     profileId: SAMPLE_PROFILE_ID,
     currentCount: 120,
     budget: 500,
@@ -18,7 +19,7 @@ function buildRateLimitState(overrides: Partial<RateLimitState> = {}): RateLimit
     blockThresholdHit: false,
     monthStartUtc: '2026-04-01T00:00:00.000Z',
     ...overrides,
-  };
+  } as RateLimitState;
 }
 
 function renderDialog(onOpenChange = vi.fn()) {

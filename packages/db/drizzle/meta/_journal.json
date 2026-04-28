@@ -43,6 +43,13 @@
       "when": 1776977789844,
       "tag": "0005_phase-07-oauth-token-lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777212449652,
+      "tag": "0006_phase-08-rate-limit-windows",
+      "breakpoints": true
     }
   ]
 }

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest"
   },
   "dependencies": {
     "@dnd-kit/core": "~6.3.1",
@@ -62,6 +63,7 @@
     "@types/twitter-text": "~3.1.10",
     "@vitejs/plugin-react": "^6.0.0",
     "jsdom": "~28.0.0",
+    "msw": "^2.13.6",
     "tailwindcss": "~4.2.2",
     "typescript": "~5.9.3",
     "vite": "^8.0.0",

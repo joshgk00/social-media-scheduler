@@ -66,3 +66,74 @@ export function checkTwitterBudget(args: BudgetCheckArgs): BudgetCheckResult {
 export function checkBulkBudget(args: BudgetCheckArgs): BudgetCheckResult {
   return checkTwitterBudget(args);
 }
+
+// ── LinkedIn / Facebook per-window budget calculators (LIMIT-06, LIMIT-07) ──
+//
+// Same pure-calculator pattern as `checkTwitterBudget` but keyed off the rolling
+// window snapshot the worker reads from `social_profiles` (windowStartUtc +
+// currentCount + limit). The DB-layer wrapper (Plan 03) does the atomic CAS
+// UPDATE; these helpers project whether an additional N calls would breach.
+
+export interface PlatformBudgetSnapshot {
+  /** Number of API calls already counted in the current window. */
+  currentCount: number;
+  /** Window cap (LinkedIn ~100/day, Facebook 200/hour). Must be > 0. */
+  limit: number;
+  /** Percent at which a non-blocking warning surfaces (1-99). */
+  warnThresholdPercent: number;
+}
+
+export interface PlatformBudgetCheckResult {
+  willExceed: boolean;
+  blockThresholdHit: boolean;
+  warnThresholdHit: boolean;
+  projectedCount: number;
+  /** Integer percentage of the limit consumed after the projected calls. */
+  percent: number;
+}
+
+/**
+ * LinkedIn rolling-day budget pre-flight check (LIMIT-07).
+ * `additionalCallCount` is normally 1 because LinkedIn /rest/posts is a single
+ * API call per share (image uploads via /rest/images count separately, but
+ * Plan 04's worker increments the counter per /rest/posts call only).
+ */
+export function checkLinkedInBudget(
+  snapshot: PlatformBudgetSnapshot,
+  additionalCallCount: number,
+): PlatformBudgetCheckResult {
+  return computePlatformBudget(snapshot, additionalCallCount);
+}
+
+/**
+ * Facebook rolling-hour budget pre-flight check (LIMIT-06).
+ *
+ * CRITICAL: caller must pass `mediaIds.length + 1` for multi-photo posts,
+ * because each photo upload counts against the hourly limit independently of
+ * the final /feed call (Pitfall 2 in 08-RESEARCH.md). For text-only or
+ * single-link posts, pass 1.
+ */
+export function checkFacebookBudget(
+  snapshot: PlatformBudgetSnapshot,
+  additionalCallCount: number,
+): PlatformBudgetCheckResult {
+  return computePlatformBudget(snapshot, additionalCallCount);
+}
+
+function computePlatformBudget(
+  snapshot: PlatformBudgetSnapshot,
+  additionalCallCount: number,
+): PlatformBudgetCheckResult {
+  const projectedCount = snapshot.currentCount + additionalCallCount;
+  const percent =
+    snapshot.limit > 0
+      ? Math.round((projectedCount / snapshot.limit) * 100)
+      : 0;
+  return {
+    willExceed: projectedCount > snapshot.limit,
+    blockThresholdHit: projectedCount >= snapshot.limit,
+    warnThresholdHit: percent >= snapshot.warnThresholdPercent,
+    projectedCount,
+    percent,
+  };
+}

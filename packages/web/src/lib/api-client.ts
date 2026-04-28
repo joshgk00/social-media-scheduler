@@ -103,8 +103,14 @@ export const apiClient = {
     return this.get<T>(`/api/posts/${postId}/history`);
   },
 
+  // Plan 05b: switched the read endpoint to the platform-aware
+  // `/api/rate-limit/:profileId` route shipped in Plan 03. The new endpoint
+  // returns the discriminated `RateLimitState` (with `platform` tag) for any
+  // platform, replacing the legacy Twitter-only `/api/profiles/:id/rate-limit`.
+  // The PATCH endpoint stays on the legacy path because the budget config
+  // still lives under the profile resource (Twitter-only edit flow).
   async getRateLimit<T = unknown>(profileId: string): Promise<T> {
-    return this.get<T>(`/api/profiles/${profileId}/rate-limit`);
+    return this.get<T>(`/api/rate-limit/${profileId}`);
   },
 
   async updateRateLimit<T = unknown>(profileId: string, body: unknown): Promise<T> {

@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { TokenHealthBadge } from './TokenHealthBadge';
+import { RateLimitChip } from './RateLimitChip';
 import type { Platform, SocialProfile } from '../../hooks/use-profiles';
 
 interface ProfileCardProps {
@@ -138,7 +139,24 @@ export function ProfileCard({
         <p className="text-xs text-muted-foreground mb-1">{lastPublishedCopy}</p>
         <p className="text-xs text-muted-foreground mb-2">{nextScheduledCopy}</p>
 
-        {rateLimitIndicator && <div className="mb-4">{rateLimitIndicator}</div>}
+        {/*
+          Plan 05b — for LinkedIn/Facebook, render the platform-aware
+          RateLimitChip directly below TokenHealthBadge. Twitter still uses
+          the page-supplied `rateLimitIndicator` slot (the legacy
+          ProfileRateLimitIndicator with monthly-budget copy).
+        */}
+        {profile.platform !== 'twitter' ? (
+          <div className="mb-4">
+            <RateLimitChip
+              profileId={profile.id}
+              platform={profile.platform}
+            />
+          </div>
+        ) : (
+          rateLimitIndicator && (
+            <div className="mb-4">{rateLimitIndicator}</div>
+          )
+        )}
 
         {isRed && (
           <div className="mb-2">

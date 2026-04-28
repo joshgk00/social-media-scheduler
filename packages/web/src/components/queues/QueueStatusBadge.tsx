@@ -31,8 +31,8 @@ export function QueueStatusBadge({ isPaused, postCount, seasonalStart, seasonalE
 
   if (isSeasonalPause) {
     return (
-      <Badge variant="secondary" className={cn('inline-flex items-center gap-1 text-xs font-semibold text-[--color-warning]')}>
-        <span className="h-1.5 w-1.5 rounded-full bg-[--color-warning]" aria-hidden="true" />
+      <Badge variant="secondary" className={cn('inline-flex items-center gap-1 text-xs font-semibold text-warning')}>
+        <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden="true" />
         <Clock className="h-3 w-3" aria-hidden="true" />
         Seasonal pause
       </Badge>
@@ -42,7 +42,7 @@ export function QueueStatusBadge({ isPaused, postCount, seasonalStart, seasonalE
   if (isPaused) {
     return (
       <Badge variant="secondary" className={cn('text-xs inline-flex items-center gap-1')}>
-        <span className="h-1.5 w-1.5 rounded-full bg-[--color-warning]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
         Paused
       </Badge>
     );
@@ -58,7 +58,7 @@ export function QueueStatusBadge({ isPaused, postCount, seasonalStart, seasonalE
 
   return (
     <Badge variant="outline" className={cn('text-xs inline-flex items-center gap-1')}>
-      <span className="h-1.5 w-1.5 rounded-full bg-[--color-success]" />
+      <span className="h-1.5 w-1.5 rounded-full bg-success" />
       Active
     </Badge>
   );

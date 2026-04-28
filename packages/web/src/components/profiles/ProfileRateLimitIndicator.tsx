@@ -13,14 +13,14 @@ function resolveState(percent: number, warnThreshold: number): IndicatorState {
 }
 
 const DOT_CLASS: Record<IndicatorState, string> = {
-  ok: 'bg-[--color-success]',
-  warn: 'bg-[--color-warning]',
+  ok: 'bg-success',
+  warn: 'bg-warning',
   block: 'bg-destructive',
 };
 
 const TEXT_CLASS: Record<IndicatorState, string> = {
-  ok: 'text-[--color-success]',
-  warn: 'text-[--color-warning]',
+  ok: 'text-success',
+  warn: 'text-warning',
   block: 'text-destructive',
 };
 
@@ -33,6 +33,13 @@ export function ProfileRateLimitIndicator({ profileId }: ProfileRateLimitIndicat
 
   if (!data) {
     return <p className="text-xs text-muted-foreground">Usage unavailable</p>;
+  }
+
+  // Plan 05b ships the per-platform indicator copy. For now this component
+  // only renders the Twitter variant (the only platform Phase 7 had connected
+  // before Plan 05b lands); LI/FB profiles render a placeholder.
+  if (data.platform !== 'twitter') {
+    return <p className="text-xs text-muted-foreground">Usage chip in Plan 05b.</p>;
   }
 
   const percent = data.budget > 0

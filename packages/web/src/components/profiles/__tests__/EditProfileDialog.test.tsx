@@ -113,7 +113,7 @@ describe('EditProfileDialog', () => {
 
     await screen.findByLabelText('Display name');
     const counter = screen.getByText(/4500 \/ 5000/);
-    expect(counter.className).toContain('text-[--color-warning]');
+    expect(counter).toHaveClass('text-warning');
   });
 
   it('shows a destructive counter at 5000 characters and stops accepting more input', async () => {
