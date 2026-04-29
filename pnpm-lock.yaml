@@ -11,6 +11,9 @@ importers:
       eslint:
         specifier: ~10.2.0
         version: 10.2.0(jiti@2.6.1)
+      pino-pretty:
+        specifier: ~13.1.3
+        version: 13.1.3
       prettier:
         specifier: ~3.8.1
         version: 3.8.1
@@ -92,6 +95,9 @@ importers:
       twitter-api-v2:
         specifier: ~1.29.0
         version: 1.29.0
+      zod:
+        specifier: ~3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/cookie-parser':
         specifier: ^1.4.10
@@ -384,6 +390,9 @@ importers:
       luxon:
         specifier: ~3.7.2
         version: 3.7.2
+      nodemailer:
+        specifier: ~8.0.7
+        version: 8.0.7
       pino:
         specifier: ~10.3.1
         version: 10.3.1
@@ -397,6 +406,9 @@ importers:
       '@types/luxon':
         specifier: ~3.7.1
         version: 3.7.1
+      '@types/nodemailer':
+        specifier: ~6.4.23
+        version: 6.4.23
       nodemon:
         specifier: ^3.1.14
         version: 3.1.14
@@ -2658,6 +2670,9 @@ packages:
   '@types/node@25.5.2':
     resolution: {integrity: sha512-tO4ZIRKNC+MDWV4qKVZe3Ql/woTnmHDr5JD8UI5hn2pwBrHEwOEMZK7WlNb5RKB6EoJ02gwmQS9OrjuFnZYdpg==}
 
+  '@types/nodemailer@6.4.23':
+    resolution: {integrity: sha512-aFV3/NsYFLSx9mbb5gtirBSXJnAlrusoKNuPbxsASWc7vrKLmIrTQRpdcxNcSFL3VW2A2XpeLEavwb2qMi6nlQ==}
+
   '@types/qs@6.15.0':
     resolution: {integrity: sha512-JawvT8iBVWpzTrz3EGw9BTQFg3BQNmwERdKE22vlTxawwtbyUSlMppvZYKLZzB5zgACXdXxbD3m1bXaMqP/9ow==}
 
@@ -4225,6 +4240,10 @@ packages:
   node-gyp-build@4.8.4:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
     hasBin: true
+
+  nodemailer@8.0.7:
+    resolution: {integrity: sha512-pkjE4mkBzQjdJT4/UmlKl3pX0rC9fZmjh7c6C9o7lv66Ac6w9WCnzPzhbPNxwZAzlF4mdq4CSWB5+FbK6FWCow==}
+    engines: {node: '>=6.0.0'}
 
   nodemon@3.1.14:
     resolution: {integrity: sha512-jakjZi93UtB3jHMWsXL68FXSAosbLfY0In5gtKq3niLSkrWznrVBzXFNOEMJUfc9+Ke7SHWoAZsiMkNP3vq6Jw==}
@@ -7479,6 +7498,10 @@ snapshots:
     dependencies:
       undici-types: 7.18.2
 
+  '@types/nodemailer@6.4.23':
+    dependencies:
+      '@types/node': 25.5.2
+
   '@types/qs@6.15.0': {}
 
   '@types/range-parser@1.2.7': {}
@@ -9194,6 +9217,8 @@ snapshots:
     optional: true
 
   node-gyp-build@4.8.4: {}
+
+  nodemailer@8.0.7: {}
 
   nodemon@3.1.14:
     dependencies:

@@ -10,8 +10,10 @@ const LoginPage = lazy(() => import('./pages/login/LoginPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const RecoverPage = lazy(() => import('./pages/recover/RecoverPage'));
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
+const EmailLogsPage = lazy(() => import('./pages/settings/EmailLogsPage'));
 const ProfilesPage = lazy(() => import('./pages/profiles/ProfilesPage'));
 const PostsPage = lazy(() => import('./pages/posts/PostsPage'));
+const NotificationsPage = lazy(() => import('./pages/notifications/NotificationsPage'));
 const NewPostPage = lazy(() => import('./pages/posts/NewPostPage'));
 const EditPostPage = lazy(() => import('./pages/posts/EditPostPage'));
 const QueuesPage = lazy(() => import('./pages/queues/QueuesPage'));
@@ -42,7 +44,9 @@ export function App() {
               <Route path="/queues/:id/edit" element={<QueueDetailPage />} />
               <Route path="/queues/:id/posts" element={<QueuePostsPage />} />
               <Route path="/profiles" element={<ProfilesPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/settings/email-logs" element={<EmailLogsPage />} />
             </Route>
           </Routes>
         </Suspense>

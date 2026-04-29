@@ -9,6 +9,15 @@ import { spawn } from 'node:child_process';
 
 const TRANSCODE_TIMEOUT_MS = 300_000;
 
+interface FfmpegProcess {
+  stderr: {
+    on(event: 'data', listener: (chunk: Buffer) => void): unknown;
+  };
+  on(event: 'close', listener: (code: number | null) => void): unknown;
+  on(event: 'error', listener: (err: Error) => void): unknown;
+  kill(signal: NodeJS.Signals): unknown;
+}
+
 export function transcodeVideo(
   inputPath: string,
   outputPath: string,
@@ -27,7 +36,7 @@ export function transcodeVideo(
       outputPath,
     ];
 
-    const proc = spawn('ffmpeg', args);
+    const proc = spawn('ffmpeg', args) as unknown as FfmpegProcess;
 
     let isSettled = false;
     const timeout = setTimeout(() => {
@@ -46,7 +55,7 @@ export function transcodeVideo(
       }
     });
 
-    proc.on('close', (code) => {
+    proc.on('close', (code: number | null) => {
       clearTimeout(timeout);
       if (isSettled) return;
       isSettled = true;
@@ -61,7 +70,7 @@ export function transcodeVideo(
       }
     });
 
-    proc.on('error', (err) => {
+    proc.on('error', (err: Error) => {
       clearTimeout(timeout);
       if (isSettled) return;
       isSettled = true;

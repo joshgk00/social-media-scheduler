@@ -1,6 +1,6 @@
 // Integration test for the BullMQ failed listener (WORKER-07 / D-11).
 // Verifies that when a job exhausts retries, a notification event is
-// enqueued to the notification queue with kind: 'publish_failed'.
+// enqueued to the notification queue with eventType: 'publish_failed'.
 //
 // Uses real Postgres + Redis testcontainers. The publish handler throws
 // an UnrecoverableError (simulating a permanent failure classification)
@@ -11,13 +11,14 @@ import { Queue, Worker, UnrecoverableError } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { users, socialProfiles, posts, postAttempts } from '@sms/db';
-import { QUEUE_NAMES, JOB_NAMES, buildPublishJobId } from '@sms/shared';
+import { QUEUE_NAMES, JOB_NAMES, buildPublishJobId, publishFailedNotificationSchema } from '@sms/shared';
 import { startTestEnv, type TestEnv } from '../helpers/testcontainer.js';
 import {
   createPublishHandler,
   type PublishJobPayload,
   type PublishJobResult,
 } from '../../publish-worker.js';
+import { handlePublishFailedNotification } from '../../notifications/handlers/publish-failed.handler.js';
 import { buildApiResponseError } from '../helpers/mock-twitter.js';
 
 let env: TestEnv;
@@ -134,12 +135,19 @@ describe('failed-listener integration', () => {
       if (!isFinalFailure) return;
 
       try {
+        const [postRow] = await env.db
+          .select({ profileId: posts.profileId })
+          .from(posts)
+          .where(eq(posts.id, job.data.postId))
+          .limit(1);
+
         await notificationQueue.add(JOB_NAMES.publishFailedNotification, {
-          kind: 'publish_failed',
+          eventType: 'publish_failed',
           postId: job.data.postId,
+          profileId: postRow.profileId,
+          errorMessage: err.message,
           correlationId: job.data.correlationId,
-          reason: err.message,
-          at: new Date().toISOString(),
+          occurredAt: new Date().toISOString(),
         });
       } catch {
         // Notification enqueue failure is non-fatal in tests
@@ -180,13 +188,34 @@ describe('failed-listener integration', () => {
       // Check the notification queue for the publish_failed event
       const waitingJobs = await notificationQueue.getJobs(['waiting', 'delayed']);
       const publishFailedJobs = waitingJobs.filter(
-        (j) => j.data?.kind === 'publish_failed',
+        (j) => j.data?.eventType === 'publish_failed',
       );
 
       expect(publishFailedJobs.length).toBeGreaterThanOrEqual(1);
       const notificationJob = publishFailedJobs[0];
+      expect(notificationJob.data.eventType).toBe('publish_failed');
       expect(notificationJob.data.postId).toBe(postId);
-      expect(notificationJob.data.reason).toBeTruthy();
+      expect(notificationJob.data.profileId).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(typeof notificationJob.data.errorMessage).toBe('string');
+      expect(typeof notificationJob.data.correlationId).toBe('string');
+      expect(notificationJob.data.occurredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(publishFailedNotificationSchema.safeParse(notificationJob.data).success).toBe(true);
+
+      const insertNotification = vi.fn();
+      await handlePublishFailedNotification({
+        store: { insertNotification },
+        prefs: {
+          loadPrefs: vi.fn().mockResolvedValue({ isInAppEnabled: true, shouldSendEmail: false }),
+        },
+      }, {
+        id: notificationJob.id ?? 'notification-job-1',
+        name: JOB_NAMES.publishFailedNotification,
+        data: notificationJob.data,
+      });
+      expect(insertNotification).toHaveBeenCalledWith(expect.objectContaining({
+        eventType: 'publish_failed',
+        linkPath: `/posts/${postId}`,
+      }));
     } finally {
       await worker.close();
       await workerRedis.quit();

@@ -23,9 +23,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 6.3: Queue Engine Bug Fixes** - INSERTED — Fix recycling race condition, stuck queue state, seasonal pause logic, silent failures, profile display
 - [ ] **Phase 6.4: Wire Media-Post Association** - INSERTED — Wire associateMediaToPost into post create/update routes, close MEDIA-05 and FLOW-C
 - [ ] **Phase 6.5: Nginx Proxy Completion** - INSERTED — Add nginx proxy for /media/ and /admin/queues, mount media_data volume on nginx container
+- [ ] **Phase 6.6: Twitter Publish Path Completion + State Guard** - INSERTED — Unblock thread/multi-media publish in Twitter worker; add 409 publishing-state guard to API
 - [ ] **Phase 7: Multi-Platform Profiles & Token Lifecycle** - LinkedIn and Facebook OAuth connections, profile management UI, token health monitoring, auto-refresh
+- [ ] **Phase 7.1: Profile UX Polish** - INSERTED — Add next-scheduled-run column, platform filter, markdown notes; explicit publish-loop exclusion logging for invalid-token profiles
 - [ ] **Phase 8: LinkedIn & Facebook Post Creation** - LinkedIn share forms, Facebook post forms, LinkedIn and Facebook rate limit tracking
+- [ ] **Phase 8.1: Rate Limit Dashboard Widget** - INSERTED — Per-profile dashboard widget showing current usage vs. limit, color-coded
 - [ ] **Phase 9: Notifications & Settings** - In-app notification bell, SMTP email notifications, notification preferences, email logs
+- [ ] **Phase 9.1: Notifications & Settings Polish** - INSERTED — Migrate NotificationsTab to RHF + Zod (CLAUDE.md alignment), preserve NotificationBell aria-label across expanded state, add notification-prefs round-trip test, add Discard-button regression test, fix docker-compose.dev.yml web service so cold compose-up boots Vite cleanly
+- [ ] **Phase 9.2: Tech Debt Sweep** - INSERTED — Finalize 06.5 VALIDATION.md paperwork; enrich publish_failed notification with link_path; formalize dev-compose shared/dist volumes
 - [ ] **Phase 10: Bulk Operations** - CSV upload and export, bulk queue operations (randomize, purge, copy, text modify, deduplicate), bulk pause/resume/delete
 - [ ] **Phase 11: Snippets, Search, Calendar & Polish** - Text snippets with insert button, full-text post search, calendar views, SEC-07 policy
 
@@ -229,6 +234,20 @@ Plans:
 Plans:
 - [x] 06.5-01-PLAN.md -- Add /media/ and /admin/ proxy blocks to nginx.conf and nginx.dev.conf
 
+### Phase 6.6: Twitter Publish Path Completion + State Guard
+**INSERTED** — Gap closure from v1.0 code-grounded re-verification (2026-04-29)
+**Goal**: Twitter worker can publish threads and multi-media tweets; API rejects edits/deletes on `publishing`-state posts with 409
+**Depends on**: Phase 6.5
+**Requirements**: POST-TW-02, POST-TW-03, POST-TW-04, POST-TW-05, STATE-02
+**Gap Closure**:
+  - Worker rejects threads and multi-media at `packages/worker/src/twitter-publish.service.ts:54-58` ("unsupported until Phase 4.5")
+  - No 409 publishing-state guard on POST/PATCH/DELETE `/api/posts/:id`
+**Success Criteria** (what must be TRUE):
+  1. `callTwitter` chains thread tweets via Twitter API v2 reply (in_reply_to_tweet_id) without rejecting at the entry guard
+  2. `callTwitter` performs chunked media upload for images, GIF, and video; attaches mediaIds to first tweet only on threads
+  3. POST/PATCH/DELETE `/api/posts/:id` returns HTTP 409 when `post.status === 'publishing'`; UI Edit/Delete buttons disabled in that state
+  4. Existing single-tweet text-only path continues to pass; no regression in Phase 4 publish tests
+
 ### Phase 7: Multi-Platform Profiles & Token Lifecycle
 **Goal**: User can connect LinkedIn and Facebook profiles alongside Twitter, with token health monitoring and automatic refresh
 **Depends on**: Phase 4
@@ -246,6 +265,22 @@ Plans:
 - [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
 - [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
 **UI hint**: yes
+
+### Phase 7.1: Profile UX Polish
+**INSERTED** — Gap closure from v1.0 code-grounded re-verification (2026-04-29)
+**Goal**: Profile list surfaces next scheduled run and supports platform filtering; users can attach Markdown notes to profiles; the publish scanner emits a clear log line when skipping invalid-token profiles
+**Depends on**: Phase 7
+**Requirements**: PROFILE-05, PROFILE-06, PROFILE-07, TOKEN-05
+**Gap Closure**:
+  - PROFILE-05 partial: ProfileCard missing "next scheduled run" column
+  - PROFILE-06 unsatisfied: ProfilesPage has no platform filter UI
+  - PROFILE-07 partial: EditProfileDialog missing Markdown notes field
+  - TOKEN-05 partial: scanner does not emit a structured `skipping: true` log when a profile is excluded for token revocation/expiry
+**Success Criteria** (what must be TRUE):
+  1. ProfileCard renders a "Next scheduled run" field computed from the earliest queued/scheduled post for that profile (empty state when none)
+  2. ProfilesPage exposes a network filter (Twitter | LinkedIn | Facebook | All) that narrows the rendered list
+  3. EditProfileDialog has a Markdown-capable notes textarea persisted to `social_profiles.notes`; ProfileCard preview shows first 80 chars
+  4. Publish scanner logs `{ level: 'warn', profileId, reason, skipping: true }` whenever a profile is excluded due to invalid token, and emits the matching token-status notification once per status transition
 
 ### Phase 8: LinkedIn & Facebook Post Creation
 **Goal**: User can create and publish LinkedIn shares and Facebook posts with platform-specific forms, previews, and rate limit tracking
@@ -265,6 +300,17 @@ Plans:
 - [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
 **UI hint**: yes
 
+### Phase 8.1: Rate Limit Dashboard Widget
+**INSERTED** — Gap closure from v1.0 code-grounded re-verification (2026-04-29)
+**Goal**: Aggregated dashboard widget shows current API usage vs. limit for each connected profile, color-coded — beyond the per-profile chip already in ProfileCard
+**Depends on**: Phase 8
+**Requirements**: LIMIT-08
+**Gap Closure**: LIMIT-08 partial — RateLimitChip exists in ProfileCard but no aggregated dashboard widget per the requirement
+**Success Criteria** (what must be TRUE):
+  1. Dashboard page hosts a `RateLimitWidget` listing every connected profile with platform icon, name, current count, configured limit, and percent used
+  2. Each row is color-coded green (<50%), yellow (50–80%), red (>80%) and links to the profile detail
+  3. Counts read from the same fields the chip uses (`twitter_*`, `linkedin_*`, `facebook_*` columns on `social_profiles`); refresh on profile-switch
+
 ### Phase 9: Notifications & Settings
 **Goal**: User receives timely alerts for publish failures, token issues, and rate limits via in-app bell and email; notification preferences are configurable
 **Depends on**: Phase 4
@@ -274,14 +320,57 @@ Plans:
   2. Email notifications send via configured SMTP for publish failures, token expiry, and rate limit events
   3. User can configure notification preferences per event type (enable/disable email and/or in-app where applicable)
   4. Email logs view shows a paginated, filterable list of all system emails sent
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 09-01-PLAN.md — Wave 0 scaffolding: nodemailer install, shared event-type catalog, non-token event payload schemas, JOB_NAMES.rateLimitReachedNotification, RED test files for every Wave 0 entry
+- [ ] 09-02-PLAN.md — DB schema (notifications, user_notification_prefs, email_logs) + partial unique index + [BLOCKING] schema push via drizzle-kit generate + migrate
+- [ ] 09-03-PLAN.md — Notification worker: SMTP factory, 9 active handlers + bulk_completed stub, 7 templates + email shell + escape-html, prefs service, notification store, bootstrap wiring in main()
+- [ ] 09-04-PLAN.md — API routes (notifications, notification-prefs, email-logs, system) + always-on coercion + rate_limit_reached producer in posts.ts (NOTIF-07)
+- [ ] 09-05-PLAN.md — Web UI: bell + dropdown, /notifications page, /settings/email-logs page, Settings Tabs + Notifications tab, hook bundle, App routes; visual checkpoint
+- [ ] 09-06-PLAN.md — End-to-end testcontainers integration tests, .env.template updates, finalize 09-VALIDATION.md, full repo suite verification
 **UI hint**: yes
+
+### Phase 9.1: Notifications & Settings Polish
+**INSERTED** — Phase 9 UAT follow-ups (`.planning/phases/09-notifications-settings/09-UAT.md` Findings A, C, D, E, F)
+**Goal**: Close five low-risk Phase 9 polish items — RHF + Zod migration of NotificationsTab (per packages/web/CLAUDE.md), NotificationBell a11y polish, two test-coverage gaps that allowed Phase 9 bugs to ship to UAT, and a dev compose fix so `docker compose up -d --build web` boots Vite cleanly
+**Depends on**: Phase 9
+**Requirements**: None new — quality / convention / test-gap closures only. No NOTIF-* or SETTINGS-* outcome changes.
+**Success Criteria** (what must be TRUE):
+  1. NotificationsTab uses React Hook Form + Zod resolver per packages/web/CLAUDE.md State Management standard; existing 3 component tests still pass; Save and Discard buttons disable when form returns to saved state
+  2. NotificationBell trigger has accessible name queryable in BOTH dropdown-collapsed and dropdown-expanded states; new test asserts this
+  3. notification-prefs.test.ts contains a round-trip test (GET → PATCH(response.rows) → 200) so the schema-asymmetry bug fixed at 038ad6f cannot silently regress
+  4. NotificationsTab.test.tsx asserts the Discard changes button is queryable and exercises the discard reset flow
+  5. From a clean state, `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build web` reaches Vite-ready and serves http://127.0.0.1:5173/ with HTTP 200 (no "Cannot find module vite")
+**Plans**: 3 plans
+Plans:
+- [ ] 09.1-01-PLAN.md — NotificationBell aria-label preservation (Finding C) + notification-prefs round-trip test (Finding E)
+- [ ] 09.1-02-PLAN.md — Migrate NotificationsTab to RHF + Zod (Finding D) + Discard button regression tests (Finding F)
+- [ ] 09.1-03-PLAN.md — Fix docker-compose.dev.yml web service volumes and command (Finding A)
+
+### Phase 9.2: Tech Debt Sweep
+**INSERTED** — Gap closure from v1.0 code-grounded re-verification (2026-04-29)
+**Goal**: Close lingering paperwork and dev-experience items surfaced by audit and 09.1 UAT — no new requirements, just hygiene
+**Depends on**: Phase 9.1
+**Requirements**: None new (quality / paperwork / dev-experience only)
+**Working tree state**: Some of this work is already in-flight on the `phase-9-notifications-and-settings` branch as uncommitted edits to `docker-compose.dev.yml`, `packages/web/vite.config.ts`, and `packages/web/src/lib/api-client.ts`. The plan should absorb those existing diffs rather than re-do them.
+**Gap Closure**:
+  - 06.5 VALIDATION.md frontmatter still `status: draft / nyquist_compliant: false` despite verification PASSED 5/5 (paperwork)
+  - Phase 9 `publish_failed` notifications emit `link_path: NULL` — should be `/posts/{post_id}` (UAT Test 7 follow-up)
+  - 09.1 UAT applied ad-hoc volume additions for `shared/dist` + `shared/package.json` to **api and worker** services (Phase 9.1 already handled the web service in plan 09.1-03) — formalize the api/worker mounts in `docker-compose.dev.yml`
+  - Web Vite dev-server proxy hardcodes `http://localhost:3000`, which fails when the web dev server runs in-container — should target the `api` Docker service name
+  - `apiClient.get` lets the browser HTTP cache stale notification responses — needs `cache: 'no-store'` so in-app bell stays fresh in dev
+**Success Criteria** (what must be TRUE):
+  1. `.planning/phases/06.5-bull-board-nginx-proxy/06.5-VALIDATION.md` frontmatter shows `status: complete` and `nyquist_compliant: true` with reasoning that records the 5/5 verification override
+  2. `publish_failed` notification producer enriches payload with `link_path: /posts/{post_id}`; in-app bell row links to the post detail page; existing publish_failed test asserts the link is set
+  3. `docker-compose.dev.yml` `api` and `worker` services mount `./packages/shared/dist:/app/packages/shared/dist` and `./packages/shared/package.json:/app/packages/shared/package.json:ro`; a cold `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build` boots all services without ad-hoc fixups
+  4. `packages/web/vite.config.ts` `server.proxy['/api']` targets `http://api:3000` (Docker service DNS), not `http://localhost:3000`, so the in-container web dev server can reach the api container
+  5. `apiClient.get` includes `cache: 'no-store'` so GET responses are not served from browser HTTP cache (notification freshness)
+**Plans**: 3 plans
+Plans:
+- [ ] 09.2-01-PLAN.md — Flip 06.5 VALIDATION.md frontmatter to status:complete/nyquist_compliant:true with manual-verify override reasoning (SC#1)
+- [ ] 09.2-02-PLAN.md — Fix publish_failed producer payload to match publishFailedNotificationSchema (eventType+profileId+errorMessage+occurredAt) so handler-side linkPath populates link_path on the notification row (SC#2)
+- [ ] 09.2-03-PLAN.md — Verify-and-complete dev-experience triple: docker-compose.dev.yml api+worker shared volumes (SC#3) + vite proxy http://api:3000 (SC#4) + apiClient.get cache:no-store with mutation-bypass regression test (SC#5)
+
 
 ### Phase 10: Bulk Operations
 **Goal**: User can manage content at scale via CSV upload/export, bulk queue modifications, and bulk profile-level actions
@@ -323,25 +412,31 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 6.1 -> 6.2 -> 6.3 -> 6.4 -> 6.5 -> 7 -> 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 6.1 -> 6.2 -> 6.3 -> 6.4 -> 6.5 -> 6.6 -> 7 -> 7.1 -> 8 -> 8.1 -> 9 -> 9.1 -> 9.2 -> 10 -> 11
 Note: Phases 6, 7, and 9 all depend on Phase 4 (not on each other) and could theoretically overlap.
 Note: Phases 6.1-6.5 are gap closure phases inserted after v1.0 milestone audit. 6.4 and 6.5 both depend on 6.3; they are independent of each other.
+Note: Phases 6.6, 7.1, 8.1, 9.2 are gap closure phases inserted after the 2026-04-29 code-grounded re-verification — each closes partial/unsatisfied requirements within its parent phase's scope.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure & Foundation | 0/5 | Planning complete | - |
-| 2. Authentication & User Account | 0/6 | Planning complete | - |
-| 3. Twitter Profile & Post Creation | 0/TBD | Not started | - |
+| 1. Infrastructure & Foundation | 0/5 | Verified satisfied (code) | - |
+| 2. Authentication & User Account | 0/6 | Verified satisfied (code) | - |
+| 3. Twitter Profile & Post Creation | -/- | Substantially built (no phase dir); 4 partials → 6.6 | - |
 | 4. Publish Worker & Scheduled Posts | 6/6 | Complete    | 2026-04-10 |
 | 5. Queue Engine | 5/5 | Complete | 2026-04-15 |
 | 6. Media Handling | 6/6 | Complete | 2026-04-16 |
-| 6.1 Production Deployment Wiring | 0/TBD | Gap closure | - |
-| 6.2 Test & Build Stabilization + Migration Runner Hardening | 0/TBD | Gap closure | - |
-| 6.3 Queue Engine Bug Fixes | 0/TBD | Gap closure | - |
-| 6.4 Wire Media-Post Association | 0/TBD | Gap closure | - |
-| 6.5 Nginx Proxy Completion | 0/1 | Planning complete | - |
-| 7. Multi-Platform Profiles & Token Lifecycle | 0/TBD | Not started | - |
-| 8. LinkedIn & Facebook Post Creation | 0/TBD | Not started | - |
-| 9. Notifications & Settings | 0/TBD | Not started | - |
+| 6.1 Production Deployment Wiring | 3/3 | Complete | - |
+| 6.2 Test & Build Stabilization + Migration Runner Hardening | 3/3 | Complete | - |
+| 6.3 Queue Engine Bug Fixes | 2/2 | Complete | - |
+| 6.4 Wire Media-Post Association | 2/2 | Complete | - |
+| 6.5 Nginx Proxy Completion | 1/1 | Complete (paperwork pending in 9.2) | - |
+| 6.6 Twitter Publish Path + State Guard | 0/TBD | Gap closure (planning) | - |
+| 7. Multi-Platform Profiles & Token Lifecycle | -/- | Substantially built (no phase dir); 3 partials + 1 gap → 7.1 | - |
+| 7.1 Profile UX Polish | 0/TBD | Gap closure (planning) | - |
+| 8. LinkedIn & Facebook Post Creation | -/- | Substantially built (no phase dir); 1 partial → 8.1 | - |
+| 8.1 Rate Limit Dashboard Widget | 0/TBD | Gap closure (planning) | - |
+| 9. Notifications & Settings | 6/6 | Complete | - |
+| 9.1 Notifications & Settings Polish | 3/3 | Complete | - |
+| 9.2 Tech Debt Sweep | 0/TBD | Gap closure (planning) | - |
 | 10. Bulk Operations | 0/TBD | Not started | - |
 | 11. Snippets, Search, Calendar & Polish | 0/TBD | Not started | - |

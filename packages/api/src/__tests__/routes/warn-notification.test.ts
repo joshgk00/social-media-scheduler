@@ -277,8 +277,9 @@ describe('LIMIT-02 rate-limit warn notification enqueue', () => {
     const res = await agent.post('/api/posts').send(BODY);
 
     expect(res.status).toBe(201);
-    expect(notificationQueue.count()).toBe(0);
-    expect(notificationQueue.add).not.toHaveBeenCalled();
+    expect(notificationQueue.getJobs()).not.toContainEqual(
+      expect.objectContaining({ name: JOB_NAMES.rateLimitWarnNotification }),
+    );
   });
 
   it('Test 2: warn-hit path enqueues one job with correct payload and dedupe jobId', async () => {
@@ -431,7 +432,8 @@ describe('LIMIT-02 rate-limit warn notification enqueue', () => {
       currentCount: 500,
     });
     expect(mockCreatePost).not.toHaveBeenCalled();
-    expect(notificationQueue.count()).toBe(0);
-    expect(notificationQueue.add).not.toHaveBeenCalled();
+    expect(notificationQueue.getJobs()).not.toContainEqual(
+      expect.objectContaining({ name: JOB_NAMES.rateLimitWarnNotification }),
+    );
   });
 });

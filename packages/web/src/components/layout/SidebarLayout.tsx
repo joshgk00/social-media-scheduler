@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { Menu } from 'lucide-react';
 import { Sidebar } from './Sidebar';
+import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -38,7 +39,7 @@ export function SidebarLayout() {
       {/* Main content area */}
       <div className="flex flex-1 flex-col">
         {/* Mobile header with hamburger */}
-        <header className="flex items-center border-b border-border p-2 md:hidden">
+        <header className="flex items-center justify-between border-b border-border p-2 md:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -48,6 +49,11 @@ export function SidebarLayout() {
           >
             <Menu className="h-4 w-4" />
           </Button>
+          <NotificationBell />
+        </header>
+
+        <header className="hidden md:flex items-center justify-end border-b border-border px-6 py-2">
+          <NotificationBell />
         </header>
 
         <div id="main-content" className="flex-1 overflow-auto p-6 lg:p-8">

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
-import type { ChildProcess } from 'node:child_process';
 
 // Mock logger before any imports that use it
 vi.mock('@sms/shared/logger', () => ({
@@ -63,11 +62,16 @@ vi.mock('node:fs/promises', () => ({
   unlink: vi.fn().mockResolvedValue(undefined),
 }));
 
-function createMockProcess(): ChildProcess {
-  const proc = new EventEmitter() as unknown as ChildProcess;
+interface MockChildProcess extends EventEmitter {
+  stderr: EventEmitter;
+  kill: ReturnType<typeof vi.fn>;
+}
+
+function createMockProcess(): MockChildProcess {
+  const proc = new EventEmitter() as MockChildProcess;
   const stderrEmitter = new EventEmitter();
   Object.defineProperty(proc, 'stderr', { value: stderrEmitter, writable: false });
-  (proc as unknown as Record<string, unknown>).kill = vi.fn();
+  proc.kill = vi.fn();
   return proc;
 }
 
