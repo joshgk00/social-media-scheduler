@@ -35,6 +35,12 @@ describe('buildSmtpTransporter', () => {
     expect(smtpTransport.smtpFrom).toBe(smtpEnv.SMTP_FROM);
     expect(smtpTransport.isConfigured).toBe(true);
   });
+
+  it.each(['abc', '123abc', '0', '65536'])('returns in-app-only mode when SMTP_PORT is invalid: %s', (smtpPort) => {
+    Object.assign(process.env, smtpEnv, { SMTP_PORT: smtpPort });
+
+    expect(buildSmtpTransporter()).toEqual({ transporter: null, smtpFrom: null });
+  });
 });
 
 describe('sendEmail', () => {

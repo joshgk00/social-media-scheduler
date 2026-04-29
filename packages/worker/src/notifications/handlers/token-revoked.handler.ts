@@ -1,4 +1,4 @@
-import { ALWAYS_ON_EVENT_TYPES, tokenNotificationEventSchema } from '@sms/shared';
+import { tokenNotificationEventSchema } from '@sms/shared';
 import type { NotificationHandlerContext, NotificationJob } from './common.js';
 import {
   appBaseUrl,
@@ -16,15 +16,13 @@ export async function handleTokenRevokedNotification(
     (data) => tokenNotificationEventSchema.safeParse(data),
     'token_revoked',
   );
-  const isAlwaysOn = ALWAYS_ON_EVENT_TYPES.has('token_revoked');
-
   // Composite failures surface as AggregateError from performNotificationSideEffects.
   await performNotificationSideEffects({
     ctx,
     userId: payload.userId,
     eventType: 'token_revoked',
     title: `Token revoked for ${payload.platform}`,
-    body: isAlwaysOn ? payload.reason : payload.reason,
+    body: payload.reason,
     linkPath: `/profiles/${payload.profileId}`,
     payload,
     email: renderTokenRevokedEmail(payload, appBaseUrl(ctx)),

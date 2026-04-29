@@ -17,13 +17,18 @@ export const tokenNotificationEventTypes = [
   'token_reauth_required',
 ] as const;
 
+// Correlation IDs intentionally remain trace strings rather than UUID-only.
+// Producers include scanner/job IDs such as scan-... and corr-...; email_logs
+// stores correlation_id as text to preserve those IDs for operator debugging.
+const correlationIdSchema = z.string().min(1);
+
 export const tokenNotificationEventSchema = z.object({
   eventType: z.enum(tokenNotificationEventTypes),
   profileId: z.string().uuid(),
   userId: z.string().uuid(),
   platform: z.enum(['twitter', 'linkedin', 'facebook']),
   reason: z.string(),                    // human-readable summary
-  correlationId: z.string(),             // traceable back to scanner/worker job
+  correlationId: correlationIdSchema,     // traceable back to scanner/worker job
   occurredAt: z.string().datetime(),     // ISO 8601 UTC
 }).strict();
 
@@ -35,7 +40,7 @@ export const publishFailedNotificationSchema = z.object({
   postId: z.string().uuid(),
   profileId: z.string().uuid(),
   errorMessage: z.string().max(2000),
-  correlationId: z.string(),
+  correlationId: correlationIdSchema,
   occurredAt: z.string().datetime(),
 }).strict();
 
@@ -57,7 +62,7 @@ export const rateLimitReachedNotificationSchema = z.object({
   // Use nonnegative() rather than positive() so producer can faithfully
   // emit limit=0 when monthly_tweet_budget is set to 0.
   limit: z.number().int().nonnegative().optional(),
-  correlationId: z.string(),
+  correlationId: correlationIdSchema,
   triggeredAt: z.string().datetime(),
 }).strict();
 
@@ -65,7 +70,7 @@ export const queueEmptyNotificationSchema = z.object({
   queueId: z.string().uuid(),
   queueName: z.string(),
   profileId: z.string().uuid(),
-  correlationId: z.string(),
+  correlationId: correlationIdSchema,
   occurredAt: z.string().datetime(),
 }).strict();
 
@@ -73,7 +78,7 @@ export const autoDestructFailedNotificationSchema = z.object({
   postId: z.string().uuid(),
   profileId: z.string().uuid(),
   errorMessage: z.string().max(2000),
-  correlationId: z.string(),
+  correlationId: correlationIdSchema,
   occurredAt: z.string().datetime(),
 }).strict();
 

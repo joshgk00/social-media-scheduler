@@ -36,6 +36,7 @@ import { requireAuth } from '../middleware/auth-guard.js';
 import { validateUuidParam } from '../middleware/validation.js';
 
 const logger = createLogger('posts-router');
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface PostsDependencies {
   db: Db;
@@ -90,6 +91,10 @@ async function enqueueWarnNotification(
       'Failed to enqueue rate-limit warn notification',
     );
   }
+}
+
+function requestCorrelationId(req: { id?: string }): string {
+  return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
 }
 
 async function enqueueRateLimitReachedNotification(
@@ -200,7 +205,7 @@ export function createPostsRouter({
 
       if (budget.blockThresholdHit) {
         if (notificationQueue) {
-          const correlationId = (req as unknown as { id?: string }).id ?? randomUUID();
+          const correlationId = requestCorrelationId(req as unknown as { id?: string });
           const currentUsage =
             parsed.data.platform === 'twitter'
               ? budget.currentUsage
@@ -401,7 +406,7 @@ export function createPostsRouter({
 
           if (budget.blockThresholdHit) {
             if (notificationQueue) {
-              const correlationId = (req as unknown as { id?: string }).id ?? randomUUID();
+              const correlationId = requestCorrelationId(req as unknown as { id?: string });
               const platform = ownedProfile.platform as 'twitter' | 'linkedin' | 'facebook';
               const currentUsage =
                 platform === 'twitter'

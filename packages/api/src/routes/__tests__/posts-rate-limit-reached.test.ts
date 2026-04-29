@@ -51,11 +51,13 @@ function createDb(selectRows: unknown[][]) {
 function createTestApp(input: {
   db: ReturnType<typeof createDb>;
   notificationQueue: { add: ReturnType<typeof vi.fn> };
+  requestId?: string;
 }) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     req.session = { id: 'session-1', userId: USER_ID };
+    (req as typeof req & { id?: string }).id = input.requestId;
     next();
   });
   app.use(createPostsRouter({
@@ -87,6 +89,7 @@ describe('posts rate_limit_reached producer', () => {
     const app = createTestApp({
       db: createDb([[{ id: PROFILE_ID, platform: 'twitter' }]]),
       notificationQueue,
+      requestId: 'not-a-uuid',
     });
 
     const response = await request(app).post('/api/posts').send({
@@ -108,7 +111,11 @@ describe('posts rate_limit_reached producer', () => {
       }),
       { jobId: `rate-limit-reached:${PROFILE_ID}:2026-04` },
     );
-    expect(rateLimitReachedNotificationSchema.safeParse(notificationQueue.add.mock.calls[0][1]).success).toBe(true);
+    const payload = notificationQueue.add.mock.calls[0][1];
+    expect(payload.correlationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(rateLimitReachedNotificationSchema.safeParse(payload).success).toBe(true);
   });
 
   it('PATCH block-threshold path also enqueues and keeps the 409 response body', async () => {

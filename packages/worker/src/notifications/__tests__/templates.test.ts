@@ -18,6 +18,9 @@ describe('notification email templates', () => {
       expect(emailTemplate.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
       expect(emailTemplate.html).not.toContain('<script>');
       expect(emailTemplate.html).not.toContain('localhost:3000');
+      expect(emailTemplate.html).not.toContain('<tr><td style="padding:0 24px;"><tr>');
+      expect(emailTemplate.html).toContain('Notification settings');
+      expect(emailTemplate.html).not.toContain('/settings/notifications');
     }
   });
 });

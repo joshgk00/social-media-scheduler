@@ -55,7 +55,16 @@ export function buildSmtpTransporter(): SmtpResult {
     return { transporter: null, smtpFrom: null };
   }
 
-  const portNumber = Number.parseInt(portValue, 10);
+  const normalizedPortValue = portValue.trim();
+  const portNumber = Number.parseInt(normalizedPortValue, 10);
+  if (!/^\d+$/.test(normalizedPortValue) || portNumber <= 0 || portNumber > 65535) {
+    logger.warn(
+      { invalidVars: ['SMTP_PORT'], smtpPort: portValue },
+      'SMTP not configured - invalid SMTP_PORT',
+    );
+    return { transporter: null, smtpFrom: null };
+  }
+
   const transporter = nodemailer.createTransport({
     host: hostName,
     port: portNumber,

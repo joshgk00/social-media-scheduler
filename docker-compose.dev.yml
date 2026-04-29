@@ -51,6 +51,7 @@ services:
       - "127.0.0.1:5173:5173"
     environment:
       NODE_ENV: development
+      VITE_API_PROXY_TARGET: http://api:3000
     command: ["sh", "-c", "corepack enable && pnpm install --filter @sms/web... --frozen-lockfile && pnpm --filter @sms/web dev --host 0.0.0.0"]
 
   postgres:
