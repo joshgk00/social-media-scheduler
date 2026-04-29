@@ -24,7 +24,7 @@ const severityClasses = {
 };
 
 function isSafeLinkPath(linkPath: string | null): linkPath is string {
-  return Boolean(linkPath?.startsWith('/') && !linkPath.startsWith('//'));
+  return Boolean(linkPath && /^\/(?:posts|profiles|queues)(?:\/[a-z0-9-]+)?$/i.test(linkPath));
 }
 
 function NotificationRowView({ notification, onMarkRead, onNavigate }: NotificationRowProps & { onNavigate: (linkPath: string) => void }) {

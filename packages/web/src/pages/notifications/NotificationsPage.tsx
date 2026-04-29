@@ -98,6 +98,7 @@ function NotificationsPageView({
   readStatus,
   onReadStatusChange,
   onNavigate,
+  pagination,
 }: {
   rows: NotificationRowData[];
   isLoading?: boolean;
@@ -105,6 +106,12 @@ function NotificationsPageView({
   readStatus: 'all' | 'read' | 'unread';
   onReadStatusChange: (readStatus: 'all' | 'read' | 'unread') => void;
   onNavigate: (linkPath: string) => void;
+  pagination?: {
+    currentPage: number;
+    totalPages: number;
+    onPreviousPage: () => void;
+    onNextPage: () => void;
+  };
 }) {
   const isNarrowViewport = useIsNarrowViewport();
 
@@ -192,6 +199,29 @@ function NotificationsPageView({
           </Table>
         </div>
       )}
+      {pagination && pagination.totalPages > 1 ? (
+        <div className="flex items-center justify-end gap-2" aria-label="Notifications pagination">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pagination.currentPage <= 1}
+            onClick={pagination.onPreviousPage}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground" role="status" aria-live="polite">
+            Page {pagination.currentPage} of {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pagination.currentPage >= pagination.totalPages}
+            onClick={pagination.onNextPage}
+          >
+            Next
+          </Button>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -208,41 +238,24 @@ function NotificationsPageContainer() {
   const currentPage = notificationsQuery.data?.page ?? filters.page ?? 1;
 
   return (
-    <>
-      <NotificationsPageView
-        rows={rows}
-        isLoading={notificationsQuery.isLoading}
-        onMarkRead={(notificationId) => markReadMutation.mutateAsync(notificationId)}
-        readStatus={filters.readStatus ?? 'all'}
-        onReadStatusChange={(readStatus) =>
-          setFilters((previousFilters) => ({ ...previousFilters, readStatus, page: 1 }))
-        }
-        onNavigate={navigate}
-      />
-      {notificationsQuery.data && totalPages > 1 ? (
-        <div className="flex items-center justify-end gap-2 px-6 pb-6 lg:px-8">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={currentPage <= 1}
-            onClick={() => setFilters((previousFilters) => ({ ...previousFilters, page: currentPage - 1 }))}
-          >
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={currentPage >= totalPages}
-            onClick={() => setFilters((previousFilters) => ({ ...previousFilters, page: currentPage + 1 }))}
-          >
-            Next
-          </Button>
-        </div>
-      ) : null}
-    </>
+    <NotificationsPageView
+      rows={rows}
+      isLoading={notificationsQuery.isLoading}
+      onMarkRead={(notificationId) => markReadMutation.mutateAsync(notificationId)}
+      readStatus={filters.readStatus ?? 'all'}
+      onReadStatusChange={(readStatus) =>
+        setFilters((previousFilters) => ({ ...previousFilters, readStatus, page: 1 }))
+      }
+      onNavigate={navigate}
+      pagination={notificationsQuery.data ? {
+        currentPage,
+        totalPages,
+        onPreviousPage: () =>
+          setFilters((previousFilters) => ({ ...previousFilters, page: currentPage - 1 })),
+        onNextPage: () =>
+          setFilters((previousFilters) => ({ ...previousFilters, page: currentPage + 1 })),
+      } : undefined}
+    />
   );
 }
 

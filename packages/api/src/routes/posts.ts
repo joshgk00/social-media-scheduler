@@ -209,7 +209,7 @@ export function createPostsRouter({
             parsed.data.platform === 'twitter'
               ? budget.budget
               : budget.snapshot?.limit;
-          await enqueueRateLimitReachedNotification(notificationQueue, {
+          void enqueueRateLimitReachedNotification(notificationQueue, {
             userId,
             profileId: parsed.data.profileId,
             platform: parsed.data.platform,
@@ -411,7 +411,7 @@ export function createPostsRouter({
                 platform === 'twitter'
                   ? budget.budget
                   : budget.snapshot?.limit;
-              await enqueueRateLimitReachedNotification(notificationQueue, {
+              void enqueueRateLimitReachedNotification(notificationQueue, {
                 userId,
                 profileId: existingPost.profileId,
                 platform,

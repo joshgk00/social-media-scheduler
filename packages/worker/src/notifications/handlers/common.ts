@@ -117,6 +117,14 @@ export function truncateNotificationText(input: string, maxLength = 1000): strin
   return input.length > maxLength ? input.slice(0, maxLength) : input;
 }
 
+function safeLinkPath(linkPath: string | null): string | null {
+  if (!linkPath) return null;
+  if (!/^\/(?:posts|profiles|queues)(?:\/[a-z0-9-]+)?$/i.test(linkPath)) {
+    return null;
+  }
+  return linkPath;
+}
+
 export async function resolveUserIdFromPost(
   ctx: NotificationHandlerContext,
   postId: string,
@@ -274,7 +282,7 @@ export async function performNotificationSideEffects<TPayload extends { correlat
         severity: eventSpec.severity,
         title: input.title,
         body: truncateNotificationText(input.body),
-        linkPath: input.linkPath,
+        linkPath: safeLinkPath(input.linkPath),
         payload: input.payload,
       });
     } catch (err: unknown) {

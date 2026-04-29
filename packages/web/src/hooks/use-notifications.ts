@@ -117,7 +117,7 @@ function allRead(notificationList: NotificationListResponse): NotificationListRe
 export function useUnreadCount() {
   const query = useQuery({
     queryKey: ['notifications', 'unreadCount'] as const,
-    queryFn: () => apiClient.get<{ count: number }>('/api/notifications/unread-count'),
+    queryFn: () => apiClient.get<{ count: number }>('/api/notifications/unread-count', { cache: 'no-store' }),
     staleTime: 25_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -135,7 +135,10 @@ export function useNotifications(filters: NotificationsFilters = {}) {
   return useQuery({
     queryKey: ['notifications', filters] as QueryKey,
     queryFn: () =>
-      apiClient.get<NotificationListResponse>(`/api/notifications${buildQuery(normalizeNotificationFilters(filters))}`),
+      apiClient.get<NotificationListResponse>(
+        `/api/notifications${buildQuery(normalizeNotificationFilters(filters))}`,
+        { cache: 'no-store' },
+      ),
     staleTime: 15_000,
   });
 }

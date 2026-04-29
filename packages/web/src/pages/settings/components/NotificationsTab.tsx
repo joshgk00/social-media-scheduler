@@ -79,6 +79,7 @@ function NotificationsTabView({
   });
   const draftPrefs = useWatch({ control: form.control, name: 'rows' }) ?? initialPrefs;
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
   const isSmtpOff = smtpStatus?.configured === false;
   const isDirty = form.formState.isDirty;
 
@@ -95,14 +96,23 @@ function NotificationsTabView({
       shouldValidate: true,
     });
     setSavedMessage(null);
+    setSaveErrorMessage(null);
   }
 
   async function handleSave() {
-    const formValues = notificationPrefsFormSchema.parse(form.getValues());
-    await onSave?.(formValues.rows);
-    form.reset(formValues);
-    setSavedMessage('Preferences saved');
-    toast.success('Preferences saved');
+    try {
+      const formValues = notificationPrefsFormSchema.parse(form.getValues());
+      await onSave?.(formValues.rows);
+      form.reset(formValues);
+      setSaveErrorMessage(null);
+      setSavedMessage('Preferences saved');
+      toast.success('Preferences saved');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save preferences';
+      setSavedMessage(null);
+      setSaveErrorMessage(message);
+      toast.error(message);
+    }
   }
 
   return (
@@ -179,13 +189,23 @@ function NotificationsTabView({
           <a href="/settings/email-logs">Email logs</a>
         </Button>
         <div className="flex items-center gap-3">
-          {savedMessage && <p className="text-sm text-muted-foreground">{savedMessage}</p>}
+          {savedMessage && (
+            <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+              {savedMessage}
+            </p>
+          )}
+          {saveErrorMessage && (
+            <p className="text-sm text-destructive" role="alert">
+              {saveErrorMessage}
+            </p>
+          )}
           <Button
             type="button"
             variant="ghost"
             onClick={() => {
               form.reset({ rows: initialPrefs });
               setSavedMessage(null);
+              setSaveErrorMessage(null);
             }}
             disabled={!isDirty || isSaving}
           >

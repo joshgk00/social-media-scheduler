@@ -62,12 +62,15 @@ function NotificationBellView({
         >
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-semibold leading-4 text-destructive-foreground">
+            <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-destructive px-1 text-xs font-semibold leading-5 text-destructive-foreground">
               {badgeLabel}
             </span>
           )}
         </Button>
       </DropdownMenuTrigger>
+      <span className="sr-only" aria-live="polite">
+        {ariaLabel}
+      </span>
       <DropdownMenuContent align="end" sideOffset={8} className="w-96 p-0">
         <NotificationDropdownContent
           notifications={recentNotifications.map(toNotificationRow)}
@@ -88,7 +91,11 @@ function NotificationBellContainer() {
   const markAllReadMutation = useMarkAllRead();
 
   async function handleMarkRead(notificationId: string) {
-    await markReadMutation.mutateAsync(notificationId);
+    try {
+      await markReadMutation.mutateAsync(notificationId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not mark notification read');
+    }
   }
 
   async function handleMarkAllRead() {

@@ -15,16 +15,26 @@ const listQuerySchema = z.object({
   event_type: z.string().optional(),
   eventType: z.string().optional(),
   status: z.enum(['sent', 'failed']).optional(),
-  recipient: z.string().min(1).max(254).optional(),
+  recipient: z.string().min(1).max(254).regex(/^[^\s@]+@?[^\s@]*$/).optional(),
 }).strict();
 
-function parseEventTypes(rawEventTypes?: string): string[] | undefined {
-  if (!rawEventTypes) return undefined;
+function parseEventTypes(rawEventTypes?: string): { success: true; eventTypes?: string[] } | { success: false; error: z.ZodIssue[] } {
+  if (!rawEventTypes) return { success: true };
   const eventTypes = rawEventTypes.split(',').filter(Boolean);
   for (const eventType of eventTypes) {
-    notificationEventTypeSchema.parse(eventType);
+    const parsedEventType = notificationEventTypeSchema.safeParse(eventType);
+    if (!parsedEventType.success) {
+      return {
+        success: false,
+        error: parsedEventType.error.issues,
+      };
+    }
   }
-  return eventTypes;
+  return { success: true, eventTypes };
+}
+
+function escapeLikePattern(input: string): string {
+  return input.replace(/[\\%_]/g, (wildcardChar) => `\\${wildcardChar}`);
 }
 
 async function loadEntriesPerPage(db: Db, userId: string): Promise<number> {
@@ -51,7 +61,12 @@ export function createEmailLogsRouter({ db }: EmailLogsRouterDeps): Router {
       return;
     }
 
-    const eventTypes = parseEventTypes(parsed.data.eventType ?? parsed.data.event_type);
+    const parsedEventTypes = parseEventTypes(parsed.data.eventType ?? parsed.data.event_type);
+    if (parsedEventTypes && !parsedEventTypes.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsedEventTypes.error });
+      return;
+    }
+    const eventTypes = parsedEventTypes?.eventTypes;
     const userId = req.session.userId!;
     const pageSize = parsed.data.pageSize ?? await loadEntriesPerPage(db, userId);
     const conditions = [eq(emailLogs.userId, userId)];
@@ -62,7 +77,7 @@ export function createEmailLogsRouter({ db }: EmailLogsRouterDeps): Router {
       conditions.push(eq(emailLogs.status, parsed.data.status));
     }
     if (parsed.data.recipient) {
-      conditions.push(sql`LOWER(${emailLogs.recipientEmail}) LIKE LOWER(${`%${parsed.data.recipient}%`})`);
+      conditions.push(sql`${emailLogs.recipientEmail} ILIKE ${`${escapeLikePattern(parsed.data.recipient)}%`} ESCAPE '\\'`);
     }
     const whereClause = and(...conditions);
     const countQuery = db.select?.({ emailLogCount: sql<number>`count(*)::int` });

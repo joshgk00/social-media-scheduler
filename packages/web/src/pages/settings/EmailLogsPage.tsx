@@ -121,7 +121,7 @@ function EmailLogsPageView({
 
       <div className="flex flex-wrap items-center gap-3">
         <Tabs value={status} onValueChange={(value) => setStatus(value as 'all' | 'sent' | 'failed')}>
-          <TabsList>
+          <TabsList aria-label="Email delivery status">
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="sent">Sent</TabsTrigger>
             <TabsTrigger value="failed">Failed</TabsTrigger>
@@ -144,7 +144,6 @@ function EmailLogsPageView({
 
         <Input
           type="search"
-          role="searchbox"
           aria-label="Recipient"
           placeholder="Recipient"
           value={recipientInput}
@@ -292,7 +291,7 @@ function EmailLogsPageView({
           >
             Previous
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground" role="status" aria-live="polite">
             Page {page} of {totalPages}
           </span>
           <Button

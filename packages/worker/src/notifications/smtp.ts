@@ -122,6 +122,7 @@ export async function sendEmail(
     const info = await message.transporter.sendMail({
       from: message.smtpFrom,
       to: message.to,
+      envelope: { from: message.smtpFrom, to: message.to },
       subject: message.subject,
       text: message.text,
       html: message.html,

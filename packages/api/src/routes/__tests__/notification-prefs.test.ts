@@ -29,10 +29,10 @@ describe('notification preference routes', () => {
     expect(response.body).toHaveProperty('rows');
   });
 
-  it('requires CSRF for PATCH', async () => {
+  it('relies on global CSRF middleware instead of local header presence checks', async () => {
     const response = await request(createTestApp()).patch('/api/users/me/notification-prefs').send({ rows: [] });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
   });
 
   it('coerces always-on token_revoked prefs back to enabled', async () => {

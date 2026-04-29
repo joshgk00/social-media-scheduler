@@ -8,7 +8,7 @@ export interface NotificationFilterBarProps {
 export function NotificationFilterBar({ readStatus, onReadStatusChange }: NotificationFilterBarProps) {
   return (
     <Tabs value={readStatus} onValueChange={(value) => onReadStatusChange(value as 'all' | 'read' | 'unread')}>
-      <TabsList>
+      <TabsList aria-label="Notification read status">
         <TabsTrigger value="all">All</TabsTrigger>
         <TabsTrigger value="unread">Unread</TabsTrigger>
         <TabsTrigger value="read">Read</TabsTrigger>

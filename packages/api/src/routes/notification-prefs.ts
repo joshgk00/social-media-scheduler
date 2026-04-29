@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   ALWAYS_ON_EVENT_TYPES,
@@ -22,10 +22,6 @@ const patchBodySchema = z.object({
   rows: z.array(prefRowSchema).max(20).optional(),
   prefs: z.array(prefRowSchema).max(20).optional(),
 }).strict();
-
-function hasCsrfHeader(req: { get: (field: string) => string | undefined }): boolean {
-  return Boolean(req.get('x-csrf-token'));
-}
 
 export function createNotificationPrefsRouter({ db }: NotificationPrefsRouterDeps): Router {
   const router = Router();
@@ -50,11 +46,6 @@ export function createNotificationPrefsRouter({ db }: NotificationPrefsRouterDep
   });
 
   router.patch('/api/users/me/notification-prefs', requireAuth, async (req, res) => {
-    if (!hasCsrfHeader(req)) {
-      res.status(403).json({ error: 'Invalid CSRF token' });
-      return;
-    }
-
     const parsed = patchBodySchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -70,31 +61,27 @@ export function createNotificationPrefsRouter({ db }: NotificationPrefsRouterDep
       return prefRow;
     });
 
-    if (!db.transaction) {
+    if (coercedRows.length === 0 || !db.insert) {
       res.json({ ok: true });
       return;
     }
 
-    await db.transaction(async (tx) => {
-      for (const prefRow of coercedRows) {
-        await tx
-          .insert(userNotificationPrefs)
-          .values({
-            userId,
-            eventType: prefRow.eventType,
-            inAppEnabled: prefRow.inAppEnabled,
-            emailEnabled: prefRow.emailEnabled,
-          })
-          .onConflictDoUpdate({
-            target: [userNotificationPrefs.userId, userNotificationPrefs.eventType],
-            set: {
-              inAppEnabled: prefRow.inAppEnabled,
-              emailEnabled: prefRow.emailEnabled,
-              updatedAt: new Date(),
-            },
-          });
-      }
-    });
+    await db
+      .insert(userNotificationPrefs)
+      .values(coercedRows.map((prefRow) => ({
+        userId,
+        eventType: prefRow.eventType,
+        inAppEnabled: prefRow.inAppEnabled,
+        emailEnabled: prefRow.emailEnabled,
+      })))
+      .onConflictDoUpdate({
+        target: [userNotificationPrefs.userId, userNotificationPrefs.eventType],
+        set: {
+          inAppEnabled: sql`excluded.in_app_enabled`,
+          emailEnabled: sql`excluded.email_enabled`,
+          updatedAt: new Date(),
+        },
+      });
 
     res.json({ ok: true });
   });

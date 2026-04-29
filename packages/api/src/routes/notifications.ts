@@ -18,11 +18,18 @@ export interface NotificationsRouterDeps {
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).optional(),
-  eventTypes: z.string().optional().transform((eventTypes) => {
+  eventTypes: z.string().optional().transform((eventTypes, ctx) => {
     if (!eventTypes) return undefined;
     const parsedEventTypes = eventTypes.split(',').filter(Boolean);
     for (const eventType of parsedEventTypes) {
-      notificationEventTypeSchema.parse(eventType);
+      const parsedEventType = notificationEventTypeSchema.safeParse(eventType);
+      if (!parsedEventType.success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Invalid event type: ${eventType}`,
+        });
+        return z.NEVER;
+      }
     }
     return parsedEventTypes;
   }),
@@ -30,10 +37,6 @@ const listQuerySchema = z.object({
 }).strict();
 
 const idParamSchema = z.object({ id: z.string().min(1) }).strict();
-
-function hasCsrfHeader(req: { get: (field: string) => string | undefined }): boolean {
-  return Boolean(req.get('x-csrf-token'));
-}
 
 async function loadEntriesPerPage(db: Db, userId: string): Promise<number> {
   const query = db.select?.({ entriesPerPage: users.entriesPerPage });
@@ -84,11 +87,6 @@ export function createNotificationsRouter({ db }: NotificationsRouterDeps): Rout
   });
 
   router.post('/api/notifications/:id/read', requireAuth, async (req, res) => {
-    if (!hasCsrfHeader(req)) {
-      res.status(403).json({ error: 'Invalid CSRF token' });
-      return;
-    }
-
     const parsed = idParamSchema.safeParse(req.params);
     if (!parsed.success) {
       res.status(400).json({ error: 'Invalid id' });
@@ -106,11 +104,6 @@ export function createNotificationsRouter({ db }: NotificationsRouterDeps): Rout
   });
 
   router.post('/api/notifications/read-all', requireAuth, async (req, res) => {
-    if (!hasCsrfHeader(req)) {
-      res.status(403).json({ error: 'Invalid CSRF token' });
-      return;
-    }
-
     const userId = req.session.userId!;
     const updatedCount = await markAllRead(db, userId);
     res.json({ ok: true, updated: updatedCount });

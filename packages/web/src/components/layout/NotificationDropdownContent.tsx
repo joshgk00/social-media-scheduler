@@ -1,4 +1,5 @@
 import { ArrowRight } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,6 +37,14 @@ export function NotificationDropdownContent({
   onMarkRead,
   onMarkAllRead,
 }: NotificationDropdownContentProps) {
+  async function handleMarkAllRead() {
+    try {
+      await onMarkAllRead?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not mark notifications read');
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
@@ -45,7 +54,7 @@ export function NotificationDropdownContent({
           variant="ghost"
           size="sm"
           className="h-8 px-2 text-xs"
-          onClick={() => void onMarkAllRead?.()}
+          onClick={() => void handleMarkAllRead()}
           disabled={unreadCount === 0}
         >
           Mark all read

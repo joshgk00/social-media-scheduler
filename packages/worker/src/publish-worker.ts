@@ -84,6 +84,32 @@ const PUBLISH_WORKER_CONFIG = {
 } as const;
 
 const DEFAULT_MAX_ATTEMPTS = 4;
+type PublishPlatform = 'twitter' | 'linkedin' | 'facebook';
+
+function isPublishPlatform(platform: string): platform is PublishPlatform {
+  return platform === 'twitter' || platform === 'linkedin' || platform === 'facebook';
+}
+
+function redactSafeMessage(input: string): string {
+  return input
+    .replace(/(access_token=)[^&\s]+/gi, '$1[redacted]')
+    .replace(/(oauth(?:_token|_nonce)?=)[^&\s]+/gi, '$1[redacted]')
+    .replace(/(authorization:\s*bearer\s+)[^\s]+/gi, '$1[redacted]')
+    .replace(/([A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,})/g, '[redacted-token]');
+}
+
+function safePublishFailureMessage(
+  err: unknown,
+  platform: PublishPlatform,
+): string {
+  const classification =
+    platform === 'linkedin'
+      ? classifyLinkedInError(err)
+      : platform === 'facebook'
+        ? classifyFacebookError(err)
+        : classifyTwitterError(err);
+  return redactSafeMessage(classification.message || 'Unknown publish failure');
+}
 
 /**
  * Pure handler function — exported so unit tests can invoke it directly
@@ -317,10 +343,10 @@ export function createPublishWorker({
     if (!isFinalFailure) return;
 
     try {
-      let postRow: { profileId: string | null } | undefined;
+      let postRow: { profileId: string | null; platform: string } | undefined;
       try {
         [postRow] = await db
-          .select({ profileId: posts.profileId })
+          .select({ profileId: posts.profileId, platform: posts.platform })
           .from(posts)
           .where(eq(posts.id, job.data.postId))
           .limit(1);
@@ -339,12 +365,19 @@ export function createPublishWorker({
         );
         return;
       }
+      if (!isPublishPlatform(postRow.platform)) {
+        baseLogger.error(
+          { postId: job.data.postId, platform: postRow.platform },
+          'publish-failed listener: unsupported platform, skipping notification enqueue',
+        );
+        return;
+      }
 
       await notificationQueue.add(JOB_NAMES.publishFailedNotification, {
         eventType: 'publish_failed',
         postId: job.data.postId,
         profileId: postRow.profileId,
-        errorMessage: err.message,
+        errorMessage: safePublishFailureMessage(err, postRow.platform),
         correlationId: job.data.correlationId,
         occurredAt: new Date().toISOString(),
       });

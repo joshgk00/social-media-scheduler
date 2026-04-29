@@ -24,13 +24,23 @@ describe('apiClient cache directive contract', () => {
     fetchSpy.mockRestore();
   });
 
-  it("get() passes cache: 'no-store' so browser HTTP cache cannot serve stale GETs", async () => {
-    await apiClient.get('/api/notifications/unread-count');
+  it("get() can opt into cache: 'no-store' for freshness-sensitive reads", async () => {
+    await apiClient.get('/api/notifications/unread-count', { cache: 'no-store' });
 
     const lastCall = fetchSpy.mock.calls.at(-1);
     expect(lastCall).toBeDefined();
     const init = lastCall![1] as RequestInit;
     expect(init.cache).toBe('no-store');
+    expect(init.credentials).toBe('include');
+  });
+
+  it("get() does NOT pass cache: 'no-store' by default", async () => {
+    await apiClient.get('/api/profiles');
+
+    const getCall = findFetchCall('/api/profiles');
+    expect(getCall).toBeDefined();
+    const init = getCall![1] as RequestInit;
+    expect(init.cache).toBeUndefined();
     expect(init.credentials).toBe('include');
   });
 
