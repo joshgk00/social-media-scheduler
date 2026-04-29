@@ -71,7 +71,7 @@ async function mutationRequest<T>(method: string, path: string, data?: unknown):
 
 export const apiClient = {
   async get<T = unknown>(path: string): Promise<T> {
-    const res = await fetch(path, { credentials: 'include' });
+    const res = await fetch(path, { credentials: 'include', cache: 'no-store' });
     if (!res.ok) {
       const body = await parseErrorBody(res);
       throw createError((body.error as string) || res.statusText, res.status, body);

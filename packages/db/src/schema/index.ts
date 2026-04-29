@@ -7,3 +7,6 @@ export { postAttempts, postAttemptOutcome } from './post-attempts.js';
 export type { PostAttempt, NewPostAttempt } from './post-attempts.js';
 export { tags, postTags } from './tags.js';
 export { queues } from './queues.js';
+export * from './notifications.js';
+export * from './user-notification-prefs.js';
+export * from './email-logs.js';

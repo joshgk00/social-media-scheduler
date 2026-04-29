@@ -25,11 +25,15 @@ export {
   DELETABLE_STATES,
   type PostStatus,
 } from './constants/post-states.js';
+export * from './constants/notification-events.js';
 export * from './constants/queues.js';
 export * from './constants/media-limits.js';
 export * from './schemas/queues.js';
 export * from './schemas/media.js';
-export * from './lib/error-classifier.js';
+// error-classifier intentionally NOT re-exported — it imports twitter-api-v2
+// (Node-only deps via `events`/`stream`) which crashes browser bundles.
+// Server-only consumers must import directly:
+//   import { classifyTwitterError } from '@sms/shared/lib/error-classifier'
 export * from './lib/spinnable-text.js';
 export * from './lib/schedule-evaluation.js';
 export * from './lib/platform-text-limits.js';

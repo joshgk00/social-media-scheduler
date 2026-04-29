@@ -21,14 +21,16 @@ import {
 } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { eq } from 'drizzle-orm';
-import { socialProfiles } from '@sms/db';
+import { posts, socialProfiles } from '@sms/db';
 import {
   QUEUE_NAMES,
   JOB_NAMES,
+} from '@sms/shared';
+import {
   classifyTwitterError,
   classifyLinkedInError,
   classifyFacebookError,
-} from '@sms/shared';
+} from '@sms/shared/lib/error-classifier';
 import { createLogger } from '@sms/shared/logger';
 import type { WorkerDb } from './db.js';
 import { publishPost, PostLifecycleAbort } from './post-lifecycle.service.js';
@@ -315,12 +317,36 @@ export function createPublishWorker({
     if (!isFinalFailure) return;
 
     try {
+      let postRow: { profileId: string | null } | undefined;
+      try {
+        [postRow] = await db
+          .select({ profileId: posts.profileId })
+          .from(posts)
+          .where(eq(posts.id, job.data.postId))
+          .limit(1);
+      } catch (lookupErr) {
+        baseLogger.error(
+          { err: lookupErr, postId: job.data.postId },
+          'publish-failed listener: failed to resolve profileId',
+        );
+        return;
+      }
+
+      if (!postRow?.profileId) {
+        baseLogger.error(
+          { postId: job.data.postId },
+          'publish-failed listener: post not found, skipping notification enqueue',
+        );
+        return;
+      }
+
       await notificationQueue.add(JOB_NAMES.publishFailedNotification, {
-        kind: 'publish_failed',
+        eventType: 'publish_failed',
         postId: job.data.postId,
+        profileId: postRow.profileId,
+        errorMessage: err.message,
         correlationId: job.data.correlationId,
-        reason: err.message,
-        at: new Date().toISOString(),
+        occurredAt: new Date().toISOString(),
       });
     } catch (enqueueErr) {
       baseLogger.error(

@@ -5,6 +5,7 @@
 //   4. The Phase 5 queue scanner (evaluates active queues on 60s tick)
 //   5. The Phase 5 auto-destruct worker (delayed deletion of published posts)
 //   6. The Phase 6 transcode worker (async video transcoding via ffmpeg)
+//   7. The Phase 9 notification worker (in-app and email notifications)
 //
 // All construction happens inside `main()` so env vars are read at runtime
 // and no module-level side effects leak into tests (CLAUDE.md convention).
@@ -29,6 +30,8 @@ import { startQueueScanner } from './queue-scanner.js';
 import { createAutoDestructWorker } from './auto-destruct-worker.js';
 import { startTokenRefreshScanner } from './token-refresh-scanner.js';
 import { createTokenRefreshWorker } from './token-refresh-worker.js';
+import { createNotificationWorker } from './notification-worker.js';
+import { buildSmtpTransporter } from './notifications/smtp.js';
 
 const logger = createLogger('worker');
 
@@ -90,8 +93,26 @@ async function main() {
     notificationQueue,
   });
 
+  const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:5173';
+  if (appBaseUrl === 'http://localhost:5173') {
+    logger.warn('APP_BASE_URL not set - using dev default; emails will link to localhost');
+  }
+
+  const { transporter, smtpFrom } = buildSmtpTransporter();
+  const notificationWorker = createNotificationWorker({
+    redis,
+    db,
+    transporter,
+    smtpFrom,
+    appBaseUrl,
+  });
   logger.info(
-    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker + transcode worker + media cleanup worker + token-refresh scanner/worker active',
+    { concurrency: process.env.NOTIFICATION_WORKER_CONCURRENCY ?? '2' },
+    'Notification worker started',
+  );
+
+  logger.info(
+    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker + transcode worker + media cleanup worker + token-refresh scanner/worker + notification worker active',
   );
 
   const closeWithTimeout = async (
@@ -129,6 +150,7 @@ async function main() {
     // Close order: workers first (stop accepting jobs, drain in-flight),
     // then queues (stop new enqueues), then DB, then Redis. Each in its
     // own try/catch so one failure does not skip the rest.
+    await closeWithTimeout('notificationWorker', () => notificationWorker.close());
     await closeWithTimeout('tokenRefreshWorker', () => tokenRefreshWorker.close());
     await closeWithTimeout('mediaCleanupWorker', () => mediaCleanupWorker.close());
     await closeWithTimeout('transcodeWorker', () => transcodeWorker.close());
@@ -143,6 +165,9 @@ async function main() {
     await closeWithTimeout('cleanupQueue', () => cleanupQueue.close());
     await closeWithTimeout('tokenRefreshQueue', () => tokenRefreshQueue.close());
     await closeWithTimeout('notificationQueue', () => notificationQueue.close());
+    if (transporter) {
+      await closeWithTimeout('smtpTransporter', () => Promise.resolve(transporter.close()));
+    }
     await closeWithTimeout('pgClient', () => pgClient.end({ timeout: 5 }));
 
     try {

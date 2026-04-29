@@ -20,6 +20,7 @@ export const JOB_NAMES = {
   rateLimitWarnNotification: 'rate-limit-warn',
   queueEmptyNotification: 'queue-empty',
   autoDestructFailedNotification: 'auto-destruct-failed',
+  rateLimitReachedNotification: 'rate-limit-reached',
   transcodeVideo: 'transcode-video',
   mediaCleanup: 'media-cleanup',
   mediaCleanupScheduler: 'weekly-media-cleanup',

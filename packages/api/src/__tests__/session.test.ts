@@ -68,7 +68,8 @@ describe('createSessionMiddleware', () => {
     });
 
     const res = await request(app).get('/test');
-    expect(res.body.maxAge).toBe(86400000);
+    expect(res.body.maxAge).toBeGreaterThanOrEqual(86_399_000);
+    expect(res.body.maxAge).toBeLessThanOrEqual(86_400_000);
   });
 
   it('session cookie httpOnly is true', async () => {

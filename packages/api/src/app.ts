@@ -26,6 +26,10 @@ import { createTagsRouter } from './routes/tags.js';
 import { createQueuesRouter } from './routes/queues.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createMediaRouter } from './routes/media.js';
+import { createNotificationsRouter } from './routes/notifications.js';
+import { createNotificationPrefsRouter } from './routes/notification-prefs.js';
+import { createEmailLogsRouter } from './routes/email-logs.js';
+import { createSystemRouter } from './routes/system.js';
 import type { PublishQueueService } from './services/publish-queue.service.js';
 interface AppDependencies {
   redis: Redis;
@@ -85,6 +89,10 @@ export function createApp({
   app.use(createPostsRouter({ db, publishQueueService, notificationQueue }));
   app.use(createRateLimitRouter({ db }));
   app.use(createTagsRouter({ db }));
+  app.use(createNotificationsRouter({ db }));
+  app.use(createNotificationPrefsRouter({ db }));
+  app.use(createEmailLogsRouter({ db }));
+  app.use(createSystemRouter());
   app.use('/api/queues', createQueuesRouter({ db }));
 
   if (storage && transcodeQueue) {

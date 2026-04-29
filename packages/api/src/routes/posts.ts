@@ -92,6 +92,42 @@ async function enqueueWarnNotification(
   }
 }
 
+async function enqueueRateLimitReachedNotification(
+  notificationQueue: Queue,
+  params: {
+    userId: string;
+    profileId: string;
+    platform: 'twitter' | 'linkedin' | 'facebook';
+    correlationId: string;
+    currentUsage?: number;
+    limit?: number;
+  },
+): Promise<void> {
+  const billingMonth = DateTime.utc().toFormat('yyyy-LL');
+  const jobId = `rate-limit-reached:${params.profileId}:${billingMonth}`;
+  try {
+    await notificationQueue.add(
+      JOB_NAMES.rateLimitReachedNotification,
+      {
+        kind: 'rate_limit_reached',
+        userId: params.userId,
+        profileId: params.profileId,
+        platform: params.platform,
+        currentUsage: params.currentUsage,
+        limit: params.limit,
+        correlationId: params.correlationId,
+        triggeredAt: new Date().toISOString(),
+      },
+      { jobId },
+    );
+  } catch (err) {
+    logger.error(
+      { err, profileId: params.profileId, jobId },
+      'Failed to enqueue rate-limit-reached notification',
+    );
+  }
+}
+
 export function createPostsRouter({
   db,
   publishQueueService,
@@ -163,6 +199,26 @@ export function createPostsRouter({
       });
 
       if (budget.blockThresholdHit) {
+        if (notificationQueue) {
+          const correlationId = (req as unknown as { id?: string }).id ?? randomUUID();
+          const currentUsage =
+            parsed.data.platform === 'twitter'
+              ? budget.currentUsage
+              : budget.snapshot?.currentCount;
+          const limit =
+            parsed.data.platform === 'twitter'
+              ? budget.budget
+              : budget.snapshot?.limit;
+          await enqueueRateLimitReachedNotification(notificationQueue, {
+            userId,
+            profileId: parsed.data.profileId,
+            platform: parsed.data.platform,
+            correlationId,
+            currentUsage: typeof currentUsage === 'number' ? currentUsage : undefined,
+            limit: typeof limit === 'number' ? limit : undefined,
+          });
+        }
+
         // Per-platform 409 body. Mutually exclusive with the warn-notification
         // enqueue below — a blocked post never fires a warn notification.
         if (parsed.data.platform === 'twitter') {
@@ -344,6 +400,27 @@ export function createPostsRouter({
           });
 
           if (budget.blockThresholdHit) {
+            if (notificationQueue) {
+              const correlationId = (req as unknown as { id?: string }).id ?? randomUUID();
+              const platform = ownedProfile.platform as 'twitter' | 'linkedin' | 'facebook';
+              const currentUsage =
+                platform === 'twitter'
+                  ? budget.currentUsage
+                  : budget.snapshot?.currentCount;
+              const limit =
+                platform === 'twitter'
+                  ? budget.budget
+                  : budget.snapshot?.limit;
+              await enqueueRateLimitReachedNotification(notificationQueue, {
+                userId,
+                profileId: existingPost.profileId,
+                platform,
+                correlationId,
+                currentUsage: typeof currentUsage === 'number' ? currentUsage : undefined,
+                limit: typeof limit === 'number' ? limit : undefined,
+              });
+            }
+
             if (ownedProfile.platform === 'twitter') {
               const body: BudgetExceededBody = {
                 code: 'twitter_budget_exceeded',

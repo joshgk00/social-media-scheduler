@@ -50,6 +50,13 @@
       "when": 1777212449652,
       "tag": "0006_phase-08-rate-limit-windows",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777412448917,
+      "tag": "0007_foamy_speed",
+      "breakpoints": true
     }
   ]
 }

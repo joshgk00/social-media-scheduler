@@ -28,11 +28,10 @@ import { sql, eq, and, isNull, inArray } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
 import { posts, postAttempts, socialProfiles, postMedia } from '@sms/db';
 import {
-  classifyTwitterError,
   JOB_NAMES,
-  type ClassifiedError,
   type TokenNotificationEvent,
 } from '@sms/shared';
+import { classifyTwitterError, type ClassifiedError } from '@sms/shared/lib/error-classifier';
 import { createLogger } from '@sms/shared/logger';
 import type { WorkerDb } from './db.js';
 
