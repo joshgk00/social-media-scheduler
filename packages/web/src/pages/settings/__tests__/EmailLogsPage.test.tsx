@@ -53,4 +53,32 @@ describe('EmailLogsPage', () => {
 
     expect(onFilter).toHaveBeenCalledWith(expect.objectContaining({ recipient: 'example.com' }));
   });
+
+  it('renders pagination controls and requests the next page', () => {
+    const onPageChange = vi.fn();
+
+    render(
+      <EmailLogsPage
+        rows={[{
+          id: 'email-1',
+          eventType: 'publish_failed',
+          recipientEmail: 'recipient@example.com',
+          subject: '[SMS] Publish failed',
+          status: 'sent',
+          sentAt: '2026-04-28T12:00:00.000Z',
+        }]}
+        page={1}
+        pageSize={1}
+        total={2}
+        onPageChange={onPageChange}
+      />,
+    );
+
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(onPageChange).toHaveBeenCalledWith(2);
+  });
 });

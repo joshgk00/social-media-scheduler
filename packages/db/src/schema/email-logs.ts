@@ -13,7 +13,7 @@ export const emailLogs = pgTable(
     status: text('status').notNull(),
     errorMessage: text('error_message'),
     smtpMessageId: text('smtp_message_id'),
-    correlationId: uuid('correlation_id').notNull(),
+    correlationId: text('correlation_id').notNull(),
     sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

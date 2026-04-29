@@ -27,7 +27,11 @@ type TestEmailLogRow = Partial<EmailLogRow> & Pick<EmailLogRow, 'id' | 'eventTyp
 
 export interface EmailLogsPageProps {
   rows?: TestEmailLogRow[];
+  page?: number;
+  pageSize?: number;
+  total?: number;
   onFilter?: (filters: EmailLogsFilters) => void;
+  onPageChange?: (page: number) => void;
 }
 
 function toEmailLogRow(emailLogRow: TestEmailLogRow): EmailLogRow {
@@ -60,7 +64,21 @@ function useIsNarrowViewport() {
   return isNarrowViewport;
 }
 
-function EmailLogsPageView({ rows, onFilter }: { rows: EmailLogRow[]; onFilter?: (filters: EmailLogsFilters) => void }) {
+function EmailLogsPageView({
+  rows,
+  page = 1,
+  pageSize = rows.length || 25,
+  total = rows.length,
+  onFilter,
+  onPageChange,
+}: {
+  rows: EmailLogRow[];
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  onFilter?: (filters: EmailLogsFilters) => void;
+  onPageChange?: (page: number) => void;
+}) {
   const [status, setStatus] = useState<'all' | 'sent' | 'failed'>('all');
   const [eventType, setEventType] = useState<'all' | NotificationEventType>('all');
   const [recipientInput, setRecipientInput] = useState('');
@@ -92,6 +110,8 @@ function EmailLogsPageView({ rows, onFilter }: { rows: EmailLogRow[]; onFilter?:
       return nextExpandedRows;
     });
   }
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <main className="space-y-6 p-6 lg:p-8">
@@ -260,6 +280,32 @@ function EmailLogsPageView({ rows, onFilter }: { rows: EmailLogRow[]; onFilter?:
           </Table>
         </div>
       )}
+
+      {totalPages > 1 ? (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => onPageChange?.(page - 1)}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange?.(page + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -271,14 +317,27 @@ function EmailLogsPageContainer() {
   return (
     <EmailLogsPageView
       rows={emailLogsQuery.data?.rows ?? []}
+      page={emailLogsQuery.data?.page ?? filters.page ?? 1}
+      pageSize={emailLogsQuery.data?.pageSize ?? filters.pageSize ?? 25}
+      total={emailLogsQuery.data?.total ?? 0}
       onFilter={(nextFilters) => setFilters((previousFilters) => ({ ...previousFilters, ...nextFilters, page: 1 }))}
+      onPageChange={(page) => setFilters((previousFilters) => ({ ...previousFilters, page }))}
     />
   );
 }
 
 export function EmailLogsPage(props: EmailLogsPageProps) {
-  if (props.rows !== undefined || props.onFilter !== undefined) {
-    return <EmailLogsPageView rows={(props.rows ?? []).map(toEmailLogRow)} onFilter={props.onFilter} />;
+  if (props.rows !== undefined || props.onFilter !== undefined || props.onPageChange !== undefined) {
+    return (
+      <EmailLogsPageView
+        rows={(props.rows ?? []).map(toEmailLogRow)}
+        page={props.page}
+        pageSize={props.pageSize}
+        total={props.total}
+        onFilter={props.onFilter}
+        onPageChange={props.onPageChange}
+      />
+    );
   }
 
   return <EmailLogsPageContainer />;

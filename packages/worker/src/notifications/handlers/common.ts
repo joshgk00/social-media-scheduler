@@ -286,6 +286,7 @@ export async function performNotificationSideEffects<TPayload extends { correlat
   if (prefs.shouldSendEmail && input.email) {
     let hasInsertedEmailLog = false;
     let recipientEmailForLog: string | null = null;
+    let shouldRetryEmail = false;
     try {
       const recipientEmail = await resolveRecipientEmail(input.ctx, input.userId);
       if (!recipientEmail) {
@@ -313,9 +314,14 @@ export async function performNotificationSideEffects<TPayload extends { correlat
       hasInsertedEmailLog = true;
 
       if (emailResult.status === 'failed' && emailResult.isTransient) {
+        shouldRetryEmail = true;
         throw new Error(emailResult.errorMessage ?? 'Email send failed');
       }
     } catch (err: unknown) {
+      const caughtEmailErr = err instanceof Error ? err : new Error(String(err));
+      const isPermanentHeaderValidationError =
+        caughtEmailErr.message.includes('SMTP header injection');
+
       if (!hasInsertedEmailLog && recipientEmailForLog) {
         try {
           await insertEmailLog(input.ctx, {
@@ -324,19 +330,27 @@ export async function performNotificationSideEffects<TPayload extends { correlat
             recipientEmail: recipientEmailForLog,
             subject: input.email.subject,
             status: 'failed',
-            errorMessage: truncateNotificationText(err instanceof Error ? err.message : String(err)),
+            errorMessage: truncateNotificationText(caughtEmailErr.message),
             correlationId: input.payload.correlationId ?? '33333333-3333-3333-3333-333333333333',
           });
         } catch (emailLogErr: unknown) {
           emailErr = emailLogErr as Error;
         }
       }
-      emailErr = err as Error;
+      if (!emailErr && (shouldRetryEmail || !recipientEmailForLog || !isPermanentHeaderValidationError)) {
+        emailErr = caughtEmailErr;
+      }
     }
   }
 
   if (inAppErr && emailErr) {
     throw new AggregateError([inAppErr, emailErr], 'Both in-app and email notification paths failed');
+  }
+  if (inAppErr) {
+    throw inAppErr;
+  }
+  if (emailErr) {
+    throw emailErr;
   }
 }
 

@@ -29,7 +29,7 @@ CREATE TABLE "email_logs" (
 	"status" text NOT NULL,
 	"error_message" text,
 	"smtp_message_id" text,
-	"correlation_id" uuid NOT NULL,
+	"correlation_id" text NOT NULL,
 	"sent_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

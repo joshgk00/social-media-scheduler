@@ -132,6 +132,24 @@ describe('notification worker integration', () => {
     expect(ctx.sentEmails).toHaveLength(1);
   });
 
+  it('NOTIF-04 accepts non-UUID correlation IDs in email logs', async () => {
+    const user = await seedTestUser(ctx.db);
+    const profile = await seedTestProfile(ctx.db, user.id, 'linkedin');
+    const correlationId = `scan-20260429-${profile.id}`;
+
+    await createProcessor().process(seedTokenJob(JOB_NAMES.tokenExpiringSoon, {
+      eventType: 'token_expiring_soon',
+      userId: user.id,
+      profileId: profile.id,
+      platform: 'linkedin',
+      correlationId,
+    }));
+
+    const emailLogRows = await waitForRows(() => readEmailLogRows(ctx.db), 1);
+
+    expect(emailLogRows[0].correlationId).toBe(correlationId);
+  });
+
   it('NOTIF-05 enforces always-on token_revoked despite disabled prefs', async () => {
     const user = await seedTestUser(ctx.db);
     const profile = await seedTestProfile(ctx.db, user.id, 'facebook');
@@ -276,7 +294,7 @@ describe('notification worker integration', () => {
     expect(emailLogRows[0].errorMessage).toBe('smtp_not_configured');
   });
 
-  it('Pitfall 3 acks when only in-app insert fails and email succeeds', async () => {
+  it('Pitfall 3 rejects when only in-app insert fails and email succeeds', async () => {
     const { profile, post } = await seedPublishFailureGraph();
     const insertNotificationError = new Error('insert failed');
     const store = {
@@ -288,7 +306,7 @@ describe('notification worker integration', () => {
       postId: post.id,
       profileId: profile.id,
       correlationId: randomUUID(),
-    }))).resolves.toBeUndefined();
+    }))).rejects.toThrow('insert failed');
 
     expect(store.insertNotification).toHaveBeenCalled();
     expect(store.insertEmailLog).toHaveBeenCalled();
