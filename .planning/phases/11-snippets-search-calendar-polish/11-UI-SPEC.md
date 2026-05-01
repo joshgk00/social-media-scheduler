@@ -1,10 +1,11 @@
 ---
 phase: 11
 slug: snippets-search-calendar-polish
-status: draft
+status: approved
 shadcn_initialized: true
 preset: default (zinc, css-vars, tsx, lucide)
 created: 2026-05-01
+reviewed_at: 2026-05-01
 ---
 
 # Phase 11 — UI Design Contract
