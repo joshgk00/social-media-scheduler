@@ -3,6 +3,7 @@ export const POST_STATUSES = [
   'draft',
   'scheduled',
   'queued',
+  'paused',
   'publishing',
   'published',
   'failed',
@@ -14,8 +15,9 @@ export type PostStatus = (typeof POST_STATUSES)[number];
 
 export const POST_STATE_TRANSITIONS: Record<PostStatus, readonly PostStatus[]> = {
   draft: ['scheduled', 'queued', 'publishing'],
-  scheduled: ['draft', 'queued', 'publishing'],
+  scheduled: ['draft', 'queued', 'publishing', 'paused'],
   queued: ['draft', 'publishing'],
+  paused: ['scheduled', 'draft'],
   publishing: ['published', 'failed'],
   published: ['queued', 'auto_destructing'],
   failed: ['draft', 'scheduled'],
@@ -47,5 +49,5 @@ export function transitionPost(currentStatus: PostStatus, targetStatus: PostStat
   return targetStatus;
 }
 
-export const EDITABLE_STATES: readonly PostStatus[] = ['draft', 'scheduled', 'failed'];
-export const DELETABLE_STATES: readonly PostStatus[] = ['draft', 'scheduled', 'published', 'failed'];
+export const EDITABLE_STATES: readonly PostStatus[] = ['draft', 'scheduled', 'paused', 'failed'];
+export const DELETABLE_STATES: readonly PostStatus[] = ['draft', 'scheduled', 'paused', 'published', 'failed'];

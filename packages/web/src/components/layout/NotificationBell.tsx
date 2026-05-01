@@ -1,4 +1,5 @@
 import { Bell } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,15 +18,68 @@ import {
 
 export type NotificationBellRow = Partial<NotificationRow> & Pick<NotificationRow, 'id' | 'title'>;
 
+const bulkOperationLabels: Record<string, string> = {
+  'bulk.csv-import-scheduled': 'Import',
+  'bulk.csv-import-queue': 'Import',
+  'bulk.queue-randomize': 'Randomize',
+  'bulk.queue-purge': 'Purge queue',
+  'bulk.queue-copy': 'Copy queue',
+  'bulk.queue-text-modify': 'Modify text',
+  'bulk.queue-dedupe': 'Remove duplicates',
+  'bulk.profile-pause': 'Pause publishing',
+  'bulk.profile-resume': 'Resume publishing',
+  'bulk.profile-bulk-delete': 'Bulk delete',
+  'bulk.profile-modify-tags': 'Modify tags',
+};
+
 export interface NotificationBellProps {
   unreadCount?: number;
   recentNotifications?: NotificationBellRow[];
   isLoading?: boolean;
   onMarkRead?: (notificationId: string) => Promise<unknown> | unknown;
   onMarkAllRead?: () => Promise<unknown> | unknown;
+  onOpenChange?: (isOpen: boolean) => void;
+}
+
+function getStringPayloadValue(payload: Record<string, unknown>, key: string): string | null {
+  const value = payload[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function getNumberPayloadValue(payload: Record<string, unknown>, key: string): number {
+  const value = payload[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function formatBulkNotification(notification: NotificationBellRow): NotificationBellRow {
+  if (notification.eventType !== 'bulk_completed') return notification;
+
+  const payload = notification.payload ?? {};
+  const operation = getStringPayloadValue(payload, 'operation') ?? '';
+  const operationLabel = bulkOperationLabels[operation] ?? 'Bulk operation';
+  const successCount = getNumberPayloadValue(payload, 'successCount');
+  const failureCount = getNumberPayloadValue(payload, 'failureCount');
+  const errorReportUrl = getStringPayloadValue(payload, 'errorReportUrl') ?? getStringPayloadValue(payload, 'errorReportPath');
+  const displayKind = failureCount > 0 ? 'bulk-op-failed' : 'bulk-op-finished';
+
+  return {
+    ...notification,
+    severity: failureCount > 0 ? 'warning' : 'info',
+    title:
+      failureCount > 0
+        ? `${operationLabel} complete with ${failureCount} errors.`
+        : `${operationLabel} complete: ${successCount} posts.`,
+    body: failureCount > 0 ? 'Open the error report to review rows that need attention.' : notification.body,
+    payload: {
+      ...payload,
+      displayKind,
+      errorReportUrl,
+    },
+  };
 }
 
 function toNotificationRow(notification: NotificationBellRow): NotificationRow {
+  const formattedNotification = formatBulkNotification(notification);
   return {
     eventType: 'publish_failed',
     severity: 'info',
@@ -34,7 +88,7 @@ function toNotificationRow(notification: NotificationBellRow): NotificationRow {
     payload: {},
     readAt: null,
     createdAt: new Date().toISOString(),
-    ...notification,
+    ...formattedNotification,
   };
 }
 
@@ -44,13 +98,14 @@ function NotificationBellView({
   isLoading = false,
   onMarkRead,
   onMarkAllRead,
+  onOpenChange,
 }: Required<Pick<NotificationBellProps, 'unreadCount' | 'recentNotifications' | 'isLoading'>> &
-  Pick<NotificationBellProps, 'onMarkRead' | 'onMarkAllRead'>) {
+  Pick<NotificationBellProps, 'onMarkRead' | 'onMarkAllRead' | 'onOpenChange'>) {
   const badgeLabel = unreadCount > 99 ? '99+' : String(unreadCount);
   const ariaLabel = unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications';
 
   return (
-    <DropdownMenu modal={false}>
+    <DropdownMenu modal={false} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -89,6 +144,17 @@ function NotificationBellContainer() {
   const notificationsQuery = useNotifications({ page: 1, pageSize: 10 });
   const markReadMutation = useMarkRead();
   const markAllReadMutation = useMarkAllRead();
+  const [lastObservedUnreadCount, setLastObservedUnreadCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const unreadCount = unreadCountQuery.data?.count;
+    if (unreadCount === undefined) return;
+
+    if (lastObservedUnreadCount !== null && unreadCount > lastObservedUnreadCount) {
+      void notificationsQuery.refetch();
+    }
+    setLastObservedUnreadCount(unreadCount);
+  }, [lastObservedUnreadCount, notificationsQuery.refetch, unreadCountQuery.data?.count]);
 
   async function handleMarkRead(notificationId: string) {
     try {
@@ -113,6 +179,9 @@ function NotificationBellContainer() {
       isLoading={notificationsQuery.isLoading}
       onMarkRead={handleMarkRead}
       onMarkAllRead={handleMarkAllRead}
+      onOpenChange={(isOpen) => {
+        if (isOpen) void notificationsQuery.refetch();
+      }}
     />
   );
 }

@@ -9,8 +9,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Activity,
+  Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getAdminQueuesUrl } from '@/lib/admin-queues-url';
 import { Button } from '@/components/ui/button';
 
 interface SidebarProps {
@@ -23,6 +25,7 @@ const navItems = [
   { to: '/posts', icon: FileText, label: 'Posts' },
   { to: '/queues', icon: ListOrdered, label: 'Queues' },
   { to: '/posts/new', icon: PenSquare, label: 'New Post', isAction: true },
+  { to: '/posts/import', icon: Upload, label: 'Import Posts' },
   { to: '/profiles', icon: Users, label: 'Profiles' },
   { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/admin/queues', icon: Activity, label: 'Admin queues', external: true },
@@ -55,7 +58,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
             return (
               <a
                 key={item.to}
-                href={item.to}
+                href={getAdminQueuesUrl()}
                 className={cn(
                   'flex items-center rounded-md text-sm transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground',
                   isCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2',

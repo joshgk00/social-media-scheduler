@@ -7,3 +7,5 @@ export * from './error-classifier.js';
 export * from './schedule-evaluation.js';
 export * from './spinnable-text.js';
 export * from './platform-text-limits.js';
+export * from './normalize-text.js';
+export * from './platform-char-count.js';

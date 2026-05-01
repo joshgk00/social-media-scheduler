@@ -226,6 +226,7 @@ export const postQuerySchema = z.object({
       'draft',
       'scheduled',
       'queued',
+      'paused',
       'publishing',
       'published',
       'failed',

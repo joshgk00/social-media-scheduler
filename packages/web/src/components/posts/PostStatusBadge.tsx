@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2, Pause } from 'lucide-react';
 import type { PostStatus } from '@sms/shared';
 import { Badge } from '../ui/badge';
 import { cn } from '../../lib/utils';
@@ -9,12 +9,20 @@ interface StatusStyle {
   border: string;
   label: string;
   withSpinner?: boolean;
+  withPause?: boolean;
 }
 
 const STATUS_STYLES: Record<PostStatus, StatusStyle> = {
   draft: { bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border', label: 'Draft' },
   scheduled: { bg: '', text: 'text-foreground', border: 'border-border', label: 'Scheduled' },
   queued: { bg: '', text: 'text-foreground', border: 'border-border', label: 'Queued' },
+  paused: {
+    bg: 'bg-warning/10',
+    text: 'text-warning',
+    border: 'border-warning/30',
+    label: 'Paused',
+    withPause: true,
+  },
   publishing: {
     bg: 'bg-muted',
     text: 'text-muted-foreground',
@@ -70,6 +78,7 @@ export function PostStatusBadge({ status }: PostStatusBadgeProps) {
       )}
     >
       {style.withSpinner && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+      {style.withPause && <Pause className="h-3 w-3" aria-hidden="true" />}
       {style.label}
     </Badge>
   );

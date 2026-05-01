@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Plus, ListOrdered } from 'lucide-react';
 
-import { useQueue } from '../../hooks/use-queues';
+import { useQueue, useQueues } from '../../hooks/use-queues';
 import {
   useQueuePosts,
   useMovePostUp,
@@ -17,6 +17,20 @@ import { PostFullTextDialog } from '../../components/posts/PostFullTextDialog';
 import { QueuePostActionsMenu } from '../../components/queues/QueuePostActionsMenu';
 import { QueueStatusBadge } from '../../components/queues/QueueStatusBadge';
 import { SpinnableVariantsDialog } from '../../components/queues/SpinnableVariantsDialog';
+import { BulkActionsDropdown } from '../../components/bulk/BulkActionsDropdown';
+import { CopyQueueDialog } from '../../components/bulk/CopyQueueDialog';
+import { ModifyTextDialog } from '../../components/bulk/ModifyTextDialog';
+import { PurgeQueueDialog } from '../../components/bulk/PurgeQueueDialog';
+import { RandomizeQueueDialog } from '../../components/bulk/RandomizeQueueDialog';
+import { RemoveDuplicatesDialog } from '../../components/bulk/RemoveDuplicatesDialog';
+import {
+  useBulkExport,
+  useQueueCopy,
+  useQueueDedupe,
+  useQueueModifyText,
+  useQueuePurge,
+  useQueueRandomize,
+} from '../../hooks/use-bulk-ops';
 import type { PostStatus } from '@sms/shared';
 
 import { Button } from '../../components/ui/button';
@@ -42,6 +56,7 @@ import { cn } from '../../lib/utils';
 export default function QueuePostsPage() {
   const { id: queueId } = useParams<{ id: string }>();
   const { data: queue, isLoading: isQueueLoading } = useQueue(queueId ?? '');
+  const { data: queues } = useQueues();
   const {
     data: queuePosts,
     isLoading: isPostsLoading,
@@ -51,6 +66,12 @@ export default function QueuePostsPage() {
   const moveUpMutation = useMovePostUp(queueId ?? '');
   const moveDownMutation = useMovePostDown(queueId ?? '');
   const removeMutation = useRemoveFromQueue(queueId ?? '');
+  const bulkExportMutation = useBulkExport();
+  const queueCopyMutation = useQueueCopy(queueId ?? '');
+  const queueDedupeMutation = useQueueDedupe(queueId ?? '');
+  const queueModifyTextMutation = useQueueModifyText(queueId ?? '');
+  const queuePurgeMutation = useQueuePurge(queueId ?? '');
+  const queueRandomizeMutation = useQueueRandomize(queueId ?? '');
 
   const [historyPostId, setHistoryPostId] = useState<string | null>(null);
   const [fullTextPost, setFullTextPost] = useState<{
@@ -60,11 +81,27 @@ export default function QueuePostsPage() {
   const [variantsPost, setVariantsPost] = useState<{
     text: string;
   } | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [dedupeOpen, setDedupeOpen] = useState(false);
+  const [modifyTextOpen, setModifyTextOpen] = useState(false);
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [randomizeOpen, setRandomizeOpen] = useState(false);
 
   const isLoading = isQueueLoading || isPostsLoading;
   const cursorPosition = queue?.cursorPosition ?? 0;
   const isRecycling = queue?.isRecycling ?? false;
   const totalPosts = queuePosts?.length ?? 0;
+  const sameProfileTargetQueues = (queues ?? [])
+    .filter((targetQueue) => targetQueue.profileId === queue?.profileId && targetQueue.id !== queueId)
+    .map((targetQueue) => ({ id: targetQueue.id, name: targetQueue.name }));
+
+  function closeQueueBulkDialogs() {
+    setCopyOpen(false);
+    setDedupeOpen(false);
+    setModifyTextOpen(false);
+    setPurgeOpen(false);
+    setRandomizeOpen(false);
+  }
 
   function getRowClassName(post: QueuePost): string {
     const isPublishing = post.status === 'publishing';
@@ -127,6 +164,19 @@ export default function QueuePostsPage() {
             Add Post
           </Link>
         </Button>
+      </div>
+
+      <div className="flex justify-end">
+        <BulkActionsDropdown
+          view="queue"
+          selectionCount={totalPosts}
+          onRandomize={() => setRandomizeOpen(true)}
+          onPurge={() => setPurgeOpen(true)}
+          onCopy={() => setCopyOpen(true)}
+          onModifyText={() => setModifyTextOpen(true)}
+          onDedupe={() => setDedupeOpen(true)}
+          onExport={() => bulkExportMutation.mutate({ path: `/api/queues/${queueId}/posts.csv`, filename: 'queue-posts.csv' })}
+        />
       </div>
 
       {/* Queue metadata */}
@@ -332,6 +382,56 @@ export default function QueuePostsPage() {
           onOpenChange={(isOpen) => !isOpen && setVariantsPost(null)}
         />
       )}
+
+      <RandomizeQueueDialog
+        open={randomizeOpen}
+        onOpenChange={setRandomizeOpen}
+        queueName={queue?.name ?? 'Queue'}
+        postCount={totalPosts}
+        isPending={queueRandomizeMutation.isPending}
+        onConfirm={() => queueRandomizeMutation.mutate(undefined, { onSuccess: closeQueueBulkDialogs })}
+      />
+
+      <PurgeQueueDialog
+        open={purgeOpen}
+        onOpenChange={setPurgeOpen}
+        queueName={queue?.name ?? 'Queue'}
+        postCount={totalPosts}
+        isPending={queuePurgeMutation.isPending}
+        onConfirm={() =>
+          queuePurgeMutation.mutate(
+            { typedConfirmation: queue?.name ?? 'Queue' },
+            { onSuccess: closeQueueBulkDialogs },
+          )
+        }
+      />
+
+      <CopyQueueDialog
+        open={copyOpen}
+        onOpenChange={setCopyOpen}
+        sourceQueueName={queue?.name ?? 'Queue'}
+        postCount={totalPosts}
+        queues={sameProfileTargetQueues}
+        isPending={queueCopyMutation.isPending}
+        onConfirm={(input) => queueCopyMutation.mutate(input, { onSuccess: closeQueueBulkDialogs })}
+      />
+
+      <ModifyTextDialog
+        open={modifyTextOpen}
+        onOpenChange={setModifyTextOpen}
+        queueName={queue?.name ?? 'Queue'}
+        postCount={totalPosts}
+        isPending={queueModifyTextMutation.isPending}
+        onConfirm={(input) => queueModifyTextMutation.mutate(input, { onSuccess: closeQueueBulkDialogs })}
+      />
+
+      <RemoveDuplicatesDialog
+        open={dedupeOpen}
+        onOpenChange={setDedupeOpen}
+        queueName={queue?.name ?? 'Queue'}
+        isPending={queueDedupeMutation.isPending}
+        onConfirm={() => queueDedupeMutation.mutate(undefined, { onSuccess: closeQueueBulkDialogs })}
+      />
     </main>
   );
 }

@@ -68,9 +68,10 @@ describe('post state machine', () => {
   });
 
   describe('EDITABLE_STATES contains correct values', () => {
-    it('includes draft, scheduled, failed', () => {
+    it('includes draft, scheduled, paused, failed', () => {
       expect(EDITABLE_STATES).toContain('draft');
       expect(EDITABLE_STATES).toContain('scheduled');
+      expect(EDITABLE_STATES).toContain('paused');
       expect(EDITABLE_STATES).toContain('failed');
     });
 
@@ -82,15 +83,16 @@ describe('post state machine', () => {
       expect(EDITABLE_STATES).not.toContain('destroyed');
     });
 
-    it('has exactly 3 states', () => {
-      expect(EDITABLE_STATES).toHaveLength(3);
+    it('has exactly 4 states', () => {
+      expect(EDITABLE_STATES).toHaveLength(4);
     });
   });
 
   describe('DELETABLE_STATES contains correct values', () => {
-    it('includes draft, scheduled, published, failed', () => {
+    it('includes draft, scheduled, paused, published, failed', () => {
       expect(DELETABLE_STATES).toContain('draft');
       expect(DELETABLE_STATES).toContain('scheduled');
+      expect(DELETABLE_STATES).toContain('paused');
       expect(DELETABLE_STATES).toContain('published');
       expect(DELETABLE_STATES).toContain('failed');
     });
@@ -102,8 +104,8 @@ describe('post state machine', () => {
       expect(DELETABLE_STATES).not.toContain('destroyed');
     });
 
-    it('has exactly 4 states', () => {
-      expect(DELETABLE_STATES).toHaveLength(4);
+    it('has exactly 5 states', () => {
+      expect(DELETABLE_STATES).toHaveLength(5);
     });
   });
 

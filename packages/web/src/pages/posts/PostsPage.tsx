@@ -8,11 +8,12 @@ import {
   flexRender,
   type ColumnDef,
   type Row,
+  type RowSelectionState,
 } from '@tanstack/react-table';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Plus, ChevronDown, ChevronRight, Search, AlertCircle, Image, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { POST_STATUSES, DELETABLE_STATES, type PostStatus } from '@sms/shared';
+import { POST_STATUSES, DELETABLE_STATES, type PostQueryInput, type PostStatus } from '@sms/shared';
 
 import { usePosts, useDeletePost, type Post, type PostFilters } from '../../hooks/use-posts';
 import { useTags } from '../../hooks/use-tags';
@@ -25,10 +26,23 @@ import { PostErrorCell } from '../../components/posts/PostErrorCell';
 import { PollingIndicator } from '../../components/posts/PollingIndicator';
 import { PostHistoryDialog } from '../../components/posts/PostHistoryDialog';
 import { PostFullTextDialog } from '../../components/posts/PostFullTextDialog';
+import { BulkActionsDropdown } from '../../components/bulk/BulkActionsDropdown';
+import { BulkDeleteDialog } from '../../components/bulk/BulkDeleteDialog';
+import { BulkPauseResumeDialog } from '../../components/bulk/BulkPauseResumeDialog';
+import { ModifyTagsDialog } from '../../components/bulk/ModifyTagsDialog';
+import { SelectionSummaryBar } from '../../components/bulk/SelectionSummaryBar';
+import {
+  useBulkDelete,
+  useBulkExport,
+  useBulkModifyTags,
+  useBulkPause,
+  useBulkResume,
+} from '../../hooks/use-bulk-ops';
 
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
+import { Checkbox } from '../../components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -97,6 +111,11 @@ export default function PostsPage() {
   const { data: tags } = useTags();
   const { data: profiles } = useProfiles();
   const deletePostMutation = useDeletePost();
+  const bulkDeleteMutation = useBulkDelete();
+  const bulkExportMutation = useBulkExport();
+  const bulkModifyTagsMutation = useBulkModifyTags();
+  const bulkPauseMutation = useBulkPause();
+  const bulkResumeMutation = useBulkResume();
 
   const [filters, setFilters] = useState<PostFilters>({
     page: 1,
@@ -108,6 +127,10 @@ export default function PostsPage() {
   const [historyPostId, setHistoryPostId] = useState<string | null>(null);
   const [fullTextPost, setFullTextPost] = useState<{ text: string; isThread: boolean } | null>(null);
   const [retryingPostIds, setRetryingPostIds] = useState<Set<string>>(new Set());
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkModifyTagsOpen, setBulkModifyTagsOpen] = useState(false);
+  const [bulkPauseResumeMode, setBulkPauseResumeMode] = useState<'pause' | 'resume' | null>(null);
 
   function handleRetry(postId: string) {
     if (retryingPostIds.has(postId)) return;
@@ -183,6 +206,24 @@ export default function PostsPage() {
   }
 
   const columns = useMemo<ColumnDef<Post>[]>(() => [
+    {
+      id: 'select',
+      header: ({ table }) => (
+        <Checkbox
+          aria-label="Select all posts on this page"
+          checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() ? 'indeterminate' : false)}
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          aria-label={`Select post ${row.original.id}`}
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
+        />
+      ),
+      size: 44,
+    },
     {
       id: 'expander',
       header: () => null,
@@ -317,10 +358,39 @@ export default function PostsPage() {
     columns,
     getCoreRowModel: getCoreRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
+    getRowId: (post) => post.id,
     getRowCanExpand: () => true,
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
+    state: { rowSelection },
     manualPagination: true,
     pageCount: totalPages,
   });
+
+  const selectedCount = Object.keys(rowSelection).length;
+  const selectedPostIds = Object.keys(rowSelection);
+  const selectedPosts = postsResponse?.posts.filter((post) => selectedPostIds.includes(post.id)) ?? [];
+  const selectedProfileId = filters.profileId ?? selectedPosts.find((post) => post.profileId)?.profileId ?? profiles?.[0]?.id;
+
+  function clearBulkSelection() {
+    setRowSelection({});
+    setBulkDeleteOpen(false);
+    setBulkModifyTagsOpen(false);
+    setBulkPauseResumeMode(null);
+  }
+
+  function getPostSelectorPayload(): { postIds?: string[]; filter?: Partial<PostQueryInput> } {
+    if (selectedPostIds.length > 0) return { postIds: selectedPostIds };
+
+    return {
+      filter: {
+        status: filters.status as PostQueryInput['status'],
+        profileId: filters.profileId,
+        tagId: filters.tagId,
+        search: filters.search,
+      },
+    };
+  }
 
   return (
     <main className="space-y-4 p-6">
@@ -406,7 +476,18 @@ export default function PostsPage() {
       </div>
 
       <div className="flex items-center justify-end">
-        <PollingIndicator dataUpdatedAt={dataUpdatedAt} />
+        <div className="flex items-center gap-3">
+          <BulkActionsDropdown
+            view="posts"
+            selectionCount={selectedCount}
+            onPause={() => setBulkPauseResumeMode('pause')}
+            onResume={() => setBulkPauseResumeMode('resume')}
+            onDelete={() => setBulkDeleteOpen(true)}
+            onModifyTags={() => setBulkModifyTagsOpen(true)}
+            onExport={() => bulkExportMutation.mutate({ path: '/api/posts.csv', filename: 'posts.csv' })}
+          />
+          <PollingIndicator dataUpdatedAt={dataUpdatedAt} />
+        </div>
       </div>
 
       {/* Data table */}
@@ -440,6 +521,13 @@ export default function PostsPage() {
         </div>
       ) : (
         <>
+          <SelectionSummaryBar
+            pageCount={selectedCount}
+            totalCount={postsResponse?.total}
+            filterActive={hasActiveFilters}
+            onSelectAllMatching={() => setRowSelection(Object.fromEntries((postsResponse?.posts ?? []).map((post) => [post.id, true])))}
+            onClearSelection={() => setRowSelection({})}
+          />
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -514,6 +602,65 @@ export default function PostsPage() {
       <PostFullTextDialog
         post={fullTextPost}
         onOpenChange={(isOpen) => !isOpen && setFullTextPost(null)}
+      />
+
+      <BulkDeleteDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        selectionCount={selectedCount}
+        isPending={bulkDeleteMutation.isPending}
+        onConfirm={() => {
+          bulkDeleteMutation.mutate(
+            {
+              ...getPostSelectorPayload(),
+              typedConfirmation: `DELETE ${selectedCount} POSTS`,
+            },
+            { onSuccess: clearBulkSelection },
+          );
+        }}
+      />
+
+      <BulkPauseResumeDialog
+        open={bulkPauseResumeMode !== null}
+        onOpenChange={(isOpen) => !isOpen && setBulkPauseResumeMode(null)}
+        mode={bulkPauseResumeMode ?? 'pause'}
+        selectionCount={selectedCount}
+        isPending={bulkPauseMutation.isPending || bulkResumeMutation.isPending}
+        onConfirm={({ scope }) => {
+          if (!selectedProfileId) {
+            toast.error('Select a profile before pausing or resuming posts.');
+            return;
+          }
+
+          const mutation = bulkPauseResumeMode === 'resume' ? bulkResumeMutation : bulkPauseMutation;
+          mutation.mutate(
+            {
+              profileId: selectedProfileId,
+              scope,
+              ...getPostSelectorPayload(),
+            },
+            { onSuccess: clearBulkSelection },
+          );
+        }}
+      />
+
+      <ModifyTagsDialog
+        open={bulkModifyTagsOpen}
+        onOpenChange={setBulkModifyTagsOpen}
+        selectionCount={selectedCount}
+        tags={tags ?? []}
+        onManageTags={() => navigate('/settings')}
+        isPending={bulkModifyTagsMutation.isPending}
+        onConfirm={({ mode, tagIds }) => {
+          bulkModifyTagsMutation.mutate(
+            {
+              ...getPostSelectorPayload(),
+              mode,
+              tagIds,
+            },
+            { onSuccess: clearBulkSelection },
+          );
+        }}
       />
 
       {/* Delete confirmation dialog */}

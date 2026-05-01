@@ -31,6 +31,8 @@ import { createNotificationPrefsRouter } from './routes/notification-prefs.js';
 import { createEmailLogsRouter } from './routes/email-logs.js';
 import { createSystemRouter } from './routes/system.js';
 import type { PublishQueueService } from './services/publish-queue.service.js';
+import type { BulkOpsQueueService } from './services/bulk-ops-queue.service.js';
+import { createBulkImportRouter } from './routes/bulk-import.js';
 interface AppDependencies {
   redis: Redis;
   sql: Sql;
@@ -40,6 +42,7 @@ interface AppDependencies {
   // keep constructing the app without stubbing BullMQ. Production wiring in
   // `index.ts` always supplies all three.
   publishQueueService?: PublishQueueService;
+  bulkOpsQueueService?: BulkOpsQueueService;
   notificationQueue?: Queue;
   storage?: StorageBackend;
   transcodeQueue?: Queue;
@@ -51,6 +54,7 @@ export function createApp({
   db,
   sessionSecret,
   publishQueueService,
+  bulkOpsQueueService,
   notificationQueue,
   storage,
   transcodeQueue,
@@ -74,6 +78,7 @@ export function createApp({
     app.use(createAdminRouter({
       publishQueue: publishQueueService.publishQueue,
       notificationQueue,
+      bulkOpsQueue: bulkOpsQueueService?.bulkOpsQueue,
     }));
   }
 
@@ -86,14 +91,17 @@ export function createApp({
 
   app.use(createProfilesRouter({ db }));
   app.use(createOAuthRouter({ db, redis }));
-  app.use(createPostsRouter({ db, publishQueueService, notificationQueue }));
+  if (bulkOpsQueueService) {
+    app.use('/api/bulk-import', createBulkImportRouter({ db, bulkOpsQueueService }));
+  }
+  app.use(createPostsRouter({ db, publishQueueService, bulkOpsQueueService, notificationQueue }));
   app.use(createRateLimitRouter({ db }));
   app.use(createTagsRouter({ db }));
   app.use(createNotificationsRouter({ db }));
   app.use(createNotificationPrefsRouter({ db }));
   app.use(createEmailLogsRouter({ db }));
   app.use(createSystemRouter());
-  app.use('/api/queues', createQueuesRouter({ db }));
+  app.use('/api/queues', createQueuesRouter({ db, bulkOpsQueueService }));
 
   if (storage && transcodeQueue) {
     app.use('/api/media', createMediaRouter({ db, storage, transcodeQueue }));

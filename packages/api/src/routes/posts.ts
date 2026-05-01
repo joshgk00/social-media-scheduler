@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { DateTime } from 'luxon';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, ilike, inArray, sql } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
 import {
+  bulkDeleteInputSchema,
+  bulkModifyTagsInputSchema,
+  bulkPauseInputSchema,
   createPostSchema,
   updatePostSchema,
   postQuerySchema,
@@ -14,7 +17,7 @@ import {
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
-import { posts, postAttempts, socialProfiles } from '@sms/db';
+import { bulkOperations, posts, postAttempts, postTags, socialProfiles, tags } from '@sms/db';
 
 import {
   createPost,
@@ -32,11 +35,41 @@ import {
   type FacebookRateLimitExceededBody,
 } from '../services/rate-limit.service.js';
 import type { PublishQueueService } from '../services/publish-queue.service.js';
+import type { BulkOpsQueueService } from '../services/bulk-ops-queue.service.js';
+import { beginCsvDownload, writeCsvRows } from '../services/bulk-export.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
+import { bulkOperationsLimiter } from '../middleware/rate-limiter.js';
 import { validateUuidParam } from '../middleware/validation.js';
 
 const logger = createLogger('posts-router');
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function escapeLikePattern(input: string): string {
+  return input.replace(/[%_\\]/g, '\\$&');
+}
+
+async function loadTagNamesByPostId(db: Db, postIds: string[]): Promise<Record<string, string>> {
+  if (postIds.length === 0) return {};
+
+  const tagRows = await db
+    .select({
+      postId: postTags.postId,
+      name: tags.name,
+    })
+    .from(postTags)
+    .innerJoin(tags, eq(postTags.tagId, tags.id))
+    .where(inArray(postTags.postId, postIds));
+
+  const tagNamesByPostId: Record<string, string[]> = {};
+  for (const tagRow of tagRows) {
+    tagNamesByPostId[tagRow.postId] ??= [];
+    tagNamesByPostId[tagRow.postId].push(tagRow.name);
+  }
+
+  return Object.fromEntries(
+    Object.entries(tagNamesByPostId).map(([postId, tagNames]) => [postId, tagNames.join(';')]),
+  );
+}
 
 interface PostsDependencies {
   db: Db;
@@ -44,6 +77,7 @@ interface PostsDependencies {
   // paths can keep omitting BullMQ. Handlers that require enqueue will
   // degrade gracefully when the dependency is missing (see below).
   publishQueueService?: PublishQueueService;
+  bulkOpsQueueService?: BulkOpsQueueService;
   notificationQueue?: Queue;
 }
 
@@ -97,6 +131,12 @@ function requestCorrelationId(req: { id?: string }): string {
   return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
 }
 
+function parseIdempotencyKey(rawHeader: string | undefined): string | null {
+  if (rawHeader === undefined) return randomUUID();
+  const idempotencyKey = rawHeader.trim();
+  return UUID_PATTERN.test(idempotencyKey) ? idempotencyKey : null;
+}
+
 async function enqueueRateLimitReachedNotification(
   notificationQueue: Queue,
   params: {
@@ -136,9 +176,96 @@ async function enqueueRateLimitReachedNotification(
 export function createPostsRouter({
   db,
   publishQueueService,
+  bulkOpsQueueService,
   notificationQueue,
 }: PostsDependencies) {
   const router = Router();
+
+  async function enqueuePostBulkOperation(args: {
+    userId: string;
+    operationType: string;
+    data: Record<string, unknown>;
+    targetKind?: 'profile' | 'queue' | 'scheduled-list';
+    targetId?: string | null;
+    idempotencyKey: string;
+    correlationId: string;
+  }) {
+    if (!bulkOpsQueueService) {
+      throw new Error('Bulk operations queue is not configured');
+    }
+    const [existingBulkOperation] = await db
+      .select({ id: bulkOperations.id })
+      .from(bulkOperations)
+      .where(and(
+        eq(bulkOperations.userId, args.userId),
+        eq(bulkOperations.idempotencyKey, args.idempotencyKey),
+      ));
+    if (existingBulkOperation) {
+      return { bulkOperationId: existingBulkOperation.id, jobId: null, replay: true };
+    }
+
+    const [bulkOperation] = await db
+      .insert(bulkOperations)
+      .values({
+        userId: args.userId,
+        operationType: args.operationType,
+        targetKind: args.targetKind ?? 'scheduled-list',
+        targetId: args.targetId ?? null,
+        idempotencyKey: args.idempotencyKey,
+        payload: args.data,
+      })
+      .returning();
+    const job = await bulkOpsQueueService.enqueueBulkOp(
+      args.operationType as typeof JOB_NAMES[keyof typeof JOB_NAMES],
+      {
+        bulkOperationId: bulkOperation.id,
+        userId: args.userId,
+        operationType: args.operationType,
+        targetKind: args.targetKind ?? 'scheduled-list',
+        targetId: args.targetId ?? null,
+        idempotencyKey: args.idempotencyKey,
+        data: args.data,
+        correlationId: args.correlationId,
+      },
+      Math.floor(Date.now() / 1000),
+    );
+    return { bulkOperationId: bulkOperation.id, jobId: job.id };
+  }
+
+  async function resolveSelectedPostIds(
+    userId: string,
+    selector: { postIds?: string[]; filter?: Record<string, unknown> },
+  ): Promise<string[]> {
+    if (selector.postIds && selector.postIds.length > 0) {
+      const rows = await db
+        .select({ id: posts.id })
+        .from(posts)
+        .where(and(eq(posts.userId, userId), inArray(posts.id, selector.postIds)));
+      return rows.map((row) => row.id);
+    }
+    const conditions = [eq(posts.userId, userId)];
+    if (typeof selector.filter?.status === 'string') {
+      conditions.push(eq(posts.status, selector.filter.status as PostStatus));
+    }
+    if (typeof selector.filter?.profileId === 'string') {
+      conditions.push(eq(posts.profileId, selector.filter.profileId));
+    }
+    if (typeof selector.filter?.tagId === 'string') {
+      conditions.push(sql`exists (
+        select 1 from ${postTags}
+        where ${postTags.postId} = ${posts.id}
+        and ${postTags.tagId} = ${selector.filter.tagId}
+      )`);
+    }
+    if (typeof selector.filter?.search === 'string' && selector.filter.search.trim().length > 0) {
+      conditions.push(ilike(posts.text, `%${escapeLikePattern(selector.filter.search.trim())}%`));
+    }
+    const rows = await db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(and(...conditions));
+    return rows.map((row) => row.id);
+  }
 
   router.post('/api/posts', requireAuth, async (req, res) => {
     const parsed = createPostSchema.safeParse(req.body);
@@ -305,6 +432,146 @@ export function createPostsRouter({
 
     const postResults = await getPosts(db, req.session.userId!, parsed.data);
     res.json(postResults);
+  });
+
+  router.get('/api/posts.csv', requireAuth, bulkOperationsLimiter, async (req, res) => {
+    const parsed = postQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const userId = req.session.userId!;
+    const conditions = [eq(posts.userId, userId)];
+    if (parsed.data.status) {
+      conditions.push(eq(posts.status, parsed.data.status));
+    }
+    if (parsed.data.profileId) {
+      conditions.push(eq(posts.profileId, parsed.data.profileId));
+    }
+    if (parsed.data.search) {
+      conditions.push(ilike(posts.text, `%${escapeLikePattern(parsed.data.search)}%`));
+    }
+    if (parsed.data.tagId) {
+      const postIdsWithTag = db
+        .select({ postId: postTags.postId })
+        .from(postTags)
+        .where(eq(postTags.tagId, parsed.data.tagId));
+
+      conditions.push(inArray(posts.id, postIdsWithTag));
+    }
+    const rows = await db
+      .select({
+        id: posts.id,
+        platform: posts.platform,
+        text: posts.text,
+        status: posts.status,
+        scheduled_at: posts.scheduledAt,
+        notes: posts.notes,
+      })
+      .from(posts)
+      .where(and(...conditions));
+    const tagNamesByPostId = await loadTagNamesByPostId(db, rows.map((row) => row.id));
+    const csvRows = rows.map((row) => ({
+      ...row,
+      tags: tagNamesByPostId[row.id] ?? '',
+    }));
+    beginCsvDownload(res, `posts-${DateTime.utc().toFormat('yyyy-LL-dd')}.csv`);
+    await writeCsvRows(res, ['id', 'platform', 'text', 'status', 'scheduled_at', 'tags', 'notes'], csvRows);
+  });
+
+  router.post('/api/posts/bulk-pause', requireAuth, bulkOperationsLimiter, async (req, res) => {
+    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
+    if (!idempotencyKey) {
+      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
+      return;
+    }
+    const parsed = bulkPauseInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const result = await enqueuePostBulkOperation({
+      userId: req.session.userId!,
+      operationType: JOB_NAMES.bulkProfilePause,
+      data: parsed.data,
+      targetKind: 'profile',
+      targetId: parsed.data.profileId,
+      idempotencyKey,
+      correlationId: requestCorrelationId(req as { id?: string }),
+    });
+    res.status(202).json(result);
+  });
+
+  router.post('/api/posts/bulk-resume', requireAuth, bulkOperationsLimiter, async (req, res) => {
+    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
+    if (!idempotencyKey) {
+      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
+      return;
+    }
+    const parsed = bulkPauseInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const result = await enqueuePostBulkOperation({
+      userId: req.session.userId!,
+      operationType: JOB_NAMES.bulkProfileResume,
+      data: parsed.data,
+      targetKind: 'profile',
+      targetId: parsed.data.profileId,
+      idempotencyKey,
+      correlationId: requestCorrelationId(req as { id?: string }),
+    });
+    res.status(202).json(result);
+  });
+
+  router.post('/api/posts/bulk-delete', requireAuth, bulkOperationsLimiter, async (req, res) => {
+    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
+    if (!idempotencyKey) {
+      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
+      return;
+    }
+    const parsed = bulkDeleteInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const postIds = await resolveSelectedPostIds(req.session.userId!, parsed.data);
+    const postCount = postIds.length;
+    const expected = `DELETE ${postCount} POSTS`;
+    if (parsed.data.typedConfirmation !== expected) {
+      res.status(400).json({ error: 'typedConfirmation_mismatch', expected });
+      return;
+    }
+    const result = await enqueuePostBulkOperation({
+      userId: req.session.userId!,
+      operationType: JOB_NAMES.bulkProfileBulkDelete,
+      data: { postIds, typedConfirmation: parsed.data.typedConfirmation, postCount },
+      idempotencyKey,
+      correlationId: requestCorrelationId(req as { id?: string }),
+    });
+    res.status(202).json(result);
+  });
+
+  router.post('/api/posts/bulk-modify-tags', requireAuth, bulkOperationsLimiter, async (req, res) => {
+    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
+    if (!idempotencyKey) {
+      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
+      return;
+    }
+    const parsed = bulkModifyTagsInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const result = await enqueuePostBulkOperation({
+      userId: req.session.userId!,
+      operationType: JOB_NAMES.bulkProfileModifyTags,
+      data: parsed.data,
+      idempotencyKey,
+      correlationId: requestCorrelationId(req as { id?: string }),
+    });
+    res.status(202).json(result);
   });
 
   router.get('/api/posts/conflicts', requireAuth, async (req, res) => {

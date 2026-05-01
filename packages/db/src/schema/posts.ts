@@ -8,6 +8,7 @@ export const postStatusEnum = pgEnum('post_status', [
   'draft',
   'scheduled',
   'queued',
+  'paused',
   'publishing',
   'published',
   'failed',
