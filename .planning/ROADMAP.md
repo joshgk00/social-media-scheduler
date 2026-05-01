@@ -83,13 +83,19 @@ Plans:
   3. User can schedule a post for a specific datetime, save as draft, or publish immediately; drafts are not picked up by the scheduler
   4. User can create and apply tags to posts; scheduled posts show conflict warning when another post is within 5 minutes on the same profile
   5. Post state machine enforces valid transitions (draft -> scheduled -> publishing -> published/failed); posts in `publishing` state cannot be edited
-**Plans**: 5 plans
+**Plans**: 11 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 11-01-PLAN.md — Wave 0 shared utilities: snippet-tokens util + Zod schemas (snippets, calendar, posts response extension)
+- [ ] 11-02-PLAN.md — SEC-07: pino redact extension + BullMQ schema contract test + SECURITY.md
+- [ ] 11-03-PLAN.md — Drizzle schema (snippets table, posts.search_vector + tag_search_vector) + migration 0009 with hand-edited tsvector + GIN + trigger SQL
+- [ ] 11-04-PLAN.md — [BLOCKING] Apply migration 0009 + verify via psql + EXPLAIN
+- [ ] 11-05-PLAN.md — Snippet CRUD service + routes + integration tests (cross-tenant isolation, duplicate-name 409)
+- [ ] 11-06-PLAN.md — post.service FTS rewrite (plainto_tsquery + ts_headline + ts_rank) + scope-by-view + real-Postgres integration test (GIN hit, cross-tenant)
+- [ ] 11-07-PLAN.md — Calendar API: GET /api/calendar with windowed query + hasConflict (reusing checkConflicts) + filter integration tests
+- [ ] 11-08-PLAN.md — CSV bulk-import handlers wire substituteSnippetsInText + tests for missing/cross-tenant cases
+- [ ] 11-09-PLAN.md — Snippets web surface: useSnippets hooks + SnippetPicker (cursor-capture) + SnippetFormDialog + SnippetsPage + SharedPostFields integration
+- [ ] 11-10-PLAN.md — headline-to-mark allowlist parser + QueuePostsPage search input + render headline in posts/queue lists
+- [ ] 11-11-PLAN.md — Calendar UI: install react-big-calendar + luxonLocalizer + CalendarPage with custom toolbar + filter bar + sidebar/route wiring + platform color tokens
 **UI hint**: yes
 
 ### Phase 4: Publish Worker & Scheduled Posts
@@ -257,13 +263,19 @@ Plans:
   2. Profile list shows all connected profiles with network icon, token health badge (green/yellow/red), and last published date; filterable by network
   3. LinkedIn tokens auto-refresh 7 days before expiry; Facebook Page tokens are monitored via test API call (not expiry date); Twitter token revocation detected via 401
   4. Profiles with expired or invalid tokens are excluded from the publish loop with a clear error message and notification
-**Plans**: 5 plans
+**Plans**: 11 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 11-01-PLAN.md — Wave 0 shared utilities: snippet-tokens util + Zod schemas (snippets, calendar, posts response extension)
+- [ ] 11-02-PLAN.md — SEC-07: pino redact extension + BullMQ schema contract test + SECURITY.md
+- [ ] 11-03-PLAN.md — Drizzle schema (snippets table, posts.search_vector + tag_search_vector) + migration 0009 with hand-edited tsvector + GIN + trigger SQL
+- [ ] 11-04-PLAN.md — [BLOCKING] Apply migration 0009 + verify via psql + EXPLAIN
+- [ ] 11-05-PLAN.md — Snippet CRUD service + routes + integration tests (cross-tenant isolation, duplicate-name 409)
+- [ ] 11-06-PLAN.md — post.service FTS rewrite (plainto_tsquery + ts_headline + ts_rank) + scope-by-view + real-Postgres integration test (GIN hit, cross-tenant)
+- [ ] 11-07-PLAN.md — Calendar API: GET /api/calendar with windowed query + hasConflict (reusing checkConflicts) + filter integration tests
+- [ ] 11-08-PLAN.md — CSV bulk-import handlers wire substituteSnippetsInText + tests for missing/cross-tenant cases
+- [ ] 11-09-PLAN.md — Snippets web surface: useSnippets hooks + SnippetPicker (cursor-capture) + SnippetFormDialog + SnippetsPage + SharedPostFields integration
+- [ ] 11-10-PLAN.md — headline-to-mark allowlist parser + QueuePostsPage search input + render headline in posts/queue lists
+- [ ] 11-11-PLAN.md — Calendar UI: install react-big-calendar + luxonLocalizer + CalendarPage with custom toolbar + filter bar + sidebar/route wiring + platform color tokens
 **UI hint**: yes
 
 ### Phase 7.1: Profile UX Polish
@@ -291,13 +303,19 @@ Plans:
   2. User can create a Facebook post (text, up to 10 images, video, optional URL) with real-time character count (63,206 max); live preview approximates Facebook rendering
   3. LinkedIn and Facebook posts publish through the existing worker pipeline with the same retry, state machine, and idempotency guarantees as Twitter
   4. Dashboard widget shows current API usage vs. limit for each connected profile (color-coded green/yellow/red) across all platforms
-**Plans**: 5 plans
+**Plans**: 11 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 11-01-PLAN.md — Wave 0 shared utilities: snippet-tokens util + Zod schemas (snippets, calendar, posts response extension)
+- [ ] 11-02-PLAN.md — SEC-07: pino redact extension + BullMQ schema contract test + SECURITY.md
+- [ ] 11-03-PLAN.md — Drizzle schema (snippets table, posts.search_vector + tag_search_vector) + migration 0009 with hand-edited tsvector + GIN + trigger SQL
+- [ ] 11-04-PLAN.md — [BLOCKING] Apply migration 0009 + verify via psql + EXPLAIN
+- [ ] 11-05-PLAN.md — Snippet CRUD service + routes + integration tests (cross-tenant isolation, duplicate-name 409)
+- [ ] 11-06-PLAN.md — post.service FTS rewrite (plainto_tsquery + ts_headline + ts_rank) + scope-by-view + real-Postgres integration test (GIN hit, cross-tenant)
+- [ ] 11-07-PLAN.md — Calendar API: GET /api/calendar with windowed query + hasConflict (reusing checkConflicts) + filter integration tests
+- [ ] 11-08-PLAN.md — CSV bulk-import handlers wire substituteSnippetsInText + tests for missing/cross-tenant cases
+- [ ] 11-09-PLAN.md — Snippets web surface: useSnippets hooks + SnippetPicker (cursor-capture) + SnippetFormDialog + SnippetsPage + SharedPostFields integration
+- [ ] 11-10-PLAN.md — headline-to-mark allowlist parser + QueuePostsPage search input + render headline in posts/queue lists
+- [ ] 11-11-PLAN.md — Calendar UI: install react-big-calendar + luxonLocalizer + CalendarPage with custom toolbar + filter bar + sidebar/route wiring + platform color tokens
 **UI hint**: yes
 
 ### Phase 8.1: Rate Limit Dashboard Widget
@@ -403,13 +421,19 @@ Plans:
   3. Calendar shows monthly, weekly, and daily views of all scheduled posts and queue runs; entries are color-coded by platform; clicking an entry opens edit, clicking empty slot opens creation pre-filled with that datetime
   4. Calendar highlights conflicting time slots (same profile within 5 minutes) with visual indicator; filterable by platform, profile, and tags
   5. OpenAI API key handling follows SEC-07 policy: never persisted, passed per-request only, never in job payloads, Redis, or logs
-**Plans**: 5 plans
+**Plans**: 11 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [ ] 11-01-PLAN.md — Wave 0 shared utilities: snippet-tokens util + Zod schemas (snippets, calendar, posts response extension)
+- [ ] 11-02-PLAN.md — SEC-07: pino redact extension + BullMQ schema contract test + SECURITY.md
+- [ ] 11-03-PLAN.md — Drizzle schema (snippets table, posts.search_vector + tag_search_vector) + migration 0009 with hand-edited tsvector + GIN + trigger SQL
+- [ ] 11-04-PLAN.md — [BLOCKING] Apply migration 0009 + verify via psql + EXPLAIN
+- [ ] 11-05-PLAN.md — Snippet CRUD service + routes + integration tests (cross-tenant isolation, duplicate-name 409)
+- [ ] 11-06-PLAN.md — post.service FTS rewrite (plainto_tsquery + ts_headline + ts_rank) + scope-by-view + real-Postgres integration test (GIN hit, cross-tenant)
+- [ ] 11-07-PLAN.md — Calendar API: GET /api/calendar with windowed query + hasConflict (reusing checkConflicts) + filter integration tests
+- [ ] 11-08-PLAN.md — CSV bulk-import handlers wire substituteSnippetsInText + tests for missing/cross-tenant cases
+- [ ] 11-09-PLAN.md — Snippets web surface: useSnippets hooks + SnippetPicker (cursor-capture) + SnippetFormDialog + SnippetsPage + SharedPostFields integration
+- [ ] 11-10-PLAN.md — headline-to-mark allowlist parser + QueuePostsPage search input + render headline in posts/queue lists
+- [ ] 11-11-PLAN.md — Calendar UI: install react-big-calendar + luxonLocalizer + CalendarPage with custom toolbar + filter bar + sidebar/route wiring + platform color tokens
 **UI hint**: yes
 
 ## Progress
@@ -442,4 +466,4 @@ Note: Phases 6.6, 7.1, 8.1, 9.2 are gap closure phases inserted after the 2026-0
 | 9.1 Notifications & Settings Polish | 3/3 | Complete | - |
 | 9.2 Tech Debt Sweep | 0/TBD | Gap closure (planning) | - |
 | 10. Bulk Operations | 0/TBD | Not started | - |
-| 11. Snippets, Search, Calendar & Polish | 0/TBD | Not started | - |
+| 11. Snippets, Search, Calendar & Polish | 0/11 | Planned | - |
