@@ -739,32 +739,32 @@ Required — `security_enforcement` is enabled by absence of `false`.
 
 **The remaining factual claims in this research were verified via tool calls** (npm view, file reads, ripgrep) **or directly cited from project files (CONTEXT.md, SPEC.md, UI-SPEC.md, REQUIREMENTS.md, CLAUDE.md, existing codebase).**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Tag-rename → tsvector refresh — accept the gap or add a second trigger?**
    - What we know: SPEC §Boundaries excludes tag CRUD changes from this phase.
    - What's unclear: Whether existing TAGS-01 (tag rename) exercises stale-vector behavior often enough to matter today.
-   - Recommendation: Document as known limitation in PR description; do NOT add the second trigger in Phase 11. Reopen if user feedback reports it.
+   - RESOLVED: Documented as accepted gap. Plan 11-03 threat T-11-03-05 records the disposition; tag CRUD is excluded by SPEC §Boundaries and no second trigger is added in Phase 11.
 
 2. **`websearch_to_tsquery` vs `plainto_tsquery`?**
    - What we know: Both are PG-builtin; CONTEXT prescribes neither explicitly (D-06..D-09 cover storage, not query).
    - What's unclear: Whether users want OR semantics ("launch announce" → either word) for breadth.
-   - Recommendation: Ship `plainto_tsquery` (AND semantics). Add a TODO to switch to `websearch_to_tsquery` if user feedback prefers OR.
+   - RESOLVED: Plans 11-06 and 11-07 use `plainto_tsquery` (AND semantics) at the search service layer; switch to `websearch_to_tsquery` is deferred until user feedback warrants it.
 
 3. **`SECURITY.md` location — root or `docs/`?**
    - What we know: CONTEXT D-17 says "planner picks based on existing project convention."
    - What's unclear: This repo has no `SECURITY.md` today and no `docs/` directory at root.
-   - Recommendation: Create `SECURITY.md` at repo root — that's the GitHub-recognized convention and keeps it adjacent to `README.md`.
+   - RESOLVED: `SECURITY.md` lives at the repo root (GitHub-recognized convention, adjacent to `README.md`); the docs plan in this phase writes to that path.
 
 4. **Calendar window size cap?**
    - What we know: SPEC says windowed; no max declared.
    - What's unclear: Whether we should reject ranges larger than e.g. 90 days as a DoS guard.
-   - Recommendation: Cap at 100 days in `calendarQuerySchema`. UI cannot exceed Month view (~35 days), so the cap only protects against malicious clients.
+   - RESOLVED: 100-day window cap implemented in plan 11-01 `calendarQuerySchema.refine` and enforced in plan 11-07 Test 2.
 
 5. **Snippet name allowed character set in `{{snippet:name}}`?**
    - What we know: SPEC says "case-insensitive name match." UI allows `[a-zA-Z0-9_\- ]+`.
    - What's unclear: Whether spaces in names are valid inside `{{snippet:name with spaces}}` tokens.
-   - Recommendation: Allow `[a-zA-Z0-9_\- ]+` in both UI and CSV regex; trim before lookup. This matches what users naturally write.
+   - RESOLVED: `[a-zA-Z0-9_\- ]+` allowed in both the UI snippet name validator (plan 11-09) and the CSV `{{snippet:name}}` regex (plan 11-10), with trim-before-lookup applied at the resolver.
 
 ## Sources
 
