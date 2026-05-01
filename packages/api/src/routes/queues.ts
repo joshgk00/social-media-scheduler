@@ -82,7 +82,7 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
     userId: string;
     queueId: string;
     operationType: string;
-    data: Record<string, unknown>;
+    params: Record<string, unknown>;
     idempotencyKey: string;
     correlationId: string;
   }) {
@@ -108,7 +108,7 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
         targetKind: 'queue',
         targetId: args.queueId,
         idempotencyKey: args.idempotencyKey,
-        payload: args.data,
+        payload: args.params,
       })
       .returning();
     const job = await bulkOpsQueueService.enqueueBulkOp(
@@ -120,7 +120,7 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
         targetKind: 'queue',
         targetId: args.queueId,
         idempotencyKey: args.idempotencyKey,
-        data: args.data,
+        params: args.params,
         correlationId: args.correlationId,
       },
       Math.floor(Date.now() / 1000),
@@ -246,7 +246,7 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueueRandomize,
-      data: parsed.data,
+      params: parsed.data,
       idempotencyKey,
       correlationId: requestCorrelationId(req as { id?: string }),
     });
@@ -278,7 +278,7 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueuePurge,
-      data: parsed.data,
+      params: parsed.data,
       idempotencyKey,
       correlationId: requestCorrelationId(req as { id?: string }),
     });
@@ -306,7 +306,7 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueueCopy,
-      data: parsed.data,
+      params: parsed.data,
       idempotencyKey,
       correlationId: requestCorrelationId(req as { id?: string }),
     });
@@ -334,7 +334,7 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueueTextModify,
-      data: parsed.data,
+      params: parsed.data,
       idempotencyKey,
       correlationId: requestCorrelationId(req as { id?: string }),
     });
@@ -362,7 +362,7 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueueDedupe,
-      data: parsed.data,
+      params: parsed.data,
       idempotencyKey,
       correlationId: requestCorrelationId(req as { id?: string }),
     });

@@ -7,11 +7,11 @@ export async function handleProfileResume(
   job: { data: BulkJobData },
   ctx: BulkJobContext,
 ): Promise<BulkJobResult> {
-  const scope = String(job.data.data.scope ?? 'scheduled-posts');
+  const scope = String(job.data.params.scope ?? 'scheduled-posts');
   let successCount = 0;
 
   if (scope === 'scheduled-posts' || scope === 'both') {
-    let postIds = selectedPostIds(job.data.data);
+    let postIds = selectedPostIds(job.data.params);
     if (postIds.length === 0 && job.data.targetId) {
       const rows = await ctx.db
         .select({ id: posts.id })

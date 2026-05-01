@@ -189,7 +189,7 @@ export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRo
           targetKind: target === 'scheduled' ? 'profile' : 'queue',
           targetId,
           idempotencyKey,
-          data: target === 'scheduled'
+          params: target === 'scheduled'
             ? { profileId, rows: parsedCsv.rows, errors: parsedCsv.errors }
             : { profileId, queueId, rows: parsedCsv.rows, errors: parsedCsv.errors },
           correlationId: requestCorrelationId(req as { id?: string }),

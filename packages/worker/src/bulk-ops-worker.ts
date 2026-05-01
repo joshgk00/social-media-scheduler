@@ -1,6 +1,6 @@
 import { Worker, UnrecoverableError, type Job } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { JOB_NAMES, QUEUE_NAMES } from '@sms/shared';
+import { bulkJobPayloadSchema, JOB_NAMES, QUEUE_NAMES } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { BulkJobContext, BulkJobData, BulkJobResult } from './bulk/common.js';
 import {
@@ -57,22 +57,28 @@ async function dispatchBulkJob(job: Job<BulkJobData>, ctx: BulkJobContext): Prom
 }
 
 async function processBulkJob(job: Job<BulkJobData>, ctx: BulkJobContext): Promise<void> {
-  await markBulkOperationRunning(ctx.db, job.data.bulkOperationId);
+  const parsedPayload = bulkJobPayloadSchema.safeParse(job.data);
+  if (!parsedPayload.success) {
+    throw new UnrecoverableError('Invalid bulk operation job payload');
+  }
+  const bulkJob = Object.assign(job, { data: parsedPayload.data }) as Job<BulkJobData>;
+
+  await markBulkOperationRunning(ctx.db, bulkJob.data.bulkOperationId);
   try {
-    const result = await dispatchBulkJob(job, ctx);
-    await markBulkOperationFinished(ctx.db, job.data.bulkOperationId, result);
+    const result = await dispatchBulkJob(bulkJob, ctx);
+    await markBulkOperationFinished(ctx.db, bulkJob.data.bulkOperationId, result);
     await ctx.notificationQueue.add('bulk-completed', {
       eventType: 'bulk_completed',
-      userId: job.data.userId,
-      bulkOperationId: job.data.bulkOperationId,
-      operation: job.data.operationType,
+      userId: bulkJob.data.userId,
+      bulkOperationId: bulkJob.data.bulkOperationId,
+      operation: bulkJob.data.operationType,
       successCount: result.successCount,
       failureCount: result.failureCount,
       errorReportPath: result.errorReportPath ?? null,
-      correlationId: job.data.correlationId,
+      correlationId: bulkJob.data.correlationId,
     });
   } catch (err) {
-    await markBulkOperationFailed(ctx.db, job.data.bulkOperationId, err);
+    await markBulkOperationFailed(ctx.db, bulkJob.data.bulkOperationId, err);
     throw err;
   }
 }

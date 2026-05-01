@@ -7,7 +7,7 @@ export async function handleProfileBulkDelete(
   job: { data: BulkJobData },
   ctx: BulkJobContext,
 ): Promise<BulkJobResult> {
-  const postIds = selectedPostIds(job.data.data);
+  const postIds = selectedPostIds(job.data.params);
   if (postIds.length === 0) {
     throw new Error('Bulk delete job payload must include resolved postIds');
   }

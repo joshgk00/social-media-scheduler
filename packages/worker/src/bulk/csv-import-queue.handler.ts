@@ -7,7 +7,7 @@ export async function handleCsvImportQueue(
   job: { data: BulkJobData },
   ctx: BulkJobContext,
 ): Promise<BulkJobResult> {
-  const parsedPayload = csvImportQueueJobDataSchema.safeParse(job.data.data);
+  const parsedPayload = csvImportQueueJobDataSchema.safeParse(job.data.params);
   if (!parsedPayload.success) {
     throw new Error('Invalid queue CSV import job payload');
   }

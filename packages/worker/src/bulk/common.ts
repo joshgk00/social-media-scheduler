@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
 import { bulkOperations } from '@sms/db';
+import type { BulkJobPayload } from '@sms/shared';
 import type { WorkerDb } from '../db.js';
 
 export interface BulkJobContext {
@@ -12,16 +13,7 @@ export interface BulkJobContext {
   appBaseUrl: string;
 }
 
-export interface BulkJobData {
-  bulkOperationId: string;
-  userId: string;
-  operationType: string;
-  targetKind: 'profile' | 'queue' | 'scheduled-list';
-  targetId: string | null;
-  idempotencyKey: string;
-  data: Record<string, unknown>;
-  correlationId: string;
-}
+export type BulkJobData = BulkJobPayload;
 
 export interface BulkJobResult {
   status: 'succeeded' | 'partial' | 'failed';

@@ -7,7 +7,7 @@ export async function handleCsvImportScheduled(
   job: { data: BulkJobData },
   ctx: BulkJobContext,
 ): Promise<BulkJobResult> {
-  const parsedPayload = csvImportScheduledJobDataSchema.safeParse(job.data.data);
+  const parsedPayload = csvImportScheduledJobDataSchema.safeParse(job.data.params);
   if (!parsedPayload.success) {
     throw new Error('Invalid scheduled CSV import job payload');
   }

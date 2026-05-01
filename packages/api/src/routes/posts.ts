@@ -184,7 +184,7 @@ export function createPostsRouter({
   async function enqueuePostBulkOperation(args: {
     userId: string;
     operationType: string;
-    data: Record<string, unknown>;
+    params: Record<string, unknown>;
     targetKind?: 'profile' | 'queue' | 'scheduled-list';
     targetId?: string | null;
     idempotencyKey: string;
@@ -212,7 +212,7 @@ export function createPostsRouter({
         targetKind: args.targetKind ?? 'scheduled-list',
         targetId: args.targetId ?? null,
         idempotencyKey: args.idempotencyKey,
-        payload: args.data,
+        payload: args.params,
       })
       .returning();
     const job = await bulkOpsQueueService.enqueueBulkOp(
@@ -224,7 +224,7 @@ export function createPostsRouter({
         targetKind: args.targetKind ?? 'scheduled-list',
         targetId: args.targetId ?? null,
         idempotencyKey: args.idempotencyKey,
-        data: args.data,
+        params: args.params,
         correlationId: args.correlationId,
       },
       Math.floor(Date.now() / 1000),
@@ -493,7 +493,7 @@ export function createPostsRouter({
     const result = await enqueuePostBulkOperation({
       userId: req.session.userId!,
       operationType: JOB_NAMES.bulkProfilePause,
-      data: parsed.data,
+      params: parsed.data,
       targetKind: 'profile',
       targetId: parsed.data.profileId,
       idempotencyKey,
@@ -516,7 +516,7 @@ export function createPostsRouter({
     const result = await enqueuePostBulkOperation({
       userId: req.session.userId!,
       operationType: JOB_NAMES.bulkProfileResume,
-      data: parsed.data,
+      params: parsed.data,
       targetKind: 'profile',
       targetId: parsed.data.profileId,
       idempotencyKey,
@@ -546,7 +546,7 @@ export function createPostsRouter({
     const result = await enqueuePostBulkOperation({
       userId: req.session.userId!,
       operationType: JOB_NAMES.bulkProfileBulkDelete,
-      data: { postIds, typedConfirmation: parsed.data.typedConfirmation, postCount },
+      params: { postIds, typedConfirmation: parsed.data.typedConfirmation, postCount },
       idempotencyKey,
       correlationId: requestCorrelationId(req as { id?: string }),
     });
@@ -567,7 +567,7 @@ export function createPostsRouter({
     const result = await enqueuePostBulkOperation({
       userId: req.session.userId!,
       operationType: JOB_NAMES.bulkProfileModifyTags,
-      data: parsed.data,
+      params: parsed.data,
       idempotencyKey,
       correlationId: requestCorrelationId(req as { id?: string }),
     });

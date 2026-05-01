@@ -8,7 +8,7 @@ export async function handleQueueCopy(
   ctx: BulkJobContext,
 ): Promise<BulkJobResult> {
   const sourceQueueId = job.data.targetId;
-  const targetQueueId = String(job.data.data.targetQueueId ?? '');
+  const targetQueueId = String(job.data.params.targetQueueId ?? '');
   if (!sourceQueueId || !targetQueueId) throw new Error('Source and target queue IDs are required');
 
   const copiedCount = await ctx.db.transaction(async (tx) => {
@@ -56,12 +56,12 @@ export async function handleQueueCopy(
     return sourcePosts.length;
   });
 
-  if (job.data.data.randomizeAfter === true) {
+  if (job.data.params.randomizeAfter === true) {
     await ctx.bulkOpsQueue.add(JOB_NAMES.bulkQueueRandomize, {
       ...job.data,
       targetId: targetQueueId,
       operationType: JOB_NAMES.bulkQueueRandomize,
-      data: {},
+      params: {},
     });
   }
 

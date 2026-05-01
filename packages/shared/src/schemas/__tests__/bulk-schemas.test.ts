@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   bulkCompletedNotificationSchema,
+  bulkJobPayloadSchema,
   bulkDeleteInputSchema,
   bulkImportRequestSchema,
   bulkModifyTagsInputSchema,
@@ -120,5 +121,33 @@ describe('bulk operation schemas', () => {
         correlationId: uuid,
       }).success,
     ).toBe(true);
+  });
+
+  it('validates the bulk job wire payload with params naming', () => {
+    expect(
+      bulkJobPayloadSchema.safeParse({
+        bulkOperationId: uuid,
+        userId: uuid,
+        operationType: 'bulk.queue-randomize',
+        targetKind: 'queue',
+        targetId: uuid,
+        idempotencyKey: uuid,
+        params: {},
+        correlationId: uuid,
+      }).success,
+    ).toBe(true);
+
+    expect(
+      bulkJobPayloadSchema.safeParse({
+        bulkOperationId: uuid,
+        userId: uuid,
+        operationType: 'bulk.queue-randomize',
+        targetKind: 'queue',
+        targetId: uuid,
+        idempotencyKey: uuid,
+        data: {},
+        correlationId: uuid,
+      }).success,
+    ).toBe(false);
   });
 });

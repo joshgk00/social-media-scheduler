@@ -11,6 +11,7 @@ export * from './schemas/profiles.js';
 export * from './schemas/oauth.js';
 export * from './schemas/notifications.js';
 export * from './schemas/bulk-import.js';
+export * from './schemas/bulk-jobs.js';
 export * from './schemas/bulk-ops.js';
 export * from './schemas/bulk-operations.js';
 export * from './schemas/bulk-notifications.js';

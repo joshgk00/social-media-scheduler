@@ -20,7 +20,7 @@ export async function handleQueueTextModify(
 ): Promise<BulkJobResult> {
   const queueId = job.data.targetId;
   if (!queueId) throw new Error('Queue targetId is required');
-  const parsedInput = queueTextModifyInputSchema.safeParse(job.data.data);
+  const parsedInput = queueTextModifyInputSchema.safeParse(job.data.params);
   if (!parsedInput.success) {
     throw new Error('Invalid queue text modify job payload');
   }

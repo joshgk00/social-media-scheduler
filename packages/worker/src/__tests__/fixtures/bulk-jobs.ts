@@ -1,4 +1,4 @@
-import { JOB_NAMES } from '@sms/shared';
+import { JOB_NAMES, type BulkJobPayload, type JobName } from '@sms/shared';
 
 const userId = '00000000-0000-4000-8000-000000000001';
 const profileId = '00000000-0000-4000-8000-000000000002';
@@ -7,54 +7,71 @@ const targetQueueId = '00000000-0000-4000-8000-000000000004';
 const bulkOperationId = '00000000-0000-4000-8000-000000000005';
 const idempotencyKey = '00000000-0000-4000-8000-000000000006';
 
-function baseData(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function baseJob(
+  name: JobName,
+  params: Record<string, unknown> = {},
+  overrides: Partial<BulkJobPayload> = {},
+) {
   return {
-    userId,
-    profileId,
-    queueId,
-    bulkOperationId,
-    idempotencyKey,
-    correlationId: '00000000-0000-4000-8000-000000000007',
-    ...overrides,
+    name,
+    data: {
+      bulkOperationId,
+      userId,
+      operationType: name,
+      targetKind: 'queue' as const,
+      targetId: queueId,
+      idempotencyKey,
+      params,
+      correlationId: '00000000-0000-4000-8000-000000000007',
+      ...overrides,
+    },
   };
 }
 
 export function makeCsvImportScheduledJob() {
-  return { name: JOB_NAMES.bulkCsvImportScheduled, data: baseData({ csvPath: '/tmp/scheduled.csv' }) };
+  return baseJob(
+    JOB_NAMES.bulkCsvImportScheduled,
+    { profileId, rows: [], errors: [] },
+    { targetKind: 'profile', targetId: profileId },
+  );
 }
 
 export function makeCsvImportQueueJob() {
-  return { name: JOB_NAMES.bulkCsvImportQueue, data: baseData({ csvPath: '/tmp/queue.csv' }) };
+  return baseJob(JOB_NAMES.bulkCsvImportQueue, { profileId, queueId, rows: [], errors: [] });
 }
 
 export function makeQueueRandomizeJob() {
-  return { name: JOB_NAMES.bulkQueueRandomize, data: baseData() };
+  return baseJob(JOB_NAMES.bulkQueueRandomize);
 }
 
 export function makeQueuePurgeJob() {
-  return { name: JOB_NAMES.bulkQueuePurge, data: baseData({ typedConfirmation: 'Main Queue' }) };
+  return baseJob(JOB_NAMES.bulkQueuePurge, { typedConfirmation: 'Main Queue' });
 }
 
 export function makeQueueCopyJob() {
-  return { name: JOB_NAMES.bulkQueueCopy, data: baseData({ targetQueueId, randomizeAfter: false }) };
+  return baseJob(JOB_NAMES.bulkQueueCopy, { targetQueueId, randomizeAfter: false });
 }
 
 export function makeQueueTextModifyJob() {
-  return { name: JOB_NAMES.bulkQueueTextModify, data: baseData({ mode: 'append', text: '#launch', separator: ' ' }) };
+  return baseJob(JOB_NAMES.bulkQueueTextModify, { mode: 'append', text: '#launch', separator: ' ' });
 }
 
 export function makeQueueDedupeJob() {
-  return { name: JOB_NAMES.bulkQueueDedupe, data: baseData() };
+  return baseJob(JOB_NAMES.bulkQueueDedupe);
 }
 
 export function makeProfilePauseJob() {
-  return { name: JOB_NAMES.bulkProfilePause, data: baseData({ scope: 'both' }) };
+  return baseJob(JOB_NAMES.bulkProfilePause, { scope: 'both' }, { targetKind: 'profile', targetId: profileId });
 }
 
 export function makeProfileResumeJob() {
-  return { name: JOB_NAMES.bulkProfileResume, data: baseData({ scope: 'both' }) };
+  return baseJob(JOB_NAMES.bulkProfileResume, { scope: 'both' }, { targetKind: 'profile', targetId: profileId });
 }
 
 export function makeProfileBulkDeleteJob() {
-  return { name: JOB_NAMES.bulkProfileBulkDelete, data: baseData({ filter: { profileId }, typedConfirmation: 'DELETE 3 POSTS' }) };
+  return baseJob(
+    JOB_NAMES.bulkProfileBulkDelete,
+    { postIds: [targetQueueId], typedConfirmation: 'DELETE 1 POSTS', postCount: 1 },
+    { targetKind: 'scheduled-list', targetId: null },
+  );
 }
