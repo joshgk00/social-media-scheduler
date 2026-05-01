@@ -22,6 +22,18 @@ async function parseErrorBody(res: Response): Promise<Record<string, unknown>> {
   return res.json().catch(() => ({}));
 }
 
+function filenameFromContentDisposition(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+
+  const encodedMatch = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
+  if (encodedMatch?.[1]) {
+    return decodeURIComponent(encodedMatch[1].replace(/^"|"$/g, ''));
+  }
+
+  const filenameMatch = /filename="?([^";]+)"?/i.exec(contentDisposition);
+  return filenameMatch?.[1] ?? null;
+}
+
 function isCsrfError(status: number, body: Record<string, unknown>): boolean {
   if (status !== 403) return false;
   const msg = ((body.error as string) ?? '').toLowerCase();
@@ -149,5 +161,26 @@ export const apiClient = {
       throw createError((body.error as string) || res.statusText, res.status, body);
     }
     return res.json();
+  },
+
+  async uploadCsv<T = unknown>(path: string, formData: FormData): Promise<T> {
+    return this.postFormData<T>(path, formData);
+  },
+
+  async downloadCsv(path: string, filename: string): Promise<void> {
+    const res = await fetch(path, { credentials: 'include' });
+    if (!res.ok) {
+      const body = await parseErrorBody(res);
+      throw createError((body.error as string) || res.statusText, res.status, body);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filenameFromContentDisposition(res.headers.get('Content-Disposition')) ?? filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   },
 };

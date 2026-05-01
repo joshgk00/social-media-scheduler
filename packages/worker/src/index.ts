@@ -32,6 +32,7 @@ import { startTokenRefreshScanner } from './token-refresh-scanner.js';
 import { createTokenRefreshWorker } from './token-refresh-worker.js';
 import { createNotificationWorker } from './notification-worker.js';
 import { buildSmtpTransporter } from './notifications/smtp.js';
+import { createBulkOpsWorker } from './bulk-ops-worker.js';
 
 const logger = createLogger('worker');
 
@@ -54,6 +55,7 @@ async function main() {
   const heartbeatInterval = startHeartbeat(redis);
 
   const publishQueue = new Queue(QUEUE_NAMES.publish, { connection: redis });
+  const bulkOpsQueue = new Queue(QUEUE_NAMES.bulkOps, { connection: redis });
   const notificationQueue = new Queue(QUEUE_NAMES.notification, {
     connection: redis,
   });
@@ -106,13 +108,22 @@ async function main() {
     smtpFrom,
     appBaseUrl,
   });
+  const bulkOpsWorker = createBulkOpsWorker({
+    redis,
+    db,
+    publishQueue,
+    bulkOpsQueue,
+    notificationQueue,
+    storageRoot: process.env.MEDIA_DIR || './data/media',
+    appBaseUrl,
+  });
   logger.info(
     { concurrency: process.env.NOTIFICATION_WORKER_CONCURRENCY ?? '2' },
     'Notification worker started',
   );
 
   logger.info(
-    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker + transcode worker + media cleanup worker + token-refresh scanner/worker + notification worker active',
+    'Worker fully started: heartbeat + publish worker + scanner + queue scanner + auto-destruct worker + transcode worker + media cleanup worker + token-refresh scanner/worker + notification worker + bulk-ops worker active',
   );
 
   const closeWithTimeout = async (
@@ -151,6 +162,7 @@ async function main() {
     // then queues (stop new enqueues), then DB, then Redis. Each in its
     // own try/catch so one failure does not skip the rest.
     await closeWithTimeout('notificationWorker', () => notificationWorker.close());
+    await closeWithTimeout('bulkOpsWorker', () => bulkOpsWorker.close());
     await closeWithTimeout('tokenRefreshWorker', () => tokenRefreshWorker.close());
     await closeWithTimeout('mediaCleanupWorker', () => mediaCleanupWorker.close());
     await closeWithTimeout('transcodeWorker', () => transcodeWorker.close());
@@ -161,6 +173,7 @@ async function main() {
     await closeWithTimeout('autoDestructQueue', () => autoDestructQueue.close());
     await closeWithTimeout('queueScannerQueue', () => queueScannerQueue.close());
     await closeWithTimeout('publishQueue', () => publishQueue.close());
+    await closeWithTimeout('bulkOpsQueue', () => bulkOpsQueue.close());
     await closeWithTimeout('scannerQueue', () => scannerQueue.close());
     await closeWithTimeout('cleanupQueue', () => cleanupQueue.close());
     await closeWithTimeout('tokenRefreshQueue', () => tokenRefreshQueue.close());

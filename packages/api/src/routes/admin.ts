@@ -9,6 +9,7 @@ import { requireAuth } from '../middleware/auth-guard.js';
 export interface AdminRouterDeps {
   publishQueue: Queue;
   notificationQueue: Queue;
+  bulkOpsQueue?: Queue;
 }
 
 // Bull-Board operator dashboard mounted at /admin/queues.
@@ -27,6 +28,7 @@ export interface AdminRouterDeps {
 export function createAdminRouter({
   publishQueue,
   notificationQueue,
+  bulkOpsQueue,
 }: AdminRouterDeps): Router {
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
@@ -35,6 +37,7 @@ export function createAdminRouter({
     queues: [
       new BullMQAdapter(publishQueue),
       new BullMQAdapter(notificationQueue),
+      ...(bulkOpsQueue ? [new BullMQAdapter(bulkOpsQueue)] : []),
     ],
     serverAdapter,
   });

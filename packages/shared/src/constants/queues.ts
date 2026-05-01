@@ -8,6 +8,7 @@ export const QUEUE_NAMES = {
   transcode: 'transcode',
   mediaCleanup: 'media-cleanup',
   tokenRefresh: 'token-refresh',
+  bulkOps: 'bulk-ops',
 } as const;
 
 export const JOB_NAMES = {
@@ -30,6 +31,18 @@ export const JOB_NAMES = {
   tokenExpiringSoon: 'token-expiring-soon',
   tokenRevoked: 'token-revoked',
   tokenReauthRequired: 'token-reauth-required',
+  bulkCompletedNotification: 'bulk-completed',
+  bulkCsvImportScheduled: 'bulk.csv-import-scheduled',
+  bulkCsvImportQueue: 'bulk.csv-import-queue',
+  bulkQueueRandomize: 'bulk.queue-randomize',
+  bulkQueuePurge: 'bulk.queue-purge',
+  bulkQueueCopy: 'bulk.queue-copy',
+  bulkQueueTextModify: 'bulk.queue-text-modify',
+  bulkQueueDedupe: 'bulk.queue-dedupe',
+  bulkProfilePause: 'bulk.profile-pause',
+  bulkProfileResume: 'bulk.profile-resume',
+  bulkProfileBulkDelete: 'bulk.profile-bulk-delete',
+  bulkProfileModifyTags: 'bulk.profile-modify-tags',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
@@ -52,6 +65,14 @@ export function buildPublishJobId(postId: string, postVersion: number): string {
 
 export function buildAutoDestructJobId(postId: string, platformPostId: string): string {
   return `auto-destruct-${postId}-${platformPostId}`;
+}
+
+export function buildBulkJobId(
+  operationType: string,
+  targetId: string,
+  timestampSeconds: number,
+): string {
+  return `${operationType}-${targetId}-${timestampSeconds}`;
 }
 
 /**

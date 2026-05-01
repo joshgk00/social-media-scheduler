@@ -31,3 +31,8 @@ export const queueMutationLimiter = createLimiter({
   max: 60,
   message: { error: 'Too many queue requests. Try again in 15 minutes.' },
 });
+
+export const bulkOperationsLimiter = createLimiter({
+  max: 30,
+  message: { error: 'Too many bulk operation requests. Try again in 15 minutes.' },
+});

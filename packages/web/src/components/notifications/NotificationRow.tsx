@@ -27,6 +27,14 @@ function isSafeLinkPath(linkPath: string | null): linkPath is string {
   return Boolean(linkPath && /^\/(?:posts|profiles|queues)(?:\/[a-z0-9-]+)?$/i.test(linkPath));
 }
 
+function getErrorReportUrl(payload: Record<string, unknown>): string | null {
+  const displayKind = payload.displayKind;
+  const errorReportUrl = payload.errorReportUrl;
+  return displayKind === 'bulk-op-failed' && typeof errorReportUrl === 'string' && errorReportUrl.length > 0
+    ? errorReportUrl
+    : null;
+}
+
 function NotificationRowView({ notification, onMarkRead, onNavigate }: NotificationRowProps & { onNavigate: (linkPath: string) => void }) {
   const SeverityIcon = severityIcons[notification.severity];
   const isUnread = notification.readAt === null;
@@ -35,6 +43,11 @@ function NotificationRowView({ notification, onMarkRead, onNavigate }: Notificat
     try {
       if (isUnread) {
         await onMarkRead?.(notification.id);
+      }
+      const errorReportUrl = getErrorReportUrl(notification.payload);
+      if (errorReportUrl) {
+        window.open(errorReportUrl, '_blank', 'noopener,noreferrer');
+        return;
       }
       if (isSafeLinkPath(notification.linkPath)) {
         onNavigate(notification.linkPath);

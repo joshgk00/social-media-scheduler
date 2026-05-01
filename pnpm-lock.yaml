@@ -53,6 +53,12 @@ importers:
       csrf-csrf:
         specifier: ~4.0.3
         version: 4.0.3
+      csv-parse:
+        specifier: ~6.2.1
+        version: 6.2.1
+      csv-stringify:
+        specifier: ~6.7.0
+        version: 6.7.0
       dotenv:
         specifier: ^17.4.1
         version: 17.4.1
@@ -178,6 +184,9 @@ importers:
       twitter-api-v2:
         specifier: ~1.29.0
         version: 1.29.0
+      twitter-text:
+        specifier: ~3.1.0
+        version: 3.1.0
       zod:
         specifier: ~3.25.76
         version: 3.25.76
@@ -188,6 +197,9 @@ importers:
       '@types/node':
         specifier: ^25.5.2
         version: 25.5.2
+      '@types/twitter-text':
+        specifier: ~3.1.10
+        version: 3.1.10
       pino-pretty:
         specifier: ~13.1.3
         version: 13.1.3
@@ -3177,6 +3189,12 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  csv-parse@6.2.1:
+    resolution: {integrity: sha512-LRLMV+UCyfMokp8Wb411duBf1gaBKJfOfBWU9eHMJ+b+cJYZsNu3AFmjJf3+yPGd59Exz1TsMjaSFyxnYB9+IQ==}
+
+  csv-stringify@6.7.0:
+    resolution: {integrity: sha512-UdtziYp5HuTz7e5j8Nvq+a/3HQo+2/aJZ9xntNTpmRRIg/3YYqDVgiS9fvAhtNbnyfbv2ZBe0bqCHqzhE7FqWQ==}
 
   data-urls@7.0.0:
     resolution: {integrity: sha512-23XHcCF+coGYevirZceTVD7NdJOqVn+49IHyxgszm+JIiHLoB2TkmPtsYkNWT1pvRSGkc35L6NHs0yHkN2SumA==}
@@ -8020,6 +8038,10 @@ snapshots:
       lru-cache: 11.3.3
 
   csstype@3.2.3: {}
+
+  csv-parse@6.2.1: {}
+
+  csv-stringify@6.7.0: {}
 
   data-urls@7.0.0(@noble/hashes@2.0.1):
     dependencies:

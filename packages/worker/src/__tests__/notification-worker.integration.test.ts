@@ -218,15 +218,31 @@ describe('notification worker integration', () => {
     expect(await readEmailLogRows(ctx.db)).toHaveLength(0);
   });
 
-  it('NOTIF-09 bulk_completed is an acked no-op stub', async () => {
+  it('NOTIF-09 bulk_completed creates an in-app notification', async () => {
+    const user = await seedTestUser(ctx.db);
+    const bulkOperationId = randomUUID();
+
     await createProcessor().process({
       id: 'bulk-job-1',
       name: 'bulk-completed',
-      data: { correlationId: randomUUID() },
+      data: {
+        eventType: 'bulk_completed',
+        userId: user.id,
+        bulkOperationId,
+        operation: 'bulk.queue-randomize',
+        successCount: 10,
+        failureCount: 0,
+        correlationId: randomUUID(),
+      },
       attemptsMade: 0,
     });
 
-    expect(await readNotificationRows(ctx.db)).toHaveLength(0);
+    const notificationRows = await waitForRows(() => readNotificationRows(ctx.db), 1);
+    expect(notificationRows[0]).toMatchObject({
+      userId: user.id,
+      eventType: 'bulk_completed',
+      title: 'Randomize queue complete',
+    });
     expect(await readEmailLogRows(ctx.db)).toHaveLength(0);
   });
 

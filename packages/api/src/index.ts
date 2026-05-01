@@ -15,6 +15,7 @@ import { createStorageBackend } from '@sms/shared/storage';
 import { logger } from './middleware/logger.js';
 import { createApp } from './app.js';
 import { createPublishQueueService } from './services/publish-queue.service.js';
+import { createBulkOpsQueueService } from './services/bulk-ops-queue.service.js';
 
 const DATABASE_URL = requireEnv('DATABASE_URL');
 const REDIS_URL = requireEnv('REDIS_URL');
@@ -33,6 +34,7 @@ async function main() {
   redis.on('error', (err) => logger.error({ err }, 'Redis connection error'));
 
   const publishQueueService = createPublishQueueService(redis);
+  const bulkOpsQueueService = createBulkOpsQueueService(redis);
   const notificationQueue = new Queue(QUEUE_NAMES.notification, {
     connection: redis,
     defaultJobOptions: {
@@ -57,6 +59,7 @@ async function main() {
     db,
     sessionSecret: SESSION_SECRET,
     publishQueueService,
+    bulkOpsQueueService,
     notificationQueue,
     storage,
     transcodeQueue,
@@ -70,6 +73,7 @@ async function main() {
   const shutdown = async () => {
     logger.info('Shutting down...');
     try { await publishQueueService.publishQueue.close(); } catch (err) { logger.error({ err }, 'Publish queue shutdown error'); }
+    try { await bulkOpsQueueService.bulkOpsQueue.close(); } catch (err) { logger.error({ err }, 'Bulk operations queue shutdown error'); }
     try { await notificationQueue.close(); } catch (err) { logger.error({ err }, 'Notification queue shutdown error'); }
     try { await transcodeQueue.close(); } catch (err) { logger.error({ err }, 'Transcode queue shutdown error'); }
     try { await redis.quit(); } catch (err) { logger.error({ err }, 'Redis shutdown error'); }
