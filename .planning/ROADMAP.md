@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 9: Notifications & Settings** - In-app notification bell, SMTP email notifications, notification preferences, email logs
 - [ ] **Phase 9.1: Notifications & Settings Polish** - INSERTED — Migrate NotificationsTab to RHF + Zod (CLAUDE.md alignment), preserve NotificationBell aria-label across expanded state, add notification-prefs round-trip test, add Discard-button regression test, fix docker-compose.dev.yml web service so cold compose-up boots Vite cleanly
 - [ ] **Phase 9.2: Tech Debt Sweep** - INSERTED — Finalize 06.5 VALIDATION.md paperwork; enrich publish_failed notification with link_path; formalize dev-compose shared/dist volumes
-- [ ] **Phase 10: Bulk Operations** - CSV upload and export, bulk queue operations (randomize, purge, copy, text modify, deduplicate), bulk pause/resume/delete
+- [x] **Phase 10: Bulk Operations** - CSV upload and export, bulk queue operations (randomize, purge, copy, text modify, deduplicate), bulk pause/resume/delete
 - [ ] **Phase 11: Snippets, Search, Calendar & Polish** - Text snippets with insert button, full-text post search, calendar views, SEC-07 policy
 
 ## Phase Details
@@ -381,13 +381,16 @@ Plans:
   2. User can export scheduled posts and queue posts as CSV (with current filters applied)
   3. User can randomize, purge, copy, bulk-modify text, and remove duplicates in a queue; bulk operations run as async BullMQ jobs with completion notification
   4. User can bulk pause, resume, or delete scheduled posts and queues for a profile
-**Plans**: 5 plans
+**Plans**: 8 plans
 Plans:
-- [ ] 01-01-PLAN.md — Monorepo scaffold, package skeletons, Drizzle ORM infrastructure, web stub
-- [ ] 01-02-PLAN.md — Docker Compose (prod + dev), Dockerfile, nginx, env template
-- [ ] 01-03-PLAN.md — AES-256-GCM encryption module (TDD)
-- [ ] 01-04-PLAN.md — Express API server, middleware stack, health endpoint, worker heartbeat
-- [ ] 01-05-PLAN.md — Integration verification, baseline migration, human sign-off
+- [x] 10-01-PLAN.md -- Wave 0 foundation: csv-parse/csv-stringify install, twitter-text hoist to @sms/shared, shared Zod schemas + queue constants + normalize-text/platform-char-count helpers, RED test scaffolds + CSV/JSON fixtures
+- [x] 10-02-PLAN.md -- bulk_operations table schema + extend post_status enum with paused, [BLOCKING] drizzle-kit push
+- [x] 10-03-PLAN.md -- API: CSV import route (multer + csv-parse + Twitter pre-flight), CSV export endpoints, 8 bulk-action endpoints on /posts and /queues, bulk-ops queue producer, rate limiter, Bull-Board registration
+- [x] 10-04-PLAN.md -- Worker dispatcher + 5 handlers (csv-import-scheduled, csv-import-queue, queue-randomize, queue-purge, queue-copy)
+- [x] 10-05-PLAN.md -- Worker remaining 5 handlers (text-modify, dedupe, profile-pause, profile-resume, profile-bulk-delete) + drainDelayedJobs helper + bulk-completed notification handler stub fill
+- [x] 10-06-PLAN.md -- Web foundation: TanStack table conversion of QueuePostsPage, RowSelectionState extensions, BulkActionsDropdown + SelectionSummaryBar + ConfirmSimpleDialog + ConfirmDestructiveDialog (dismiss-label discipline), 11 useBulkOps mutations, apiClient multipart/Blob helpers, PostStatusBadge paused variant
+- [x] 10-07-PLAN.md -- Web: 9 specific bulk dialogs with exact UI-SPEC dismiss labels, BulkImportPage + FileDropZone + pre-flight cap banner, NotificationBell bulk-op-finished/failed variants, Sidebar Import Posts nav, /posts/import route
+- [x] 10-08-PLAN.md -- Verification: testcontainers full-stack integration, web flow integration, finalize 10-VALIDATION.md (status:complete, nyquist_compliant:true), human checkpoint for manual-only behaviors
 **UI hint**: yes
 
 ### Phase 11: Snippets, Search, Calendar & Polish
