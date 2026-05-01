@@ -40,7 +40,7 @@ Key locked decisions from SPEC.md (do not re-litigate):
 
 - **D-01:** "Insert Snippet" is a button rendered next to the post text input (within `SharedPostFields.tsx`) that opens a Radix Popover containing a search-as-you-type combobox over the user's snippets.
 - **D-02:** Selecting a snippet inserts `body` at the textarea cursor (`selectionStart`/`selectionEnd`) and re-focuses the textarea, restoring caret to the position immediately after the inserted text. No replacement of text outside the cursor selection.
-- **D-03:** No slash-command trigger inside the textarea — explicit-button only. (Slash-command rejected: caret-position math, conflict with literal `/` in post bodies, mobile virtual-keyboard friction.)
+- **D-03 [informational]:** No slash-command trigger inside the textarea — explicit-button only. (Slash-command rejected: caret-position math, conflict with literal `/` in post bodies, mobile virtual-keyboard friction.) *Negative decision honored by absence — no plan artifact.*
 - **D-04:** Picker is keyboard-accessible: arrow keys navigate, Enter inserts, Escape closes. Search filters by snippet `name` (case-insensitive substring); no fuzzy match in Phase 11.
 - **D-05:** A Vitest component test asserts cursor-position insertion for at least one form (the SharedPostFields-mounted variant satisfies all platforms).
 
@@ -56,7 +56,7 @@ Key locked decisions from SPEC.md (do not re-litigate):
 ### Calendar IA + nav placement (CAL-01..04)
 
 - **D-10:** New top-level sidebar entry `{ to: '/calendar', icon: Calendar, label: 'Calendar' }` inserted between `Queues` and `New Post` in the `navItems` array of `packages/web/src/components/layout/Sidebar.tsx`. Calendar icon comes from `lucide-react` (already a dependency).
-- **D-11:** Posts list view (`/posts`) remains the default for the posts section. Calendar is a separate destination; tabs/segments under `/posts` are explicitly rejected (would require Posts-page refactor and duplicate filter UIs).
+- **D-11 [informational]:** Posts list view (`/posts`) remains the default for the posts section. Calendar is a separate destination; tabs/segments under `/posts` are explicitly rejected (would require Posts-page refactor and duplicate filter UIs). *Negative decision honored by absence — no plan artifact.*
 - **D-12:** Custom toolbar built with shadcn/ui `Button` + `Tabs` for the M/W/D switcher and prev/next/today controls, replacing react-big-calendar's default toolbar via the `components.toolbar` prop. Reason: visual consistency with the rest of the app; default toolbar styling clashes with the Tailwind/shadcn design system.
 - **D-13:** Conflict indicator is rendered at entry-level (per react-big-calendar event), not as a banner. Conflicting entries get a distinct left-border color + tooltip listing the conflicting entry's text preview. Backend windowed query annotates each entry with `hasConflict: boolean` so the frontend doesn't recompute.
 
@@ -69,7 +69,7 @@ Key locked decisions from SPEC.md (do not re-litigate):
   - `*.openai_api_key`, `*.openaiApiKey`, `*.OPENAI_API_KEY` (wildcard for nested objects)
   - Existing `Authorization` rule continues to cover the request header
 - **D-15:** Vitest contract test at `packages/api/src/__tests__/sec-07-job-schema.test.ts` (or similar) imports every BullMQ job-data Zod schema — at minimum: `publish`, `media-transcode`, `token-refresh`, `auto-destruct`, `notifications` — and asserts that none of them define a field whose name matches `/openai|api[_-]?key/i`. Fails CI if Phase 12 accidentally adds an AI key to a job payload.
-- **D-16:** Wildcard-only redact + runtime job scrubber middleware (option B) is rejected — too easy to mask legitimate fields and harder to reason about than explicit paths + a static test.
+- **D-16 [informational]:** Wildcard-only redact + runtime job scrubber middleware (option B) is rejected — too easy to mask legitimate fields and harder to reason about than explicit paths + a static test. *Negative decision honored by absence — no plan artifact.*
 - **D-17:** Policy section added to `SECURITY.md` (or `docs/SECURITY.md`; planner picks based on existing project convention) stating: OpenAI API key is provided per-request only, never persisted, never written to job payloads, Redis, or logs.
 - **D-18:** SEC-07 deliverables ship in this phase even though no AI endpoint exists. Requirement closure criteria: (a) policy doc merged, (b) redact paths in source, (c) contract test passing, (d) `grep -r "openai" packages/api/src` finds only the redact config + test, no production AI code.
 
