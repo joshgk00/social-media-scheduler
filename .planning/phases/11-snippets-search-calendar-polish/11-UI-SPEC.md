@@ -36,18 +36,19 @@ Locked by CONTEXT decisions D-01 .. D-13. Each row ties to an existing or new co
 | Surface | Component(s) | Source | Notes |
 |---------|--------------|--------|-------|
 | Snippet picker trigger | `<Button variant="outline" size="sm">` with `Hash` icon, label `Insert snippet` | shadcn `button` + lucide `Hash` | Mounts in `SharedPostFields.tsx` next to the post text textarea (D-01) |
-| Snippet picker popover | `<Popover>` + `<Command>` (combobox) + `<CommandInput>` + `<CommandList>` + `<CommandEmpty>` + `<CommandGroup>` + `<CommandItem>` | shadcn `popover` + `command` | Width 320px (`w-80`); aligns `start` to trigger; `sideOffset={8}` |
+| Snippet picker popover | `<Popover>` + `<Command>` (combobox) + `<CommandInput>` + `<CommandList>` + `<CommandEmpty>` + `<CommandGroup>` + `<CommandItem>` | shadcn `popover` + `command` | Width 320px (`w-80`); aligns `start` to trigger; `sideOffset={8}`. **Primary visual anchor (when open):** the `<CommandInput>` search field at the top of the popover; the result list below is the secondary scan target. |
 | "Manage snippets" link inside popover | `<Link to="/settings/snippets">` styled `text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline` rendered inside a `CommandSeparator`-divided footer row | react-router `Link` | One row at the end of the popover; left-aligned with `lucide` `Settings2` icon |
-| Snippets management page | `<main>` route at `/settings/snippets` (chosen over `/snippets` per Claude's-discretion — Settings already nests sub-pages in `packages/web/src/pages/settings/`); table of snippets + "New snippet" button + edit/delete via row dropdown | New page `packages/web/src/pages/settings/SnippetsPage.tsx`; reuses existing `Table`, `DropdownMenu`, `Dialog`, RHF + Zod | Add Sidebar link is NOT required (D-10 reserves a sidebar entry only for Calendar) |
+| Snippets management page | `<main>` route at `/settings/snippets` (chosen over `/snippets` per Claude's-discretion — Settings already nests sub-pages in `packages/web/src/pages/settings/`); table of snippets + "New snippet" button + edit/delete via row dropdown | New page `packages/web/src/pages/settings/SnippetsPage.tsx`; reuses existing `Table`, `DropdownMenu`, `Dialog`, RHF + Zod | Add Sidebar link is NOT required (D-10 reserves a sidebar entry only for Calendar). **Primary visual anchor:** the snippets table fills the viewport below the page header; secondary anchor is the `New snippet` button in the page header. |
 | Snippet create / edit dialog | `<Dialog>` with RHF + Zod form; fields: `name` (Input), `category` (RadioGroup `Hashtag set` / `Text snippet`), `body` (Textarea, `rows={6}`, mono font) | shadcn `dialog`, `form`, `input`, `radio-group`, `textarea` | Submit label per CTA contract below |
-| Snippet delete confirmation | Reuse existing destructive-confirmation pattern — match `ConfirmDestructiveDialog` from Phase 10 (typed-name + `Delete` button `variant="destructive"`) | `packages/web/src/components/bulk/ConfirmDestructiveDialog.tsx` (existing) | Dismiss label `Cancel`, confirm label `Delete snippet` |
-| Calendar route | `<main>` at `/calendar`; `<SidebarLayout>` wrapper; page-level `Header` + filter bar + `<Calendar />` (react-big-calendar) | New page `packages/web/src/pages/calendar/CalendarPage.tsx` | Loads only react-big-calendar CSS at this route |
+| Snippet delete confirmation | Reuse existing destructive-confirmation pattern — match `ConfirmDestructiveDialog` from Phase 10 (typed-name + `Delete` button `variant="destructive"`) | `packages/web/src/components/bulk/ConfirmDestructiveDialog.tsx` (existing) | Dismiss label `Keep snippet`, confirm label `Delete snippet` |
+| Snippets table row actions | Icon-only `<Button variant="ghost" size="icon">` (lucide `MoreHorizontal`) wrapped in shadcn `<Tooltip>` whose content matches the button's `aria-label` (`Snippet actions for {name}`); button triggers a `<DropdownMenu>` with `Edit` / `Delete` items | shadcn `button` + `tooltip` + `dropdown-menu` + lucide `MoreHorizontal` | Tooltip content is identical to `aria-label` so sighted users see the label on hover/focus and screen-reader users hear it from `aria-label`; covers icon-only-button label fallback |
+| Calendar route | `<main>` at `/calendar`; `<SidebarLayout>` wrapper; page-level `Header` + filter bar + `<Calendar />` (react-big-calendar) | New page `packages/web/src/pages/calendar/CalendarPage.tsx` | Loads only react-big-calendar CSS at this route. **Primary visual anchor:** the calendar grid itself, filling the viewport below the filter bar; it is the first element the eye should reach. Secondary anchor: the M/W/D Tabs in the custom toolbar. |
 | Calendar custom toolbar | `<Tabs>` (M / W / D segmented) + `<Button variant="outline" size="sm">` for prev / today / next + `<h2 className="text-lg font-semibold">` showing current range label | shadcn `tabs` + `button` (D-12) | Renders inside `<header>` row above the calendar grid; `gap-2` between groups, `mb-4` to the grid |
 | Calendar filter bar | `<section aria-label="Calendar filters">` with `<Select multiple>`-style multi-select chips for platform, profile, tags + a `<Tabs>` for `Scheduled` / `Queued` / `Both` (CAL-03) | shadcn `select`, `badge` (chip), `tabs`; reuse `ProfilePicker.tsx` and `TagSelector.tsx` patterns | Sits above the calendar grid in a `<header>` of the page; `gap-2` horizontal, wraps on narrow widths |
 | Calendar entry (event) | react-big-calendar `event` rendered with custom `eventPropGetter` returning a className that sets per-platform left-border and background tint; conflict entries get an additional `border-l-destructive` class | react-big-calendar + Tailwind | Click → navigate `/posts/:id/edit`; click empty slot → `/posts/new?scheduledAt=ISO` (CAL-02) |
 | Calendar conflict tooltip | `<Tooltip>` with the same wording as `ScheduleConflictBanner.tsx` (D-13) — "Another post on this profile is scheduled within 5 minutes of this time: \"{textPreview}\" at {date}." | shadcn `tooltip` | Anchored on the event element; opens on hover and keyboard focus |
 | Search input (Posts / Queue Posts / Calendar filter bar) | `<div className="relative">` with `<Search />` lucide icon absolutely positioned + `<Input className="pl-9" placeholder="Search posts..." aria-label="Search posts" />` | shadcn `input` + lucide `Search` | Reuses the exact pattern at `PostsPage.tsx` lines 466–475 — 1:1 visual parity required across all three views |
-| `ts_headline` rendering | Plain React with allowlist parser mapping `<b>` → `<mark>` (Claude's-discretion) | New util `packages/web/src/lib/headline-to-mark.ts` | `<mark>` styled `bg-warning/30 text-foreground rounded-sm px-0.5` (declared §Color); never `dangerouslySetInnerHTML` |
+| `ts_headline` rendering | Plain React with allowlist parser mapping `<b>` → `<mark>` (Claude's-discretion) | New util `packages/web/src/lib/headline-to-mark.ts` | `<mark>` styled `bg-warning/30 text-foreground rounded-sm px-1` (declared §Color); never `dangerouslySetInnerHTML` |
 | Calendar empty / loading states | `<Skeleton className="h-full w-full rounded-md" />` for loading; centered text-only block for empty | shadcn `skeleton` | See §Copywriting Contract |
 | Snippets-page empty state | Centered block matching PostsPage empty-state shape: `<h2 className="text-lg font-medium mb-1">{heading}</h2>` + `<p className="text-sm text-muted-foreground mb-4">{body}</p>` + primary CTA `<Button>` | Reuse PostsPage empty-state pattern (lines 498–520) | Visual parity with existing empty states is required |
 
@@ -59,7 +60,7 @@ Tailwind v4 default spacing scale already in use (`p-1` = 4px, `p-2` = 8px, …)
 
 | Token | Value | Usage in Phase 11 |
 |-------|-------|-------------------|
-| xs | 4px (`p-1`, `gap-1`) | Icon-to-label gap inside `Insert snippet` button; `<mark>` horizontal padding |
+| xs | 4px (`p-1`, `gap-1`) | Icon-to-label gap inside `Insert snippet` button; `<mark>` horizontal padding (`px-1`) |
 | sm | 8px (`p-2`, `gap-2`) | Filter-bar element gaps (Calendar + Snippets page); popover trigger `sideOffset` |
 | md | 16px (`p-4`, `gap-4`) | Default popover content padding; calendar event internal padding; dialog body padding-top |
 | lg | 24px (`p-6`, `gap-6`) | Page header → filter bar → grid vertical rhythm on `/calendar` and `/settings/snippets`; dialog default `p-6` |
@@ -104,7 +105,7 @@ The codebase ships dark-theme zinc tokens via CSS variables. Phase 11 reuses tho
 | Secondary (30%) | `bg-card` / `text-card-foreground`, `bg-muted` / `text-muted-foreground` | `oklch(0.205 0 0)` / `oklch(0.985 0 0)`, `oklch(0.269 0 0)` / `oklch(0.708 0 0)` | Sidebar, calendar filter bar surface, popover trigger hover state, table rows, helper text |
 | Accent (10%) | `bg-primary` / `text-primary-foreground` | `oklch(0.985 0 0)` / `oklch(0.205 0 0)` | Primary CTAs ONLY — see Accent reserved-for list |
 | Destructive | `bg-destructive` / `text-destructive-foreground`, `border-destructive` | `oklch(0.577 0.245 27.325)` / `oklch(0.985 0 0)` | Delete-snippet button, calendar conflict left-border indicator (CAL-04) |
-| Warning (highlight) | `bg-warning` (existing token, line 29 of `index.css`) | `oklch(0.852 0.199 91.936)` | `<mark>` highlight for `ts_headline` matches — applied as `bg-warning/30 text-foreground rounded-sm px-0.5` so the contrast stays AA |
+| Warning (highlight) | `bg-warning` (existing token, line 29 of `index.css`) | `oklch(0.852 0.199 91.936)` | `<mark>` highlight for `ts_headline` matches — applied as `bg-warning/30 text-foreground rounded-sm px-1` so the contrast stays AA |
 | Success | `text-success` (existing token, line 28 of `index.css`) | `oklch(0.696 0.17 142.495)` | NOT used by new Phase 11 UI; declared so executors don't import it speculatively |
 
 ### Platform-brand colors (NEW — required by CAL-02)
@@ -148,7 +149,7 @@ Accent is NOT used on filter chips, NOT on the `Insert snippet` button (that one
 | Snippet picker popover | `ArrowDown` / `ArrowUp` move highlight; `Home` / `End` jump first / last; `Enter` inserts highlighted snippet at textarea cursor and closes popover; `Esc` closes without inserting and returns focus to the trigger button (D-04) |
 | Snippet picker search filter | Case-insensitive substring match on snippet `name` only (D-04 — no fuzzy match in Phase 11) |
 | Snippet insertion behavior | Inserts `body` at the textarea's `selectionStart..selectionEnd`; if the user has a range selected, that range is replaced; caret lands immediately AFTER the inserted text; textarea regains focus (D-02) |
-| Snippets page table rows | Each row is a `<tr>`; row actions live in a `<DropdownMenu>` triggered by an icon-only `<Button variant="ghost" size="icon">` with `aria-label="Snippet actions for {name}"` |
+| Snippets page table rows | Each row is a `<tr>`; row actions live in a `<DropdownMenu>` triggered by an icon-only `<Button variant="ghost" size="icon">` with `aria-label="Snippet actions for {name}"`. The button is wrapped in a shadcn `<Tooltip>` whose content matches the same string, so hovering or focusing the row action reveals the label as a tooltip (icon-only-button label fallback). |
 | Search input on three views | Debounced 250ms (Claude's-discretion default per CONTEXT); URL state via `setSearchParams(..., { replace: true })` so back-button skips keystroke history; clearing the input restores the unfiltered list within one debounce cycle |
 | Calendar view switcher (Tabs) | `ArrowLeft` / `ArrowRight` move between M / W / D (shadcn `Tabs` default); switching re-queries the windowed API |
 | Calendar prev / today / next | Three buttons, `aria-label="Previous {view}"`, `aria-label="Today"`, `aria-label="Next {view}"`; `Today` resets focus to today's cell |
@@ -173,7 +174,7 @@ Accent is NOT used on filter chips, NOT on the `Insert snippet` button (that one
 | Primary CTA — snippet picker trigger | `Insert snippet` (verb + noun, sentence case) |
 | Primary CTA — snippets page header | `New snippet` |
 | Primary CTA — snippet create dialog submit | `Create snippet` |
-| Primary CTA — snippet edit dialog submit | `Save changes` |
+| Primary CTA — snippet edit dialog submit | `Update snippet` |
 | Primary CTA — calendar empty-slot click destination | uses existing `/posts/new` page CTAs (out of scope — no new copy) |
 | Search input placeholder | `Search posts...` (matches existing `PostsPage.tsx` line 469 — DO NOT diverge) |
 | Search input aria-label | `Search posts` (matches `PostsPage.tsx` line 473) |
@@ -199,7 +200,7 @@ Accent is NOT used on filter chips, NOT on the `Insert snippet` button (that one
 | Calendar page heading | `Calendar` |
 | Calendar page subhead | `Scheduled posts and queue runs across all profiles.` |
 | Calendar empty (no posts in window) | `No posts in this {view}.` where `{view}` is `month`, `week`, or `day` |
-| Calendar filter-zero | `No posts match the current filters.` |
+| Calendar filter-zero | `No posts match the current filters. Try clearing a filter to see more.` |
 | Calendar loading | `Loading calendar…` (visually hidden; skeleton renders the visual state) |
 | Calendar conflict tooltip | `Another post on this profile is scheduled within 5 minutes of this time: "{textPreview}" at {date}.` (verbatim parity with `ScheduleConflictBanner.tsx` — D-13) |
 | Calendar entry text | `{platform abbreviation} · {textPreview, max 60 chars}` — e.g., `TW · Launch announcement is live now`. Abbreviations: `TW`, `LI`, `FB` |
@@ -214,7 +215,7 @@ Accent is NOT used on filter chips, NOT on the `Insert snippet` button (that one
 | Destructive — delete snippet confirmation heading | `Delete this snippet?` |
 | Destructive — delete snippet body | `"{name}" will be removed permanently. Posts that already used it keep their text.` |
 | Destructive — delete snippet confirm button | `Delete snippet` |
-| Destructive — delete snippet cancel button | `Cancel` |
+| Destructive — delete snippet cancel button | `Keep snippet` |
 
 **Locked phrasing rules (binding for executors):**
 
