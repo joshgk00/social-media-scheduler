@@ -69,6 +69,9 @@ async function mutationRequest<T>(method: string, path: string, data?: unknown):
         const retryBody = await parseErrorBody(retryRes);
         throw createError((retryBody.error as string) || retryRes.statusText, retryRes.status, retryBody);
       }
+      if (retryRes.status === 204) {
+        return undefined as T;
+      }
       return retryRes.json();
     }
     throw createError((body.error as string) || res.statusText, res.status, body);
@@ -77,6 +80,9 @@ async function mutationRequest<T>(method: string, path: string, data?: unknown):
   if (!res.ok) {
     const body = await parseErrorBody(res);
     throw createError((body.error as string) || res.statusText, res.status, body);
+  }
+  if (res.status === 204) {
+    return undefined as T;
   }
   return res.json();
 }
@@ -152,6 +158,9 @@ export const apiClient = {
           const retryBody = await parseErrorBody(retryRes);
           throw createError((retryBody.error as string) || retryRes.statusText, retryRes.status, retryBody);
         }
+        if (retryRes.status === 204) {
+          return undefined as T;
+        }
         return retryRes.json();
       }
       throw createError((body.error as string) || res.statusText, res.status, body);
@@ -159,6 +168,9 @@ export const apiClient = {
     if (!res.ok) {
       const body = await parseErrorBody(res);
       throw createError((body.error as string) || res.statusText, res.status, body);
+    }
+    if (res.status === 204) {
+      return undefined as T;
     }
     return res.json();
   },

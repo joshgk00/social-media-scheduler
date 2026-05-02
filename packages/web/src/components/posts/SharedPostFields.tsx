@@ -1,3 +1,4 @@
+import type { RefObject } from 'react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
@@ -5,6 +6,7 @@ import { Textarea } from '../ui/textarea';
 import { ScheduleConflictBanner } from './ScheduleConflictBanner';
 import { TagSelector } from './TagSelector';
 import { AutoDestructPicker } from './AutoDestructPicker';
+import { SnippetPicker } from '../snippets/SnippetPicker';
 import { utcToLocalInput, localInputToUtc } from '../../lib/timezone';
 import { useTags } from '../../hooks/use-tags';
 import { useCheckConflicts } from '../../hooks/use-posts';
@@ -35,6 +37,9 @@ interface SharedPostFieldsProps {
 
   autoDestructAfter: string | null;
   onAutoDestructAfterChange: (value: string | null) => void;
+
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  onInsertSnippet: (nextValue: string) => void;
 }
 
 /**
@@ -73,6 +78,8 @@ export function SharedPostFields({
   onHasSpinnableTextChange,
   autoDestructAfter,
   onAutoDestructAfterChange,
+  textareaRef,
+  onInsertSnippet,
 }: SharedPostFieldsProps) {
   const { data: tagList } = useTags();
   const { data: conflicts } = useCheckConflicts(
@@ -92,6 +99,10 @@ export function SharedPostFields({
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-start">
+        <SnippetPicker textareaRef={textareaRef} onInsert={onInsertSnippet} />
+      </div>
+
       {/* POST-CMN-01 + POST-CMN-02: schedule datetime + timezone (hidden in queue mode) */}
       {mode !== 'queue' && (
         <div className="space-y-2">

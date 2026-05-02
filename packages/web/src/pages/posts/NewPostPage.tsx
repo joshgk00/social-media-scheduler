@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { DateTime } from 'luxon';
 import { toast } from 'sonner';
@@ -73,6 +73,7 @@ export default function NewPostPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queueId = searchParams.get('queueId');
+  const scheduledAtParam = searchParams.get('scheduledAt');
   const isQueueMode = !!queueId;
 
   const { data: authUser } = useAuth();
@@ -89,6 +90,7 @@ export default function NewPostPage() {
   const [isTagManageOpen, setIsTagManageOpen] = useState(false);
   const [rateLimitBlockError, setRateLimitBlockError] = useState<RateLimitBlockErrorDetail | null>(null);
   const [isRateLimitDialogOpen, setIsRateLimitDialogOpen] = useState(false);
+  const postTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const { upload, uploadingFiles, isUploading } = useMediaUpload();
@@ -106,6 +108,12 @@ export default function NewPostPage() {
       setFormState((prev) => ({ ...prev, hasSpinnableText: true }));
     }
   }, [formState.text, formState.hasSpinnableText]);
+
+  useEffect(() => {
+    if (queueId || !scheduledAtParam || formState.scheduledAt) return;
+    if (!DateTime.fromISO(scheduledAtParam).isValid) return;
+    updateForm('scheduledAt', scheduledAtParam);
+  }, [formState.scheduledAt, queueId, scheduledAtParam, updateForm]);
 
   const effectiveProfileId = isQueueMode ? (queueData?.profileId ?? '') : formState.profileId;
   const selectedProfile = profiles?.find((p) => p.id === effectiveProfileId) ?? null;
@@ -447,6 +455,7 @@ export default function NewPostPage() {
             <TwitterPostFields
               text={formState.text}
               onTextChange={(value) => updateForm('text', value)}
+              textareaRef={postTextAreaRef}
               isThread={formState.isThread}
               onThreadToggle={handleThreadToggle}
               tweets={tweets}
@@ -468,6 +477,7 @@ export default function NewPostPage() {
                 <div className="relative">
                   <Textarea
                     id="post-text"
+                    ref={postTextAreaRef}
                     placeholder="Share something with your network..."
                     value={formState.text}
                     onChange={(event) => updateForm('text', event.target.value)}
@@ -498,6 +508,7 @@ export default function NewPostPage() {
                 <div className="relative">
                   <Textarea
                     id="post-text"
+                    ref={postTextAreaRef}
                     placeholder="What's on your mind?"
                     value={formState.text}
                     onChange={(event) => updateForm('text', event.target.value)}
@@ -543,6 +554,8 @@ export default function NewPostPage() {
             onHasSpinnableTextChange={(value) => updateForm('hasSpinnableText', value)}
             autoDestructAfter={formState.autoDestructAfter}
             onAutoDestructAfterChange={(value) => updateForm('autoDestructAfter', value)}
+            textareaRef={postTextAreaRef}
+            onInsertSnippet={(nextValue) => updateForm('text', nextValue)}
           />
 
           {rateLimitBlockError && (

@@ -1,4 +1,4 @@
-import { eq, and, sql, count as drizzleCount, max, lt, gt, desc, asc } from 'drizzle-orm';
+import { eq, and, sql, count as drizzleCount, max, lt, gt, desc, asc, type SQL } from 'drizzle-orm';
 import type { InferInsertModel } from 'drizzle-orm';
 import { AppError, transitionPost, calculateNextRunAt } from '@sms/shared';
 import type { PostStatus, CreateQueueInput, UpdateQueueInput, QueueQueryInput } from '@sms/shared';
@@ -371,7 +371,12 @@ export async function removePostFromQueue(
   logger.info({ queueId, postId, userId }, 'Post removed from queue');
 }
 
-export async function getQueuePosts(db: Db, userId: string, queueId: string) {
+export async function getQueuePosts(
+  db: Db,
+  userId: string,
+  queueId: string,
+  query: { search?: string } = {},
+) {
   const [queue] = await db
     .select({ id: queues.id })
     .from(queues)
@@ -381,20 +386,43 @@ export async function getQueuePosts(db: Db, userId: string, queueId: string) {
     throw new QueueServiceError('Queue not found', 404);
   }
 
+  const conditions = [eq(posts.queueId, queueId), eq(posts.userId, userId)];
+  let orderClause: SQL = asc(posts.queuePosition);
+  let headlineColumn: SQL.Aliased<string> | undefined;
+  let rankColumn: SQL.Aliased<number> | undefined;
+  const searchText = query.search?.trim();
+
+  if (searchText) {
+    const tsQuery = sql`plainto_tsquery('english', ${searchText})`;
+    conditions.push(sql`(${posts.searchVector} || ${posts.tagSearchVector}) @@ ${tsQuery}`);
+    headlineColumn = sql<string>`ts_headline('english', ${posts.text}, ${tsQuery}, 'StartSel=<b>, StopSel=</b>, MaxWords=20, MinWords=10, ShortWord=2')`.as('headline');
+    rankColumn = sql<number>`ts_rank(${posts.searchVector} || ${posts.tagSearchVector}, ${tsQuery})`.as('rank');
+    orderClause = sql`rank DESC, ${posts.queuePosition} ASC`;
+  }
+
+  const baseSelect = {
+    id: posts.id,
+    text: posts.text,
+    status: posts.status,
+    hasSpinnableText: posts.hasSpinnableText,
+    autoDestructAfter: posts.autoDestructAfter,
+    queuePosition: posts.queuePosition,
+    platformPostId: posts.platformPostId,
+    publishedAt: posts.publishedAt,
+  };
+  const selectMap = searchText
+    ? {
+        ...baseSelect,
+        headline: headlineColumn!,
+        rank: rankColumn!,
+      }
+    : baseSelect;
+
   const postRows = await db
-    .select({
-      id: posts.id,
-      text: posts.text,
-      status: posts.status,
-      hasSpinnableText: posts.hasSpinnableText,
-      autoDestructAfter: posts.autoDestructAfter,
-      queuePosition: posts.queuePosition,
-      platformPostId: posts.platformPostId,
-      publishedAt: posts.publishedAt,
-    })
+    .select(selectMap)
     .from(posts)
-    .where(and(eq(posts.queueId, queueId), eq(posts.userId, userId)))
-    .orderBy(posts.queuePosition);
+    .where(and(...conditions))
+    .orderBy(orderClause);
 
   return postRows.map((post) => ({
     ...post,

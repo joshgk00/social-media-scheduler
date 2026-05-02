@@ -27,6 +27,9 @@
   --color-ring: oklch(0.439 0 0);
   --color-success: oklch(0.696 0.17 142.495);
   --color-warning: oklch(0.852 0.199 91.936); /* yellow-400 from UI-SPEC */
+  --color-platform-twitter: oklch(0.700 0.165 235);
+  --color-platform-linkedin: oklch(0.450 0.130 245);
+  --color-platform-facebook: oklch(0.520 0.180 265);
 
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;

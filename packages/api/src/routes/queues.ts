@@ -6,6 +6,7 @@ import {
   createQueueSchema,
   updateQueueSchema,
   queueQuerySchema,
+  postQuerySchema,
   queueCopyInputSchema,
   queueDedupeInputSchema,
   queuePurgeInputSchema,
@@ -194,7 +195,19 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
 
   router.get('/:id/posts', requireAuth, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
-    const queuePosts = await getQueuePosts(db, req.session.userId!, queueId);
+    const parsedQuery = postQuerySchema.pick({ search: true, searchScope: true }).safeParse(req.query);
+    if (!parsedQuery.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsedQuery.error.issues });
+      return;
+    }
+    if (parsedQuery.data.searchScope && parsedQuery.data.searchScope !== 'queue') {
+      res.status(400).json({ error: 'Validation failed', details: [{ path: ['searchScope'], message: 'searchScope must be queue for this route.' }] });
+      return;
+    }
+
+    const queuePosts = await getQueuePosts(db, req.session.userId!, queueId, {
+      search: parsedQuery.data.search,
+    });
     res.json(queuePosts);
   });
 

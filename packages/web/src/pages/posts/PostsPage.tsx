@@ -20,6 +20,7 @@ import { useTags } from '../../hooks/use-tags';
 import { useProfiles } from '../../hooks/use-profiles';
 import { useAuth } from '../../hooks/use-auth';
 import { apiClient } from '../../lib/api-client';
+import { renderHeadline } from '../../lib/headline-to-mark';
 import { PostStatusBadge } from '../../components/posts/PostStatusBadge';
 import { PostActionsMenu } from '../../components/posts/PostActionsMenu';
 import { PostErrorCell } from '../../components/posts/PostErrorCell';
@@ -166,7 +167,10 @@ export default function PostsPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const { data: postsResponse, isLoading, isError, refetch, dataUpdatedAt } = usePosts(filters);
+  const { data: postsResponse, isLoading, isError, refetch, dataUpdatedAt } = usePosts({
+    ...filters,
+    searchScope: 'posts',
+  });
 
   const hasActiveFilters = !!(filters.status || filters.profileId || filters.tagId || filters.search);
   const totalPages = postsResponse ? Math.ceil(postsResponse.total / postsResponse.limit) : 0;
@@ -246,14 +250,18 @@ export default function PostsPage() {
       accessorKey: 'text',
       header: 'Text',
       cell: ({ row }: { row: Row<Post> }) => {
-        const textPreview = row.original.text.length > 80
-          ? `${row.original.text.slice(0, 80)}...`
-          : row.original.text;
+        const textPreview = row.original.headline ?? (
+          row.original.text.length > 80
+            ? `${row.original.text.slice(0, 80)}...`
+            : row.original.text
+        );
         const mediaCount = (row.original as Post & { mediaCount?: number }).mediaCount ?? 0;
         const hasTranscodingMedia = (row.original as Post & { hasTranscodingMedia?: boolean }).hasTranscodingMedia ?? false;
         return (
           <div>
-            <span className="text-sm line-clamp-2">{textPreview}</span>
+            <span className="text-sm line-clamp-2">
+              {row.original.headline ? renderHeadline(textPreview) : textPreview}
+            </span>
             {mediaCount > 0 && (
               <span className="inline-flex items-center gap-1 mt-1 text-xs text-muted-foreground" title={hasTranscodingMedia ? `${mediaCount} file(s), transcoding in progress` : `${mediaCount} file(s)`}>
                 {hasTranscodingMedia ? (
