@@ -4,6 +4,20 @@ import {
   countCodePoints,
 } from '../lib/platform-text-limits.js';
 
+export const postStatusSchema = z.enum([
+  'draft',
+  'scheduled',
+  'queued',
+  'paused',
+  'publishing',
+  'published',
+  'failed',
+  'auto_destructing',
+  'destroyed',
+]);
+
+export const postSearchScopeSchema = z.enum(['posts', 'queue', 'calendar']);
+
 // createPostSchema is a discriminated union over `platform`. Each variant uses
 // `.strict()` so cross-platform fields are rejected at parse time:
 //   - linkedin payload carrying `linkUrl` → 400
@@ -221,22 +235,11 @@ export const updatePostSchema = z
 export type UpdatePostInput = z.infer<typeof updatePostSchema>;
 
 export const postQuerySchema = z.object({
-  status: z
-    .enum([
-      'draft',
-      'scheduled',
-      'queued',
-      'paused',
-      'publishing',
-      'published',
-      'failed',
-      'auto_destructing',
-      'destroyed',
-    ])
-    .optional(),
+  status: postStatusSchema.optional(),
   profileId: z.string().uuid().optional(),
   tagId: z.string().uuid().optional(),
   search: z.string().max(200).optional(),
+  searchScope: postSearchScopeSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
@@ -247,5 +250,54 @@ export const conflictCheckSchema = z.object({
   excludePostId: z.string().uuid().optional(),
 });
 
+export const postTagSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  color: z.string(),
+});
+
+export const postProfileSchema = z.object({
+  displayName: z.string(),
+  handle: z.string(),
+  avatarUrl: z.string(),
+});
+
+export const postListItemSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  profileId: z.string().uuid().nullable(),
+  platform: z.enum(['twitter', 'linkedin', 'facebook']),
+  text: z.string(),
+  isThread: z.boolean(),
+  status: postStatusSchema,
+  scheduledAt: z.string().datetime().nullable(),
+  publishedAt: z.string().datetime().nullable(),
+  platformPostId: z.string().nullable(),
+  postVersion: z.number().int().min(1),
+  hasSpinnableText: z.boolean(),
+  autoDestructAfter: z.string().nullable(),
+  notes: z.string().nullable(),
+  failureReason: z.string().nullable(),
+  visibility: z.enum(['PUBLIC', 'CONNECTIONS']).nullable(),
+  linkUrl: z.string().url().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  tags: z.array(postTagSchema),
+  profile: postProfileSchema.optional(),
+  headline: z.string().optional(),
+  rank: z.number().optional(),
+});
+
+export const postsResponseSchema = z.object({
+  posts: z.array(postListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().min(1),
+  limit: z.number().int().min(1).max(100),
+});
+
 export type PostQueryInput = z.infer<typeof postQuerySchema>;
 export type ConflictCheckInput = z.infer<typeof conflictCheckSchema>;
+export type PostTag = z.infer<typeof postTagSchema>;
+export type PostProfile = z.infer<typeof postProfileSchema>;
+export type PostListItem = z.infer<typeof postListItemSchema>;
+export type PostsResponse = z.infer<typeof postsResponseSchema>;

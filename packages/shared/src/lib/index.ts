@@ -9,3 +9,4 @@ export * from './spinnable-text.js';
 export * from './platform-text-limits.js';
 export * from './normalize-text.js';
 export * from './platform-char-count.js';
+export * from './snippet-tokens.js';

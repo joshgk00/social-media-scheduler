@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 
 function chainable(terminal: unknown = []) {
   const chain: Record<string, any> = {};
-  const methods = ['from', 'where', 'values', 'returning', 'set', 'limit'];
+  const methods = ['from', 'where', 'values', 'returning', 'set', 'limit', 'orderBy'];
   for (const method of methods) {
     chain[method] = vi.fn().mockReturnValue(chain);
   }

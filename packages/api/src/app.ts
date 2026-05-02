@@ -23,6 +23,8 @@ import { createOAuthRouter } from './routes/oauth.js';
 import { createPostsRouter } from './routes/posts.js';
 import { createRateLimitRouter } from './routes/rate-limit.js';
 import { createTagsRouter } from './routes/tags.js';
+import { createSnippetsRouter } from './routes/snippets.js';
+import { createCalendarRouter } from './routes/calendar.js';
 import { createQueuesRouter } from './routes/queues.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createMediaRouter } from './routes/media.js';
@@ -97,6 +99,8 @@ export function createApp({
   app.use(createPostsRouter({ db, publishQueueService, bulkOpsQueueService, notificationQueue }));
   app.use(createRateLimitRouter({ db }));
   app.use(createTagsRouter({ db }));
+  app.use(createSnippetsRouter({ db }));
+  app.use(createCalendarRouter({ db }));
   app.use(createNotificationsRouter({ db }));
   app.use(createNotificationPrefsRouter({ db }));
   app.use(createEmailLogsRouter({ db }));

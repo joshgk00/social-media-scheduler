@@ -1,4 +1,4 @@
-import { eq, and, sql, ilike, inArray, gte, lte, ne, count as drizzleCount, isNull } from 'drizzle-orm';
+import { eq, and, sql, inArray, gte, lte, ne, count as drizzleCount, isNull, type SQL } from 'drizzle-orm';
 import { AppError, EDITABLE_STATES, DELETABLE_STATES, transitionPost } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
@@ -8,10 +8,6 @@ import { posts, postTags, tags, socialProfiles, postMedia } from '@sms/db';
 import { softDeleteMediaForPost, associateMediaToPost } from './media.service.js';
 
 const logger = createLogger('post-service');
-
-function escapeLikePattern(input: string): string {
-  return input.replace(/[%_\\]/g, '\\$&');
-}
 
 type Platform = 'twitter' | 'linkedin' | 'facebook';
 
@@ -59,6 +55,7 @@ interface PostQuery {
   profileId?: string;
   tagId?: string;
   search?: string;
+  searchScope?: 'posts' | 'queue' | 'calendar';
   page?: number;
   limit?: number;
 }
@@ -427,6 +424,9 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
   const offset = (page - 1) * limit;
 
   const conditions = [eq(posts.userId, userId)];
+  let orderClause: SQL = sql`${posts.scheduledAt} DESC NULLS LAST, ${posts.createdAt} DESC`;
+  let headlineColumn: SQL.Aliased<string> | undefined;
+  let rankColumn: SQL.Aliased<number> | undefined;
 
   if (query.status) {
     conditions.push(eq(posts.status, query.status));
@@ -434,8 +434,17 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
   if (query.profileId) {
     conditions.push(eq(posts.profileId, query.profileId));
   }
+  if (query.searchScope === 'posts') {
+    conditions.push(sql`${posts.status} IN ('draft', 'scheduled', 'failed')`);
+  } else if (query.searchScope === 'queue') {
+    conditions.push(eq(posts.status, 'queued'));
+  }
   if (query.search) {
-    conditions.push(ilike(posts.text, `%${escapeLikePattern(query.search)}%`));
+    const tsQuery = sql`plainto_tsquery('english', ${query.search})`;
+    conditions.push(sql`(${posts.searchVector} || ${posts.tagSearchVector}) @@ ${tsQuery}`);
+    headlineColumn = sql<string>`ts_headline('english', ${posts.text}, ${tsQuery}, 'StartSel=<b>, StopSel=</b>, MaxWords=20, MinWords=10, ShortWord=2')`.as('headline');
+    rankColumn = sql<number>`ts_rank(${posts.searchVector} || ${posts.tagSearchVector}, ${tsQuery})`.as('rank');
+    orderClause = sql`rank DESC`;
   }
 
   if (query.tagId) {
@@ -447,19 +456,28 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
     conditions.push(inArray(posts.id, postIdsWithTag));
   }
 
+  const baseSelect = {
+    post: posts,
+    profile: {
+      displayName: socialProfiles.displayName,
+      handle: socialProfiles.handle,
+      avatarUrl: socialProfiles.avatarUrl,
+    },
+  };
+  const selectMap = query.search
+    ? {
+        ...baseSelect,
+        headline: headlineColumn!,
+        rank: rankColumn!,
+      }
+    : baseSelect;
+
   const postRows = await db
-    .select({
-      post: posts,
-      profile: {
-        displayName: socialProfiles.displayName,
-        handle: socialProfiles.handle,
-        avatarUrl: socialProfiles.avatarUrl,
-      },
-    })
+    .select(selectMap)
     .from(posts)
     .leftJoin(socialProfiles, eq(posts.profileId, socialProfiles.id))
     .where(and(...conditions))
-    .orderBy(sql`${posts.scheduledAt} DESC NULLS LAST`, sql`${posts.createdAt} DESC`)
+    .orderBy(orderClause)
     .limit(limit)
     .offset(offset);
 
@@ -491,16 +509,17 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
     }
   }
 
-  const postsWithTags = postRows.map(({ post, profile }) => ({
-    ...post,
-    tags: tagsByPostId[post.id] ?? [],
-    profile: profile?.handle
+  const postsWithTags = postRows.map((row) => ({
+    ...row.post,
+    tags: tagsByPostId[row.post.id] ?? [],
+    profile: row.profile?.handle
       ? {
-          displayName: profile.displayName ?? profile.handle,
-          handle: profile.handle,
-          avatarUrl: profile.avatarUrl ?? '',
+          displayName: row.profile.displayName ?? row.profile.handle,
+          handle: row.profile.handle,
+          avatarUrl: row.profile.avatarUrl ?? '',
         }
       : undefined,
+    ...('headline' in row ? { headline: row.headline, rank: row.rank } : {}),
   }));
 
   return { posts: postsWithTags, total, page, limit };
