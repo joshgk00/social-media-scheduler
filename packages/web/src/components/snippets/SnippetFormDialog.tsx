@@ -3,8 +3,11 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import type { z } from 'zod';
 import { createSnippetSchema, type CreateSnippetInput } from '@sms/shared';
 import type { Snippet } from '../../hooks/use-snippets';
+
+type SnippetFormInput = z.input<typeof createSnippetSchema>;
 import { useCreateSnippet, useUpdateSnippet } from '../../hooks/use-snippets';
 import { Button } from '../ui/button';
 import {
@@ -26,7 +29,7 @@ interface SnippetFormDialogProps {
   snippet?: Snippet;
 }
 
-const INITIAL_VALUES: CreateSnippetInput = {
+const INITIAL_VALUES: SnippetFormInput = {
   name: '',
   category: 'text',
   body: '',
@@ -45,7 +48,7 @@ export function SnippetFormDialog({ open, onOpenChange, snippet }: SnippetFormDi
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<CreateSnippetInput>({
+  } = useForm<SnippetFormInput, unknown, CreateSnippetInput>({
     resolver: zodResolver(createSnippetSchema),
     defaultValues: INITIAL_VALUES,
   });

@@ -1,3 +1,4 @@
+import { isValidElement, type ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { renderHeadline } from '../headline-to-mark';
@@ -5,7 +6,7 @@ import { renderHeadline } from '../headline-to-mark';
 function serializeHeadline(headline: string): string[] {
   return renderHeadline(headline).map((node) => {
     if (typeof node === 'string') return node;
-    if (node && typeof node === 'object' && 'type' in node && node.type === 'mark') {
+    if (isValidElement<{ children: ReactNode }>(node) && node.type === 'mark') {
       return `mark:${String(node.props.children)}`;
     }
     return String(node);
