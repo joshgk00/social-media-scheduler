@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useReactTable,
@@ -118,11 +118,13 @@ export default function PostsPage() {
   const bulkPauseMutation = useBulkPause();
   const bulkResumeMutation = useBulkResume();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<PostFilters>({
     page: 1,
     limit: user?.entriesPerPage ?? 25,
+    search: searchParams.get('search')?.trim() || undefined,
   });
-  const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [historyPostId, setHistoryPostId] = useState<string | null>(null);
@@ -162,10 +164,12 @@ export default function PostsPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setFilters(prev => ({ ...prev, search: searchInput || undefined, page: 1 }));
+      const trimmedSearch = searchInput.trim();
+      setFilters(prev => ({ ...prev, search: trimmedSearch || undefined, page: 1 }));
+      setSearchParams(trimmedSearch ? { search: trimmedSearch } : {}, { replace: true });
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, setSearchParams]);
 
   const { data: postsResponse, isLoading, isError, refetch, dataUpdatedAt } = usePosts({
     ...filters,

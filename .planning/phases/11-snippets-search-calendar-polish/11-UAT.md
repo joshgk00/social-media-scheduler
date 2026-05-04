@@ -107,6 +107,11 @@ reported: |
 
   No Vitest regression test exists for PostsPage URL-state behavior either.
 severity: major
+resolved: |
+  Fixed in commit on 2026-05-03. PostsPage.tsx now imports useSearchParams; searchInput initializes from searchParams.get('search'); the debounce useEffect calls setSearchParams(trimmedSearch ? {search: trimmedSearch} : {}, {replace: true}) alongside the existing filters update.
+  New regression test packages/web/src/pages/posts/__tests__/PostsPage.test.tsx mirrors QueuePostsPage.test.tsx URL-state assertions (3 tests: renders search input; updates URL with debounced term; removes search param when cleared). All green.
+  Existing 300ms debounce timing kept (UI-SPEC line 154's 250ms is a Claude's-discretion default, not a locked value, and changing it would be scope creep beyond the URL-state contract violation).
+  Full workspace test suite green: web 178 passed (up from 175 — three new URL-state tests).
 
 ### 11. Search highlights match terms with `<mark>` styling
 expected: Search results show matching terms highlighted (bold/marked, not raw `<b>`). Special characters and HTML in content render as text, not injected DOM (e.g., `<script>` shows as text).
@@ -210,8 +215,9 @@ note: |
 ## Summary
 
 total: 21
-passed: 17
-issues: 1
+passed: 18
+issues: 0
+issues_resolved: 1
 pending: 0
 skipped: 0
 blocked: 3
@@ -219,14 +225,11 @@ blocked: 3
 ## Gaps
 
 - truth: "Search input on Posts page syncs to URL via setSearchParams replace:true (UI-SPEC line 154 — binding for all three search views)"
-  status: failed
+  status: resolved
   reason: "PostsPage.tsx keeps searchInput in local state and debounces into filters.search; never calls useSearchParams or setSearchParams. QueuePostsPage has the correct pattern wired and tested — PostsPage was apparently not updated when SEARCH-01/02 wiring landed. Plan 11-10 only touched QueuePostsPage."
   severity: major
   test: 10
   artifacts:
     - packages/web/src/pages/posts/PostsPage.tsx
-  missing:
-    - useSearchParams hook + initial-value-from-URL read on mount
-    - setSearchParams(next, { replace: true }) on debounced search change
-    - clear-input → setSearchParams without `search` key
-    - Vitest regression test mirroring QueuePostsPage.test.tsx URL-state assertions
+    - packages/web/src/pages/posts/__tests__/PostsPage.test.tsx
+  resolved_in: "Direct fix on 2026-05-03; useSearchParams added to PostsPage, regression test mirrors QueuePostsPage URL-state assertions; full web suite 178 passed"
