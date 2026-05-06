@@ -169,23 +169,24 @@ export default function CalendarPage() {
         </div>
       ) : null}
 
-      {!isLoading && !isError && events.length === 0 ? (
-        <div className="flex min-h-[320px] flex-col items-center justify-center rounded-md border text-center">
-          {isFilterActive ? (
-            <p className="text-sm text-muted-foreground">
-              No posts match the current filters. Try clearing a filter to see more.
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No posts in this {view}.
-            </p>
-          )}
-        </div>
-      ) : null}
-
-      {!isLoading && !isError && events.length > 0 ? (
+      {!isLoading && !isError ? (
         <TooltipProvider>
-          <div className="rounded-lg border bg-card p-4">
+          <div className="relative rounded-lg border bg-card p-4">
+            {events.length === 0 ? (
+              <div className="pointer-events-none absolute inset-x-4 top-24 z-10 flex justify-center">
+                <div className="rounded-md border bg-background px-4 py-3 text-center shadow-sm">
+                  {isFilterActive ? (
+                    <p className="text-sm text-muted-foreground">
+                      No posts match the current filters. Try clearing a filter to see more.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No posts in this {view}.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
             <Calendar
               localizer={calendarLocalizer}
               events={events}

@@ -173,7 +173,7 @@ export default function PostsPage() {
 
   const { data: postsResponse, isLoading, isError, refetch, dataUpdatedAt } = usePosts({
     ...filters,
-    searchScope: 'posts',
+    searchScope: filters.search ? 'posts' : undefined,
   });
 
   const hasActiveFilters = !!(filters.status || filters.profileId || filters.tagId || filters.search);

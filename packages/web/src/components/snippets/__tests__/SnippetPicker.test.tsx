@@ -90,6 +90,23 @@ describe('SnippetPicker', () => {
     });
   });
 
+  it('inserts at the current cursor position when opened from the keyboard', async () => {
+    render(<PickerHarness snippets={[buildSnippet({ body: 'KEY' })]} />);
+    const user = userEvent.setup();
+
+    const textarea = screen.getByLabelText('Post text') as HTMLTextAreaElement;
+    textarea.focus();
+    textarea.setSelectionRange(6, 6);
+
+    await user.tab();
+    await user.keyboard('{Enter}');
+    await user.click(await screen.findByText('tags'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current value')).toHaveTextContent('Hello KEY world');
+    });
+  });
+
   it('shows the no-snippets-yet empty state when no snippets exist', async () => {
     render(<PickerHarness snippets={[]} />);
     const user = userEvent.setup();

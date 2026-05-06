@@ -434,17 +434,17 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
   if (query.profileId) {
     conditions.push(eq(posts.profileId, query.profileId));
   }
-  if (query.searchScope === 'posts') {
-    conditions.push(sql`${posts.status} IN ('draft', 'scheduled', 'failed')`);
-  } else if (query.searchScope === 'queue') {
-    conditions.push(eq(posts.status, 'queued'));
-  }
   if (query.search) {
     const tsQuery = sql`plainto_tsquery('english', ${query.search})`;
+    if (!query.status && query.searchScope === 'posts') {
+      conditions.push(sql`${posts.status} IN ('draft', 'scheduled', 'failed')`);
+    } else if (!query.status && query.searchScope === 'queue') {
+      conditions.push(eq(posts.status, 'queued'));
+    }
     conditions.push(sql`(${posts.searchVector} || ${posts.tagSearchVector}) @@ ${tsQuery}`);
     headlineColumn = sql<string>`ts_headline('english', ${posts.text}, ${tsQuery}, 'StartSel=<b>, StopSel=</b>, MaxWords=20, MinWords=10, ShortWord=2')`.as('headline');
     rankColumn = sql<number>`ts_rank(${posts.searchVector} || ${posts.tagSearchVector}, ${tsQuery})`.as('rank');
-    orderClause = sql`rank DESC`;
+    orderClause = sql`rank DESC, ${posts.scheduledAt} DESC NULLS LAST, ${posts.createdAt} DESC`;
   }
 
   if (query.tagId) {

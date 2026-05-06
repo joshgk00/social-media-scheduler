@@ -55,6 +55,7 @@ export type CsvQueueRow = z.infer<typeof csvQueueRowSchema>;
 
 const csvScheduledJobRowSchema = z
   .object({
+    rowNumber: z.number().int().min(2).optional(),
     text: z
       .string()
       .min(1)
@@ -71,6 +72,7 @@ const csvScheduledJobRowSchema = z
 
 const csvQueueJobRowSchema = z
   .object({
+    rowNumber: z.number().int().min(2).optional(),
     text: z
       .string()
       .min(1)

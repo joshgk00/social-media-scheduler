@@ -175,6 +175,34 @@ describe('CSV import snippet substitution handlers', () => {
     expect(reportContents).toContain('Unknown snippet ""doesnotexist""');
   });
 
+  it('uses original CSV row numbers for scheduled snippet errors', async () => {
+    const job = makeCsvImportScheduledJob();
+    job.data.userId = USER_A_ID;
+    job.data.targetId = PROFILE_A_ID;
+    job.data.params = {
+      profileId: PROFILE_A_ID,
+      rows: [
+        {
+          rowNumber: 3,
+          text: '{{snippet:missing}} body',
+          scheduled_at: '2026-06-01T10:00:00.000Z',
+          tags: [],
+          spinnable: false,
+        },
+      ],
+      errors: [{ rowNumber: 2, reason: 'text: String must contain at least 1 character(s)', row: { text: '' } }],
+    };
+
+    const result = await handleCsvImportScheduled(job, createTestContext());
+
+    expect(result.status).toBe('failed');
+    expect(result.failureCount).toBe(2);
+
+    const reportContents = await readFile(result.errorReportPath!, 'utf8');
+    expect(reportContents).toMatch(/^"2",/m);
+    expect(reportContents).toMatch(/^"3",/m);
+  });
+
   it('handles a mixed three-row scheduled import without storing unresolved tokens', async () => {
     await db.insert(snippets).values({
       userId: USER_A_ID,
@@ -325,5 +353,35 @@ describe('CSV import snippet substitution handlers', () => {
     expect(result.successCount).toBe(1);
     expect(result.failureCount).toBe(0);
     expect(await insertedTextsFor(USER_A_ID, 'queued')).toEqual(['Queued #queue post']);
+  });
+
+  it('uses original CSV row numbers for queue snippet errors', async () => {
+    const job = makeCsvImportQueueJob();
+    job.data.userId = USER_A_ID;
+    job.data.targetId = QUEUE_A_ID;
+    job.data.params = {
+      profileId: PROFILE_A_ID,
+      queueId: QUEUE_A_ID,
+      rows: [
+        {
+          rowNumber: 4,
+          text: 'Queued {{snippet:missing}} post',
+          queue_name: 'Worker Queue A',
+          position: 1,
+          tags: [],
+          spinnable: false,
+        },
+      ],
+      errors: [{ rowNumber: 2, reason: 'text: String must contain at least 1 character(s)', row: { text: '' } }],
+    };
+
+    const result = await handleCsvImportQueue(job, createTestContext());
+
+    expect(result.status).toBe('failed');
+    expect(result.failureCount).toBe(2);
+
+    const reportContents = await readFile(result.errorReportPath!, 'utf8');
+    expect(reportContents).toMatch(/^"2",/m);
+    expect(reportContents).toMatch(/^"4",/m);
   });
 });

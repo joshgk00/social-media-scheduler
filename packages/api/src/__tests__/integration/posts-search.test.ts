@@ -359,6 +359,25 @@ describe('posts search integration', () => {
     expect(queueScopeResult.posts[0]?.status).toBe('queued');
   });
 
+  it('does not let searchScope hide ordinary listings or explicit status searches', async () => {
+    const ordinaryListing = await getPosts(db, USER_A_ID, {
+      searchScope: 'posts',
+      limit: 100,
+    });
+
+    expect(ordinaryListing.posts.map((post) => post.id)).toContain(PUBLISHED_MATCH_POST_ID);
+    expect(ordinaryListing.posts.map((post) => post.id)).toContain(QUEUED_MATCH_POST_ID);
+
+    const publishedSearch = await getPosts(db, USER_A_ID, {
+      search: 'newsletter',
+      searchScope: 'posts',
+      status: 'published',
+      limit: 100,
+    });
+
+    expect(publishedSearch.posts.map((post) => post.id)).toEqual([PUBLISHED_MATCH_POST_ID]);
+  });
+
   it('preserves cross-tenant isolation for search results', async () => {
     const result = await getPosts(db, USER_A_ID, { search: 'newsletter launch', limit: 100 });
 

@@ -252,6 +252,22 @@ describe('CalendarPage', () => {
     expect(navigate).toHaveBeenCalledWith('/posts/new?scheduledAt=2026-06-01T14%3A30%3A00.000Z');
   });
 
+  it('keeps calendar controls active when the visible range has no events', async () => {
+    useCalendarPostsMock.mockReturnValue({
+      data: buildResponse([]),
+      isLoading: false,
+      isError: false,
+    });
+    render(<CalendarPage />);
+    const user = userEvent.setup();
+
+    expect(screen.getByText('No posts in this month.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Select slot' }));
+
+    expect(navigate).toHaveBeenCalledWith('/posts/new?scheduledAt=2026-06-01T14%3A30%3A00.000Z');
+  });
+
   it('normalizes month, week, and day range shapes', () => {
     expect(normalizeRange({
       start: new Date('2026-06-01T00:00:00.000Z'),

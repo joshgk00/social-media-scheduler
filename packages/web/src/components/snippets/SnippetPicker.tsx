@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type RefObject } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Hash, Settings2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '../ui/button';
@@ -66,9 +66,18 @@ export function SnippetPicker({ textareaRef, onInsert }: SnippetPickerProps) {
   }
 
   function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen) {
+      captureSelection();
+    }
     setIsOpen(nextOpen);
     if (!nextOpen) {
       setSearchQuery('');
+    }
+  }
+
+  function handleTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      captureSelection();
     }
   }
 
@@ -83,6 +92,7 @@ export function SnippetPicker({ textareaRef, onInsert }: SnippetPickerProps) {
           size="sm"
           aria-label="Insert snippet"
           onPointerDown={captureSelection}
+          onKeyDown={handleTriggerKeyDown}
           className="w-fit"
         >
           <Hash className="h-4 w-4" aria-hidden="true" />

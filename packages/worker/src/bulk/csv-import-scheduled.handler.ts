@@ -24,6 +24,7 @@ export async function handleCsvImportScheduled(
   const validRows: typeof rows = [];
 
   for (const [index, row] of rows.entries()) {
+    const rowNumber = row.rowNumber ?? index + 2;
     const { result, missing } = substituteSnippetsInText(
       row.text,
       (snippetName) => snippetMap.get(snippetName),
@@ -32,7 +33,7 @@ export async function handleCsvImportScheduled(
     if (missing.length > 0) {
       for (const missingName of missing) {
         errors.push({
-          rowNumber: index + 2,
+          rowNumber,
           reason: `Unknown snippet "${missingName}"`,
           row,
         });

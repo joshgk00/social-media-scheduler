@@ -4,7 +4,6 @@ import { calendarQuerySchema } from '@sms/shared';
 import type { Db } from '@sms/db';
 import { postTags, posts, socialProfiles } from '@sms/db';
 
-import { checkConflicts } from '../services/post.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 
 interface CalendarDependencies {
@@ -90,18 +89,32 @@ export function createCalendarRouter({ db }: CalendarDependencies): Router {
       .where(and(...conditions))
       .orderBy(asc(posts.scheduledAt), asc(posts.createdAt));
 
-    const events = await Promise.all(eventRows.map(async (eventRow) => {
+    const eventIds = eventRows.map((eventRow) => eventRow.id);
+    const conflictingEventRows = eventIds.length > 0
+      ? await db
+        .select({ id: posts.id })
+        .from(posts)
+        .where(and(
+          eq(posts.userId, userId),
+          inArray(posts.id, eventIds),
+          sql`EXISTS (
+            SELECT 1
+            FROM posts AS conflict_posts
+            WHERE conflict_posts.user_id = ${posts.userId}
+              AND conflict_posts.profile_id = ${posts.profileId}
+              AND conflict_posts.id <> ${posts.id}
+              AND conflict_posts.status IN ('scheduled', 'queued', 'publishing')
+              AND conflict_posts.scheduled_at >= ${posts.scheduledAt} - interval '5 minutes'
+              AND conflict_posts.scheduled_at <= ${posts.scheduledAt} + interval '5 minutes'
+          )`,
+        ))
+      : [];
+    const conflictingEventIds = new Set(conflictingEventRows.map((eventRow) => eventRow.id));
+
+    const events = eventRows.map((eventRow) => {
       if (!eventRow.profileId || !eventRow.scheduledAt) {
         throw new Error('Calendar query returned a row without profileId or scheduledAt.');
       }
-
-      const conflicts = await checkConflicts(
-        db,
-        userId,
-        eventRow.profileId,
-        eventRow.scheduledAt.toISOString(),
-        eventRow.id,
-      );
 
       return {
         id: eventRow.id,
@@ -111,9 +124,9 @@ export function createCalendarRouter({ db }: CalendarDependencies): Router {
         status: eventRow.status,
         scheduledAt: eventRow.scheduledAt.toISOString(),
         textPreview: eventRow.text.slice(0, 60),
-        hasConflict: conflicts.length > 0,
+        hasConflict: conflictingEventIds.has(eventRow.id),
       };
-    }));
+    });
 
     res.json({ events });
   });
