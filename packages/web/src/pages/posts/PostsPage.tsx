@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useReactTable,
@@ -20,6 +20,7 @@ import { useTags } from '../../hooks/use-tags';
 import { useProfiles } from '../../hooks/use-profiles';
 import { useAuth } from '../../hooks/use-auth';
 import { apiClient } from '../../lib/api-client';
+import { renderHeadline } from '../../lib/headline-to-mark';
 import { PostStatusBadge } from '../../components/posts/PostStatusBadge';
 import { PostActionsMenu } from '../../components/posts/PostActionsMenu';
 import { PostErrorCell } from '../../components/posts/PostErrorCell';
@@ -117,11 +118,13 @@ export default function PostsPage() {
   const bulkPauseMutation = useBulkPause();
   const bulkResumeMutation = useBulkResume();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<PostFilters>({
     page: 1,
     limit: user?.entriesPerPage ?? 25,
+    search: searchParams.get('search')?.trim() || undefined,
   });
-  const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [historyPostId, setHistoryPostId] = useState<string | null>(null);
@@ -161,12 +164,17 @@ export default function PostsPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setFilters(prev => ({ ...prev, search: searchInput || undefined, page: 1 }));
+      const trimmedSearch = searchInput.trim();
+      setFilters(prev => ({ ...prev, search: trimmedSearch || undefined, page: 1 }));
+      setSearchParams(trimmedSearch ? { search: trimmedSearch } : {}, { replace: true });
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, setSearchParams]);
 
-  const { data: postsResponse, isLoading, isError, refetch, dataUpdatedAt } = usePosts(filters);
+  const { data: postsResponse, isLoading, isError, refetch, dataUpdatedAt } = usePosts({
+    ...filters,
+    searchScope: filters.search ? 'posts' : undefined,
+  });
 
   const hasActiveFilters = !!(filters.status || filters.profileId || filters.tagId || filters.search);
   const totalPages = postsResponse ? Math.ceil(postsResponse.total / postsResponse.limit) : 0;
@@ -246,14 +254,18 @@ export default function PostsPage() {
       accessorKey: 'text',
       header: 'Text',
       cell: ({ row }: { row: Row<Post> }) => {
-        const textPreview = row.original.text.length > 80
-          ? `${row.original.text.slice(0, 80)}...`
-          : row.original.text;
+        const textPreview = row.original.headline ?? (
+          row.original.text.length > 80
+            ? `${row.original.text.slice(0, 80)}...`
+            : row.original.text
+        );
         const mediaCount = (row.original as Post & { mediaCount?: number }).mediaCount ?? 0;
         const hasTranscodingMedia = (row.original as Post & { hasTranscodingMedia?: boolean }).hasTranscodingMedia ?? false;
         return (
           <div>
-            <span className="text-sm line-clamp-2">{textPreview}</span>
+            <span className="text-sm line-clamp-2">
+              {row.original.headline ? renderHeadline(textPreview) : textPreview}
+            </span>
             {mediaCount > 0 && (
               <span className="inline-flex items-center gap-1 mt-1 text-xs text-muted-foreground" title={hasTranscodingMedia ? `${mediaCount} file(s), transcoding in progress` : `${mediaCount} file(s)`}>
                 {hasTranscodingMedia ? (

@@ -1,5 +1,5 @@
 import { useAuth } from '../../hooks/use-auth';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { ProfileSection } from './components/ProfileSection';
 import { PreferencesSection } from './components/PreferencesSection';
 import { SecuritySection } from './components/SecuritySection';
@@ -49,6 +49,15 @@ export default function SettingsPage() {
           <TabsUi.TabsTrigger value="notifications">Notifications</TabsUi.TabsTrigger>
           <TabsUi.TabsTrigger value="storage">Storage</TabsUi.TabsTrigger>
         </TabsUi.TabsList>
+
+        <nav aria-label="Settings sub-pages">
+          <Link
+            to="/settings/snippets"
+            className="inline-flex items-center justify-center rounded-sm border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Snippets
+          </Link>
+        </nav>
 
         <TabsUi.TabsContent value="profile"><ProfileSection user={user} /></TabsUi.TabsContent>
         <TabsUi.TabsContent value="preferences"><PreferencesSection user={user} /></TabsUi.TabsContent>

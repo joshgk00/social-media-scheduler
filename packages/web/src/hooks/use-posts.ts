@@ -32,6 +32,8 @@ interface Post {
   updatedAt: string;
   tags: PostTag[];
   profile?: PostProfile;
+  headline?: string;
+  rank?: number;
 }
 
 interface PostsResponse {
@@ -53,6 +55,7 @@ export interface PostFilters {
   profileId?: string;
   tagId?: string;
   search?: string;
+  searchScope?: 'posts' | 'queue' | 'calendar';
   page?: number;
   limit?: number;
 }
@@ -67,6 +70,7 @@ export function usePosts(filters: PostFilters = {}) {
   if (filters.profileId) params.set('profileId', filters.profileId);
   if (filters.tagId) params.set('tagId', filters.tagId);
   if (filters.search) params.set('search', filters.search);
+  if (filters.searchScope) params.set('searchScope', filters.searchScope);
   if (filters.page) params.set('page', String(filters.page));
   if (filters.limit) params.set('limit', String(filters.limit));
 

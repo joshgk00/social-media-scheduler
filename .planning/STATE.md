@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: planned
-stopped_at: Phase 10 UAT complete -- Phase 11 ready to plan
-last_updated: "2026-04-30T11:16:26.000Z"
+milestone_name: MVP
+status: shipping
+stopped_at: Phase 11 verified + UAT partial (3 manual sweep items deferred); milestone close pending PR merge
+last_updated: "2026-05-05T21:45:00.000Z"
 progress:
   total_phases: 21
-  completed_phases: 11
-  total_plans: 39
-  completed_plans: 39
+  completed_phases: 21
+  total_plans: 50
+  completed_plans: 50
   percent: 100
 ---
 
@@ -24,9 +24,9 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 
 ## Current Phase
 
-Phase 11 -- Snippets, Search, Calendar & Polish
+Phase 11 -- Snippets, Search, Calendar & Polish (final v1.0 phase)
 
-**Status:** Ready to plan
+**Status:** Shipped (verification PASSED 8/8; UAT 18 pass + 3 blocked manual-sweep + 0 outstanding issues; PR pending)
 **Goal:** User has productivity tools (saved text snippets, full-text search, calendar visualization) and the security policy for future AI integration
 
 ## Roadmap Summary
@@ -48,6 +48,24 @@ Phase 11 -- Snippets, Search, Calendar & Polish
 - Phase 4: Publish Worker & Scheduled Posts (2026-04-10)
 - Phase 5: Queue Engine (2026-04-15)
 - Phase 10: Bulk Operations (2026-04-30)
+- Phase 11: Snippets, Search, Calendar & Polish (2026-05-05 — pending PR merge)
+
+v1.0 milestone complete pending merge to main. Once merged: tag v1.0, run post-merge bookkeeping (ROADMAP rewrite, REQUIREMENTS.md archive). See .planning/MILESTONES.md for the full v1.0 entry.
+
+## Deferred Items
+
+Acknowledged at v1.0 milestone close on 2026-05-05; documented as known state, not new work.
+
+| Category | Item | Status | Notes |
+|----------|------|--------|-------|
+| Phase 11 UAT | Test 9 — iOS Safari snippet picker cursor | blocked: physical-device | Real iOS device not available pre-ship; onPointerDown cursor-capture is the iOS-specific defense, regression-tested in jsdom |
+| Phase 11 UAT | Test 12 — search highlight contrast (light theme) | blocked: release-build | Bundle with browser visual sweep; dark theme verified against real built DOM |
+| Phase 11 UAT | Test 20 — calendar entry click → /posts/:id/edit (production build) | blocked: release-build | Route works; pointer translation failed in in-app browser surface — needs human click |
+| Earlier UAT | Phase 1, 2, 6 HUMAN-UAT files | partial | Historical state from shipped phases; carried forward at milestone close |
+| Earlier verification | Phase 1, 2, 4, 6 VERIFICATION reports | human_needed | Shipped despite manual-only items pending; carried forward |
+| Earlier verification | Phase 5 VERIFICATION | gaps_found | Historical state from a shipped phase; carried forward |
+
+For Phase 11's three blocked items: bundle into one ~15 min real-browser sweep (plus an iPhone/iPad pass for Test 9) before declaring v1.0 production-ready.
 
 ## Performance Metrics
 
@@ -91,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-30T11:16:26.000Z
-Stopped at: Phase 10 UAT complete -- Phase 11 ready to plan
-Resume file: .planning/phases/11-snippets-search-calendar-polish/
+Last session: 2026-05-05T21:45:00.000Z
+Stopped at: Phase 11 verified + UAT partial; milestone close pre-merge; PR pending
+Resume file: .planning/MILESTONES.md (post-merge: tag v1.0, ROADMAP rewrite, REQUIREMENTS archive)

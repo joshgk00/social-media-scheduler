@@ -1,3 +1,4 @@
+import type { RefObject } from 'react';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
@@ -24,6 +25,7 @@ interface TwitterPostFieldsProps {
   onReorderMedia: (ids: string[]) => void;
   onRetryTranscode: (id: string) => void;
   disabled?: boolean;
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
 }
 
 /**
@@ -49,6 +51,7 @@ export function TwitterPostFields({
   onReorderMedia,
   onRetryTranscode,
   disabled,
+  textareaRef,
 }: TwitterPostFieldsProps) {
   return (
     <div className="space-y-6">
@@ -70,6 +73,7 @@ export function TwitterPostFields({
           <div className="relative">
             <Textarea
               id="tweet-text"
+              ref={textareaRef}
               placeholder="What's happening?"
               value={text}
               onChange={(event) => onTextChange(event.target.value)}

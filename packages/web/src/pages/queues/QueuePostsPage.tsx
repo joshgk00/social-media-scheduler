@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Plus, ListOrdered } from 'lucide-react';
+import { Plus, ListOrdered, Search } from 'lucide-react';
 
 import { useQueue, useQueues } from '../../hooks/use-queues';
 import {
@@ -50,18 +50,25 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../../components/ui/tooltip';
+import { Input } from '../../components/ui/input';
 
 import { cn } from '../../lib/utils';
+import { renderHeadline } from '../../lib/headline-to-mark';
 
 export default function QueuePostsPage() {
   const { id: queueId } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: queue, isLoading: isQueueLoading } = useQueue(queueId ?? '');
   const { data: queues } = useQueues();
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
   const {
     data: queuePosts,
     isLoading: isPostsLoading,
     isError,
-  } = useQueuePosts(queueId ?? '');
+  } = useQueuePosts(queueId ?? '', {
+    search: searchInput.trim() || undefined,
+    searchScope: 'queue',
+  });
 
   const moveUpMutation = useMovePostUp(queueId ?? '');
   const moveDownMutation = useMovePostDown(queueId ?? '');
@@ -123,6 +130,15 @@ export default function QueuePostsPage() {
     return false;
   }
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmedSearch = searchInput.trim();
+      setSearchParams(trimmedSearch ? { search: trimmedSearch } : {}, { replace: true });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchInput, setSearchParams]);
+
   if (isError) {
     return (
       <main className="space-y-4 p-6">
@@ -166,17 +182,29 @@ export default function QueuePostsPage() {
         </Button>
       </div>
 
-      <div className="flex justify-end">
-        <BulkActionsDropdown
-          view="queue"
-          selectionCount={totalPosts}
-          onRandomize={() => setRandomizeOpen(true)}
-          onPurge={() => setPurgeOpen(true)}
-          onCopy={() => setCopyOpen(true)}
-          onModifyText={() => setModifyTextOpen(true)}
-          onDedupe={() => setDedupeOpen(true)}
-          onExport={() => bulkExportMutation.mutate({ path: `/api/queues/${queueId}/posts.csv`, filename: 'queue-posts.csv' })}
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search posts..."
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            className="pl-9"
+            aria-label="Search posts"
+          />
+        </div>
+        <div className="flex justify-end">
+          <BulkActionsDropdown
+            view="queue"
+            selectionCount={totalPosts}
+            onRandomize={() => setRandomizeOpen(true)}
+            onPurge={() => setPurgeOpen(true)}
+            onCopy={() => setCopyOpen(true)}
+            onModifyText={() => setModifyTextOpen(true)}
+            onDedupe={() => setDedupeOpen(true)}
+            onExport={() => bulkExportMutation.mutate({ path: `/api/queues/${queueId}/posts.csv`, filename: 'queue-posts.csv' })}
+          />
+        </div>
       </div>
 
       {/* Queue metadata */}
@@ -315,7 +343,9 @@ export default function QueuePostsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm line-clamp-2">{post.text}</span>
+                      <span className="text-sm line-clamp-2">
+                        {post.headline ? renderHeadline(post.headline) : post.text}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <PostStatusBadge

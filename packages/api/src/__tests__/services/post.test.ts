@@ -17,6 +17,7 @@ const mockPosts = makeTableStub('posts', [
   'id', 'userId', 'profileId', 'text', 'isThread', 'status', 'scheduledAt',
   'publishedAt', 'failedAt', 'failureReason', 'platformPostId', 'postVersion',
   'hasSpinnableText', 'autoDestructAfter', 'notes', 'createdAt', 'updatedAt',
+  'searchVector', 'tagSearchVector',
 ]);
 
 const mockTags = makeTableStub('tags', ['id', 'name', 'color', 'userId', 'createdAt', 'updatedAt']);
@@ -817,10 +818,38 @@ describe('post.service', () => {
       expect(db.select).toHaveBeenCalled();
     });
 
-    it('filters by search text (ilike) server-side', async () => {
+    it('includes headline and rank when search is provided', async () => {
       const db = createGetPostsMockDb({ postRows: [], total: 0 });
 
       await getPosts(db, 'user-1', { search: 'hello' });
+
+      expect(db.select).toHaveBeenCalled();
+      expect(db.select.mock.calls[0][0]).toHaveProperty('headline');
+      expect(db.select.mock.calls[0][0]).toHaveProperty('rank');
+    });
+
+    it('omits headline and rank when search is not provided', async () => {
+      const db = createGetPostsMockDb({ postRows: [], total: 0 });
+
+      await getPosts(db, 'user-1', { page: 1, limit: 25 });
+
+      expect(db.select).toHaveBeenCalled();
+      expect(db.select.mock.calls[0][0]).not.toHaveProperty('headline');
+      expect(db.select.mock.calls[0][0]).not.toHaveProperty('rank');
+    });
+
+    it('accepts searchScope posts without breaking the query path', async () => {
+      const db = createGetPostsMockDb({ postRows: [], total: 0 });
+
+      await getPosts(db, 'user-1', { search: 'hello', searchScope: 'posts' });
+
+      expect(db.select).toHaveBeenCalled();
+    });
+
+    it('accepts searchScope queue without breaking the query path', async () => {
+      const db = createGetPostsMockDb({ postRows: [], total: 0 });
+
+      await getPosts(db, 'user-1', { search: 'hello', searchScope: 'queue' });
 
       expect(db.select).toHaveBeenCalled();
     });

@@ -11,6 +11,7 @@ const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const RecoverPage = lazy(() => import('./pages/recover/RecoverPage'));
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
 const EmailLogsPage = lazy(() => import('./pages/settings/EmailLogsPage'));
+const SnippetsPage = lazy(() => import('./pages/settings/SnippetsPage'));
 const ProfilesPage = lazy(() => import('./pages/profiles/ProfilesPage'));
 const PostsPage = lazy(() => import('./pages/posts/PostsPage'));
 const NotificationsPage = lazy(() => import('./pages/notifications/NotificationsPage'));
@@ -20,6 +21,7 @@ const EditPostPage = lazy(() => import('./pages/posts/EditPostPage'));
 const QueuesPage = lazy(() => import('./pages/queues/QueuesPage'));
 const QueueDetailPage = lazy(() => import('./pages/queues/QueueDetailPage'));
 const QueuePostsPage = lazy(() => import('./pages/queues/QueuePostsPage'));
+const CalendarPage = lazy(() => import('./pages/calendar/CalendarPage'));
 const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage'));
 const AdminQueuesRedirect = lazy(() => import('./pages/admin/AdminQueuesRedirect'));
 
@@ -46,10 +48,12 @@ export function App() {
               <Route path="/queues/new" element={<QueueDetailPage />} />
               <Route path="/queues/:id/edit" element={<QueueDetailPage />} />
               <Route path="/queues/:id/posts" element={<QueuePostsPage />} />
+              <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/profiles" element={<ProfilesPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/admin/queues" element={<AdminQueuesRedirect />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/settings/snippets" element={<SnippetsPage />} />
               <Route path="/settings/email-logs" element={<EmailLogsPage />} />
             </Route>
           </Routes>

@@ -1,4 +1,5 @@
-import { pgTable, pgEnum, uuid, text, varchar, timestamp, boolean, integer, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { pgTable, pgEnum, uuid, text, varchar, timestamp, boolean, integer, index, uniqueIndex, customType } from 'drizzle-orm/pg-core';
 import { users } from './users.js';
 import { socialProfiles } from './social-profiles.js';
 import { queues } from './queues.js';
@@ -15,6 +16,12 @@ export const postStatusEnum = pgEnum('post_status', [
   'auto_destructing',
   'destroyed',
 ]);
+
+const tsvector = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return 'tsvector';
+  },
+});
 
 export const posts = pgTable('posts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -45,6 +52,8 @@ export const posts = pgTable('posts', {
   visibility: varchar('visibility', { length: 16 }),
   // Phase 8 — Facebook-only optional link URL (POST-FB-04). NULL for twitter/linkedin posts.
   linkUrl: text('link_url'),
+  searchVector: tsvector('search_vector'),
+  tagSearchVector: tsvector('tag_search_vector').notNull().default(sql`''::tsvector`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

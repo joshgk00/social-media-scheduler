@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import { DateTime } from 'luxon';
 import { toast } from 'sonner';
@@ -81,6 +81,7 @@ export default function EditPostPage() {
   const [isTagManageOpen, setIsTagManageOpen] = useState(false);
   const [isFormInitialized, setIsFormInitialized] = useState(false);
   const [isRateLimitDialogOpen, setIsRateLimitDialogOpen] = useState(false);
+  const postTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const { upload, uploadingFiles, isUploading } = useMediaUpload();
@@ -530,6 +531,7 @@ export default function EditPostPage() {
             <TwitterPostFields
               text={formState.text}
               onTextChange={(value) => updateForm('text', value)}
+              textareaRef={postTextAreaRef}
               isThread={formState.isThread}
               onThreadToggle={handleThreadToggle}
               tweets={tweets}
@@ -551,6 +553,7 @@ export default function EditPostPage() {
                 <div className="relative">
                   <Textarea
                     id="post-text"
+                    ref={postTextAreaRef}
                     placeholder="Share something with your network..."
                     value={formState.text}
                     onChange={(event) => updateForm('text', event.target.value)}
@@ -581,6 +584,7 @@ export default function EditPostPage() {
                 <div className="relative">
                   <Textarea
                     id="post-text"
+                    ref={postTextAreaRef}
                     placeholder="What's on your mind?"
                     value={formState.text}
                     onChange={(event) => updateForm('text', event.target.value)}
@@ -627,6 +631,8 @@ export default function EditPostPage() {
             onHasSpinnableTextChange={(value) => updateForm('hasSpinnableText', value)}
             autoDestructAfter={formState.autoDestructAfter}
             onAutoDestructAfterChange={(value) => updateForm('autoDestructAfter', value)}
+            textareaRef={postTextAreaRef}
+            onInsertSnippet={(nextValue) => updateForm('text', nextValue)}
           />
 
           {/* SplitButton — Update as primary, Save as Draft in dropdown */}

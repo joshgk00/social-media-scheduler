@@ -503,6 +503,21 @@ describe('queues routes', () => {
       expect(res.body[0].queuePosition).toBe(1);
       expect(res.body[1].queuePosition).toBe(2);
     });
+
+    it('passes queue search params through to the service', async () => {
+      mockGetQueuePosts.mockResolvedValueOnce([]);
+      const agent = await authenticatedAgent();
+
+      const res = await agent.get(`/api/queues/${QUEUE_ID}/posts?search=announcement&searchScope=queue`);
+
+      expect(res.status).toBe(200);
+      expect(mockGetQueuePosts).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        QUEUE_ID,
+        { search: 'announcement' },
+      );
+    });
   });
 
   describe('POST /api/queues/:id/posts/:postId/move-up', () => {

@@ -11,12 +11,25 @@ export interface QueuePost {
   queuePosition: number | null;
   platformPostId: string | null;
   publishedAt: string | null;
+  headline?: string;
+  rank?: number;
 }
 
-export function useQueuePosts(queueId: string) {
+export interface QueuePostFilters {
+  search?: string;
+  searchScope?: 'queue';
+}
+
+export function useQueuePosts(queueId: string, filters: QueuePostFilters = {}) {
+  const params = new URLSearchParams();
+  if (filters.search) params.set('search', filters.search);
+  if (filters.searchScope) params.set('searchScope', filters.searchScope);
+  const queryString = params.toString();
+
   return useQuery({
-    queryKey: ['queue-posts', queueId],
-    queryFn: () => apiClient.get<QueuePost[]>(`/api/queues/${queueId}/posts`),
+    queryKey: ['queue-posts', queueId, filters],
+    queryFn: () =>
+      apiClient.get<QueuePost[]>(`/api/queues/${queueId}/posts${queryString ? `?${queryString}` : ''}`),
     enabled: !!queueId,
     staleTime: 5_000,
     refetchInterval: 10_000,

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parse } from 'csv-parse';
 import { stringify } from 'csv-stringify/sync';
 import { MAX_BULK_CSV_ROWS } from '@sms/shared';
-import type { z, ZodTypeAny } from 'zod';
+import type { z, ZodType } from 'zod';
 import { sanitizeCsvCell } from './bulk-export.service.js';
 
 export interface CsvRowError {
@@ -13,16 +13,16 @@ export interface CsvRowError {
 }
 
 export interface ParsedCsvRows<T> {
-  rows: T[];
+  rows: Array<T & { rowNumber: number }>;
   errors: CsvRowError[];
 }
 
-export async function parseCsvBuffer<TSchema extends ZodTypeAny>(
+export async function parseCsvBuffer<TSchema extends ZodType<Record<string, unknown>>>(
   buffer: Buffer,
   schema: TSchema,
   maxRows = MAX_BULK_CSV_ROWS,
 ): Promise<ParsedCsvRows<z.infer<TSchema>>> {
-  const rows: Array<z.infer<TSchema>> = [];
+  const rows: Array<z.infer<TSchema> & { rowNumber: number }> = [];
   const errors: CsvRowError[] = [];
   const parser = parse(buffer, {
     bom: true,
@@ -39,7 +39,7 @@ export async function parseCsvBuffer<TSchema extends ZodTypeAny>(
     }
     const parsed = schema.safeParse(rawRow);
     if (parsed.success) {
-      rows.push(parsed.data);
+      rows.push({ ...parsed.data, rowNumber });
       continue;
     }
 
