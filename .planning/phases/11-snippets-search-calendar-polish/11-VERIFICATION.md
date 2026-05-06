@@ -1,21 +1,20 @@
 ---
 phase: 11-snippets-search-calendar-polish
 verified: 2026-05-03T00:51:11Z
-status: gaps_found
-score: 7/8 must-haves verified
-re_verification: null
-gaps:
+re_verified: 2026-05-05
+status: passed
+score: 8/8 must-haves verified
+re_verification: "TS gap resolved in commit a10fa98 (split useForm input/output generics in SnippetFormDialog.tsx; isValidElement guard in headline-to-mark.test.tsx). UAT issue 10 (PostsPage URL-state) resolved in commit 36d46c0 with regression test. Full workspace `pnpm -w test` exit 0; web 178 / api 479 / worker 215 / shared 173 / db 11 = 1056 passing. Backlog test-coverage items filed as issues #41, #42, #43."
+gaps: []
+gaps_resolved:
   - truth: "Workspace test command (`pnpm -w test`) completes successfully"
-    status: failed
-    reason: "The `pretest` hook runs `pnpm -r build`, which fails with three TypeScript errors in Phase 11 files. Vitest itself (esbuild-driven) runs all 1042 tests green when invoked per-package, but the canonical test command documented in 11-VALIDATION.md aborts during pretest build. CI/production deploys that depend on `tsc -b` will fail."
-    artifacts:
-      - path: "packages/web/src/components/snippets/SnippetFormDialog.tsx"
-        issue: "Line 49: `zodResolver(createSnippetSchema)` returns a Resolver whose input type has `category?: ... | undefined`, but `useForm<CreateSnippetInput>` requires `category` to be strictly defined. TS2322 + TS2345 cascade. Likely fix: use `useForm<z.input<typeof createSnippetSchema>>` or add an explicit generic to `zodResolver` that aligns input/output."
-      - path: "packages/web/src/lib/__tests__/headline-to-mark.test.tsx"
-        issue: "Line 9: `node.props` is of type `unknown` (TS18046). Likely fix: narrow `node` to `React.ReactElement` before reading `.props`."
-    missing:
-      - "Type-correct resolver wiring in SnippetFormDialog.tsx (or a typed wrapper)"
-      - "Type narrowing on the React element returned from `renderHeadline()` inside the headline-to-mark test"
+    original_status: failed
+    resolved_in: "a10fa98"
+    notes: "Three TS errors in Phase 11 files fixed (SnippetFormDialog resolver typing ×2; headline-to-mark.test node.props narrowing). tsc -b clean across all packages."
+  - truth: "PostsPage search input syncs to URL via setSearchParams replace:true (UI-SPEC line 154)"
+    original_status: failed
+    resolved_in: "36d46c0"
+    notes: "Added useSearchParams import, initial-from-URL read, and setSearchParams call alongside existing filters update; new regression test mirrors QueuePostsPage URL-state assertions."
 human_verification:
   - test: "Snippet picker keyboard insertion in iOS Safari (cursor-position trap)"
     expected: "On a real iPhone, open composer, place cursor mid-text, open snippet picker, insert snippet — text inserts at original cursor position (not appended)"
