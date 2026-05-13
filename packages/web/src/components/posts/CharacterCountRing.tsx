@@ -17,7 +17,7 @@ export function CharacterCountRing({
   size = 'lg',
 }: CharacterCountRingProps) {
   const limit = PLATFORM_COMPOSER_CHAR_LIMIT[platform];
-  const { count, exceedsCap } = getPlatformCharCount(text, platform);
+  const { count } = getPlatformCharCount(text, platform);
   const remaining = limit - count;
   const permillage = limit > 0 ? Math.round((count / limit) * 1000) : 0;
 
@@ -30,7 +30,11 @@ export function CharacterCountRing({
   const center = diameter / 2;
   const strokeWidth = 2;
 
-  const isOverLimit = exceedsCap || remaining < 0;
+  // Drive over-limit purely from `remaining`. `getPlatformCharCount` returns
+  // `exceedsCap = !parseTweet.valid` for Twitter, but twitter-text marks an
+  // empty tweet invalid — using exceedsCap would render the blank composer
+  // as over-limit on initial render.
+  const isOverLimit = remaining < 0;
   const isWarning = !isOverLimit && permillage > 928;
   // Show the number once the user is within 20 chars of the limit, in either
   // direction. For high-cap platforms (FB 63k) the trailing number is only
