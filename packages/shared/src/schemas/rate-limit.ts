@@ -36,6 +36,10 @@ const twitterRateLimitState = z
     currentCount: z.number().int().nonnegative(),
     budget: z.number().int().positive(),
     monthStartUtc: z.string().datetime(),
+    // Start of the next UTC calendar month — the moment the Twitter monthly
+    // budget resets (issue #35). Required so typed consumers can rely on a
+    // future-dated reset boundary instead of formatting `monthStartUtc`.
+    windowResetAt: z.string().datetime(),
     ...sharedThresholds,
   })
   .strict();
