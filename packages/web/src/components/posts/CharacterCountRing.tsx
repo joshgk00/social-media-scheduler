@@ -1,13 +1,25 @@
-import { getCharacterCount } from '../../lib/twitter-text';
+import {
+  getPlatformCharCount,
+  PLATFORM_COMPOSER_CHAR_LIMIT,
+  type PlatformComposerKey,
+} from '@sms/shared';
 import { cn } from '../../lib/utils';
 
 interface CharacterCountRingProps {
   text: string;
+  platform: PlatformComposerKey;
   size?: 'sm' | 'lg';
 }
 
-export function CharacterCountRing({ text, size = 'lg' }: CharacterCountRingProps) {
-  const { permillage, remaining } = getCharacterCount(text);
+export function CharacterCountRing({
+  text,
+  platform,
+  size = 'lg',
+}: CharacterCountRingProps) {
+  const limit = PLATFORM_COMPOSER_CHAR_LIMIT[platform];
+  const { count, exceedsCap } = getPlatformCharCount(text, platform);
+  const remaining = limit - count;
+  const permillage = limit > 0 ? Math.round((count / limit) * 1000) : 0;
 
   const radius = size === 'sm' ? 10 : 14;
   const circumference = 2 * Math.PI * radius;
@@ -18,8 +30,11 @@ export function CharacterCountRing({ text, size = 'lg' }: CharacterCountRingProp
   const center = diameter / 2;
   const strokeWidth = 2;
 
-  const isOverLimit = remaining < 0;
-  const isWarning = permillage > 928 && permillage <= 1000;
+  const isOverLimit = exceedsCap || remaining < 0;
+  const isWarning = !isOverLimit && permillage > 928;
+  // Show the number once the user is within 20 chars of the limit, in either
+  // direction. For high-cap platforms (FB 63k) the trailing number is only
+  // useful near the boundary.
   const showCount = remaining <= 20;
 
   const progressColor = isOverLimit
@@ -37,6 +52,8 @@ export function CharacterCountRing({ text, size = 'lg' }: CharacterCountRingProp
       className="relative inline-flex items-center justify-center"
       role="status"
       aria-label={ariaLabel}
+      data-platform={platform}
+      data-over-limit={isOverLimit ? 'true' : 'false'}
     >
       <svg
         width={diameter}

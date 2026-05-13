@@ -81,7 +81,7 @@ export function TwitterPostFields({
               disabled={disabled}
             />
             <div className="absolute bottom-2 right-2">
-              <CharacterCountRing text={text} />
+              <CharacterCountRing text={text} platform="twitter" />
             </div>
           </div>
         </div>

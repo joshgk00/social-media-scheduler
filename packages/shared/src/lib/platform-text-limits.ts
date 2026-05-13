@@ -21,6 +21,27 @@ export const PLATFORM_TEXT_LIMITS = {
 export type PlatformTextLimitKey = keyof typeof PLATFORM_TEXT_LIMITS;
 
 /**
+ * Per-platform character cap surfaced by the post-composer counter UI.
+ *
+ * Twitter here is the per-tweet 280 limit — distinct from
+ * `PLATFORM_TEXT_LIMITS.twitter` (25,000) which is the thread-combined max.
+ * LinkedIn/Facebook match the platform text limits because those platforms
+ * have a single per-post cap. Use this for any per-post counter, ring, or
+ * over-limit styling in the composer.
+ */
+export const PLATFORM_COMPOSER_CHAR_LIMIT = {
+  twitter: 280,
+  linkedin: PLATFORM_TEXT_LIMITS.linkedin,
+  facebook: PLATFORM_TEXT_LIMITS.facebook,
+} as const;
+
+export type PlatformComposerKey = keyof typeof PLATFORM_COMPOSER_CHAR_LIMIT;
+
+export function getComposerCharLimit(platform: PlatformComposerKey): number {
+  return PLATFORM_COMPOSER_CHAR_LIMIT[platform];
+}
+
+/**
  * Counts Unicode code points using the spread iterator.
  *
  * The spread iterator walks the string by code point, so astral-plane

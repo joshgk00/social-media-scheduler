@@ -94,7 +94,7 @@ export function ThreadCard({
           aria-label={`Tweet ${index + 1} text`}
         />
         <div className="flex items-center justify-between mt-2">
-          <CharacterCountRing text={text} size="sm" />
+          <CharacterCountRing text={text} platform="twitter" size="sm" />
           {total > 1 && (
             <Button
               variant="ghost"

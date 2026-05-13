@@ -3,7 +3,12 @@
 // drives these GREEN by shipping the module.
 
 import { describe, it, expect } from 'vitest';
-import { countCodePoints, PLATFORM_TEXT_LIMITS } from '../lib/platform-text-limits.js';
+import {
+  countCodePoints,
+  PLATFORM_TEXT_LIMITS,
+  PLATFORM_COMPOSER_CHAR_LIMIT,
+  getComposerCharLimit,
+} from '../lib/platform-text-limits.js';
 
 describe('countCodePoints', () => {
   it('counts ASCII characters by code point', () => {
@@ -35,5 +40,41 @@ describe('PLATFORM_TEXT_LIMITS', () => {
 
   it('exports twitter = 25000', () => {
     expect(PLATFORM_TEXT_LIMITS.twitter).toBe(25000);
+  });
+});
+
+describe('PLATFORM_COMPOSER_CHAR_LIMIT (issue #33)', () => {
+  it('twitter composer counter caps at 280 (per-tweet, distinct from the thread combined max)', () => {
+    expect(PLATFORM_COMPOSER_CHAR_LIMIT.twitter).toBe(280);
+  });
+
+  it('linkedin composer counter caps at 3000', () => {
+    expect(PLATFORM_COMPOSER_CHAR_LIMIT.linkedin).toBe(3000);
+  });
+
+  it('facebook composer counter caps at 63206', () => {
+    expect(PLATFORM_COMPOSER_CHAR_LIMIT.facebook).toBe(63206);
+  });
+
+  it('linkedin composer limit tracks PLATFORM_TEXT_LIMITS.linkedin', () => {
+    expect(PLATFORM_COMPOSER_CHAR_LIMIT.linkedin).toBe(PLATFORM_TEXT_LIMITS.linkedin);
+  });
+
+  it('facebook composer limit tracks PLATFORM_TEXT_LIMITS.facebook', () => {
+    expect(PLATFORM_COMPOSER_CHAR_LIMIT.facebook).toBe(PLATFORM_TEXT_LIMITS.facebook);
+  });
+});
+
+describe('getComposerCharLimit', () => {
+  it('returns 280 for twitter', () => {
+    expect(getComposerCharLimit('twitter')).toBe(280);
+  });
+
+  it('returns 3000 for linkedin', () => {
+    expect(getComposerCharLimit('linkedin')).toBe(3000);
+  });
+
+  it('returns 63206 for facebook', () => {
+    expect(getComposerCharLimit('facebook')).toBe(63206);
   });
 });

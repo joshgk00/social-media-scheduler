@@ -1,4 +1,6 @@
 import twitterText from 'twitter-text';
+import { PLATFORM_COMPOSER_CHAR_LIMIT } from '@sms/shared';
+
 const { parseTweet } = twitterText;
 
 export interface CharacterCountResult {
@@ -18,6 +20,6 @@ export function getCharacterCount(text: string): CharacterCountResult {
     weightedLength: result.weightedLength,
     valid: result.valid,
     permillage: result.permillage,
-    remaining: 280 - result.weightedLength,
+    remaining: PLATFORM_COMPOSER_CHAR_LIMIT.twitter - result.weightedLength,
   };
 }
