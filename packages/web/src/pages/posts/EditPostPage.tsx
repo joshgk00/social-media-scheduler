@@ -560,7 +560,7 @@ export default function EditPostPage() {
                     rows={5}
                   />
                   <div className="absolute bottom-2 right-2">
-                    <CharacterCountRing text={formState.text} />
+                    <CharacterCountRing text={formState.text} platform="linkedin" />
                   </div>
                 </div>
               </div>
@@ -591,7 +591,7 @@ export default function EditPostPage() {
                     rows={5}
                   />
                   <div className="absolute bottom-2 right-2">
-                    <CharacterCountRing text={formState.text} />
+                    <CharacterCountRing text={formState.text} platform="facebook" />
                   </div>
                 </div>
               </div>
