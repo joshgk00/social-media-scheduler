@@ -79,7 +79,10 @@ async function buildRateLimitState(
       warnThresholdHit: state.warnThresholdHit,
       blockThresholdHit: state.blockThresholdHit,
       windowStartUtc: state.monthStartUtc.toISOString(),
-      windowResetAt: state.monthStartUtc.toISOString(),
+      // Issue #35: windowResetAt is the start of NEXT month, not the start of
+      // the current window. monthStartUtc is always in the past (or "now"),
+      // so using it as the reset date renders a stale "Resets <past date>".
+      windowResetAt: state.monthResetAtUtc.toISOString(),
       monthStartUtc: state.monthStartUtc.toISOString(),
     };
   }

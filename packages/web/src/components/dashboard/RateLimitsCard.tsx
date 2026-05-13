@@ -188,20 +188,15 @@ export function RateLimitsCard() {
               const percent =
                 limit > 0 ? Math.round((row.currentCount / limit) * 100) : 0;
               const band = resolveBand(percent);
-              const reset =
-                row.platform === 'twitter'
-                  ? {
-                      relative: '',
-                      absolute: row.monthStartUtc
-                        ? new Date(row.monthStartUtc).toLocaleDateString(
-                            undefined,
-                            { month: 'short', day: 'numeric' },
-                          )
-                        : '1st of next month',
-                    }
-                  : row.windowResetAt
-                  ? formatResetTime(row.windowResetAt, row.platform)
-                  : { relative: '', absolute: '' };
+              // Issue #35: every platform (including Twitter) must display
+              // the FUTURE reset boundary. Previously the Twitter row read
+              // `monthStartUtc` (start of the current window — always in the
+              // past) and rendered a stale "Resets Mar 31". Route the Twitter
+              // row through `formatResetTime` on `windowResetAt` (= start of
+              // next UTC month) like the other platforms.
+              const reset = row.windowResetAt
+                ? formatResetTime(row.windowResetAt, row.platform)
+                : { relative: '', absolute: '' };
 
               const profileLabel = row.handle ?? row.profileId.slice(0, 8);
 

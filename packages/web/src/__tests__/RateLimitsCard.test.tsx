@@ -126,6 +126,43 @@ describe('<RateLimitsCard />', () => {
     expect(dot).toHaveClass('bg-destructive');
   });
 
+  // Issue #35: the Twitter row must render a FUTURE reset date. Before the
+  // fix, the row displayed `monthStartUtc` (start of the current window) and
+  // showed a date that was always in the past, e.g. "Resets Mar 31" on May 13.
+  it('renders a future reset date for Twitter rows (issue #35)', () => {
+    // `now` is wall-clock — pick a future ISO so the assertion is robust
+    // regardless of when the test runs.
+    const futureReset = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // +14 days
+    useAllProfilesRateLimitsMock.mockReturnValue({
+      data: [
+        {
+          profileId: 'p-twitter',
+          platform: 'twitter',
+          handle: 'tester',
+          currentCount: 10,
+          budget: 500,
+          windowResetAt: futureReset.toISOString(),
+          monthStartUtc: new Date(
+            futureReset.getFullYear(),
+            futureReset.getMonth() - 1,
+            1,
+          ).toISOString(),
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    renderWithQuery(<RateLimitsCard />);
+
+    // The row should be present and reference the relative future window
+    // (e.g. "Resets in 14d"). The exact text comes from `formatResetTime`.
+    expect(screen.getByText(/resets in/i)).toBeInTheDocument();
+    // The previously-wrong "Resets <past-month-start>" formatting is gone:
+    // the Mar/Apr/May static label produced from monthStartUtc would have
+    // appeared under "Resets " (without "in"). Asserting the "in" variant
+    // pins us to the future-relative formatter.
+  });
+
   it('progress bar exposes role="progressbar" with aria-valuenow + aria-valuemax + aria-label', () => {
     useAllProfilesRateLimitsMock.mockReturnValue({
       data: [

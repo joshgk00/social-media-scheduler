@@ -120,6 +120,96 @@ describe('rate-limit service', () => {
         /Profile missing-profile not found/,
       );
     });
+
+    // Issue #35 regression coverage. The Twitter monthly window is a UTC
+    // calendar month; the reset date is the start of the NEXT calendar month
+    // and must always be strictly in the future relative to `now`.
+    describe('monthResetAtUtc (issue #35)', () => {
+      it('mid-month: returns the start of the next month', async () => {
+        const db = createMockDb({
+          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
+          countRows: [{ publishedCount: 0 }],
+        });
+        const now = new Date('2026-05-13T12:00:00Z');
+
+        const snapshot = await loadTwitterUsage(db, 'profile-uuid', now);
+
+        expect(snapshot.monthStartUtc).toEqual(new Date('2026-05-01T00:00:00Z'));
+        expect(snapshot.monthResetAtUtc).toEqual(
+          new Date('2026-06-01T00:00:00Z'),
+        );
+        expect(snapshot.monthResetAtUtc.getTime()).toBeGreaterThan(now.getTime());
+      });
+
+      it('last day of month: returns the first of the following month', async () => {
+        const db = createMockDb({
+          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
+          countRows: [{ publishedCount: 0 }],
+        });
+        // 23:59:59 on the last day of March — last possible moment of the
+        // March window. Reset must still be the start of April, not March.
+        const now = new Date('2026-03-31T23:59:59Z');
+
+        const snapshot = await loadTwitterUsage(db, 'profile-uuid', now);
+
+        expect(snapshot.monthStartUtc).toEqual(new Date('2026-03-01T00:00:00Z'));
+        expect(snapshot.monthResetAtUtc).toEqual(
+          new Date('2026-04-01T00:00:00Z'),
+        );
+        expect(snapshot.monthResetAtUtc.getTime()).toBeGreaterThan(now.getTime());
+      });
+
+      it('just past a prior month boundary: reset is current month\'s end, not the boundary that just passed', async () => {
+        const db = createMockDb({
+          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
+          countRows: [{ publishedCount: 0 }],
+        });
+        // One second after the May boundary. Reset must roll forward to
+        // June — the prior boundary (May 1) is already in the past and must
+        // never be reported as the next reset.
+        const now = new Date('2026-05-01T00:00:01Z');
+
+        const snapshot = await loadTwitterUsage(db, 'profile-uuid', now);
+
+        expect(snapshot.monthStartUtc).toEqual(new Date('2026-05-01T00:00:00Z'));
+        expect(snapshot.monthResetAtUtc).toEqual(
+          new Date('2026-06-01T00:00:00Z'),
+        );
+        expect(snapshot.monthResetAtUtc.getTime()).toBeGreaterThan(now.getTime());
+      });
+
+      it('rolls over December → January of next year', async () => {
+        const db = createMockDb({
+          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
+          countRows: [{ publishedCount: 0 }],
+        });
+        const now = new Date('2026-12-15T08:00:00Z');
+
+        const snapshot = await loadTwitterUsage(db, 'profile-uuid', now);
+
+        expect(snapshot.monthStartUtc).toEqual(new Date('2026-12-01T00:00:00Z'));
+        expect(snapshot.monthResetAtUtc).toEqual(
+          new Date('2027-01-01T00:00:00Z'),
+        );
+      });
+
+      it('propagates monthResetAtUtc through checkTwitterBudgetWithDb', async () => {
+        const db = createMockDb({
+          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
+          countRows: [{ publishedCount: 10 }],
+        });
+        const now = new Date('2026-05-13T12:00:00Z');
+
+        const result = await checkTwitterBudgetWithDb(db, {
+          profileId: 'profile-uuid',
+          additionalPostCount: 1,
+          now,
+        });
+
+        expect(result.monthResetAtUtc).toEqual(new Date('2026-06-01T00:00:00Z'));
+        expect(result.monthResetAtUtc.getTime()).toBeGreaterThan(now.getTime());
+      });
+    });
   });
 
   describe('checkTwitterBudgetWithDb', () => {
