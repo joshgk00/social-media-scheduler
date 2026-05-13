@@ -188,12 +188,7 @@ export function RateLimitsCard() {
               const percent =
                 limit > 0 ? Math.round((row.currentCount / limit) * 100) : 0;
               const band = resolveBand(percent);
-              // Issue #35: every platform (including Twitter) must display
-              // the FUTURE reset boundary. Previously the Twitter row read
-              // `monthStartUtc` (start of the current window — always in the
-              // past) and rendered a stale "Resets Mar 31". Route the Twitter
-              // row through `formatResetTime` on `windowResetAt` (= start of
-              // next UTC month) like the other platforms.
+              // fix #35 — Twitter's windowResetAt is the future month boundary; no platform branch needed.
               const reset = row.windowResetAt
                 ? formatResetTime(row.windowResetAt, row.platform)
                 : { relative: '', absolute: '' };

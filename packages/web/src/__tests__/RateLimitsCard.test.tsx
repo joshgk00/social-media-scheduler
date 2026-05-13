@@ -4,7 +4,7 @@
 // deterministic.
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RateLimitsCard } from '../components/dashboard/RateLimitsCard';
@@ -127,40 +127,44 @@ describe('<RateLimitsCard />', () => {
   });
 
   // Issue #35: the Twitter row must render a FUTURE reset date. Before the
-  // fix, the row displayed `monthStartUtc` (start of the current window) and
-  // showed a date that was always in the past, e.g. "Resets Mar 31" on May 13.
-  it('renders a future reset date for Twitter rows (issue #35)', () => {
-    // `now` is wall-clock — pick a future ISO so the assertion is robust
-    // regardless of when the test runs.
-    const futureReset = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // +14 days
-    useAllProfilesRateLimitsMock.mockReturnValue({
-      data: [
-        {
-          profileId: 'p-twitter',
-          platform: 'twitter',
-          handle: 'tester',
-          currentCount: 10,
-          budget: 500,
-          windowResetAt: futureReset.toISOString(),
-          monthStartUtc: new Date(
-            futureReset.getFullYear(),
-            futureReset.getMonth() - 1,
-            1,
-          ).toISOString(),
-        },
-      ],
-      isLoading: false,
-      isError: false,
+  // fix the row displayed `monthStartUtc` and showed a past date like
+  // "Resets Mar 31" on May 13. Pin the clock so the relative-time assertion
+  // is deterministic and so we can also assert the buggy past-date label
+  // is gone.
+  describe('Twitter reset date (issue #35)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-13T12:00:00Z'));
     });
-    renderWithQuery(<RateLimitsCard />);
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
-    // The row should be present and reference the relative future window
-    // (e.g. "Resets in 14d"). The exact text comes from `formatResetTime`.
-    expect(screen.getByText(/resets in/i)).toBeInTheDocument();
-    // The previously-wrong "Resets <past-month-start>" formatting is gone:
-    // the Mar/Apr/May static label produced from monthStartUtc would have
-    // appeared under "Resets " (without "in"). Asserting the "in" variant
-    // pins us to the future-relative formatter.
+    it('renders the relative future reset and not the past month-start', () => {
+      useAllProfilesRateLimitsMock.mockReturnValue({
+        data: [
+          {
+            profileId: 'p-twitter',
+            platform: 'twitter',
+            handle: 'tester',
+            currentCount: 10,
+            budget: 500,
+            // Start of next UTC month relative to pinned now (= 18d ahead).
+            windowResetAt: '2026-06-01T00:00:00.000Z',
+            monthStartUtc: '2026-05-01T00:00:00.000Z',
+          },
+        ],
+        isLoading: false,
+        isError: false,
+      });
+      renderWithQuery(<RateLimitsCard />);
+
+      // Positive: deterministic relative copy from formatResetTime.
+      expect(screen.getByText(/Resets in 18d/)).toBeInTheDocument();
+      // Negative: the buggy "Resets May 1" label (monthStartUtc-as-reset)
+      // must not render. Anchors the assertion to the actual bug shape.
+      expect(screen.queryByText(/Resets May 1\b/)).not.toBeInTheDocument();
+    });
   });
 
   it('progress bar exposes role="progressbar" with aria-valuenow + aria-valuemax + aria-label', () => {

@@ -81,6 +81,17 @@ function createMockDb(options: MockDbOptions) {
   };
 }
 
+// Issue-#35 helper: zero-usage Twitter profile with the default 500/80 caps.
+// Most monthResetAtUtc tests don't care about the post count — they only
+// assert calendar math — so this trims four otherwise-identical stub setups
+// to one line each.
+function createEmptyTwitterDb() {
+  return createMockDb({
+    profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
+    countRows: [{ publishedCount: 0 }],
+  });
+}
+
 describe('rate-limit service', () => {
   // Pin clock to 2026-04-15 12:00 UTC so every test sees the same month boundary
   // (2026-04-01 00:00 UTC).
@@ -126,10 +137,7 @@ describe('rate-limit service', () => {
     // and must always be strictly in the future relative to `now`.
     describe('monthResetAtUtc (issue #35)', () => {
       it('mid-month: returns the start of the next month', async () => {
-        const db = createMockDb({
-          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
-          countRows: [{ publishedCount: 0 }],
-        });
+        const db = createEmptyTwitterDb();
         const now = new Date('2026-05-13T12:00:00Z');
 
         const snapshot = await loadTwitterUsage(db, 'profile-uuid', now);
@@ -142,10 +150,7 @@ describe('rate-limit service', () => {
       });
 
       it('last day of month: returns the first of the following month', async () => {
-        const db = createMockDb({
-          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
-          countRows: [{ publishedCount: 0 }],
-        });
+        const db = createEmptyTwitterDb();
         // 23:59:59 on the last day of March — last possible moment of the
         // March window. Reset must still be the start of April, not March.
         const now = new Date('2026-03-31T23:59:59Z');
@@ -160,10 +165,7 @@ describe('rate-limit service', () => {
       });
 
       it('just past a prior month boundary: reset is current month\'s end, not the boundary that just passed', async () => {
-        const db = createMockDb({
-          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
-          countRows: [{ publishedCount: 0 }],
-        });
+        const db = createEmptyTwitterDb();
         // One second after the May boundary. Reset must roll forward to
         // June — the prior boundary (May 1) is already in the past and must
         // never be reported as the next reset.
@@ -179,10 +181,7 @@ describe('rate-limit service', () => {
       });
 
       it('rolls over December → January of next year', async () => {
-        const db = createMockDb({
-          profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
-          countRows: [{ publishedCount: 0 }],
-        });
+        const db = createEmptyTwitterDb();
         const now = new Date('2026-12-15T08:00:00Z');
 
         const snapshot = await loadTwitterUsage(db, 'profile-uuid', now);
@@ -337,6 +336,26 @@ describe('rate-limit service', () => {
       expect(result.projectedCount).toBe(510);
       expect(result.remainingBudget).toBe(40);
       expect(result.monthStartUtc).toEqual(new Date('2026-04-01T00:00:00Z'));
+    });
+
+    it('propagates monthResetAtUtc through checkBulkBudgetWithDb (issue #35)', async () => {
+      // Mirror of the equivalent checkTwitterBudgetWithDb propagation test —
+      // the bulk-upload path is the LIMIT-05 surface and uses the same
+      // monthResetAtUtc field for the "won't fit, retry after <date>" copy.
+      const db = createMockDb({
+        profileRows: [{ monthlyBudget: 500, warnThresholdPercent: 80 }],
+        countRows: [{ publishedCount: 100 }],
+      });
+      const now = new Date('2026-05-13T12:00:00Z');
+
+      const result = await checkBulkBudgetWithDb(db, {
+        profileId: 'profile-uuid',
+        additionalCount: 10,
+        now,
+      });
+
+      expect(result.monthResetAtUtc).toEqual(new Date('2026-06-01T00:00:00Z'));
+      expect(result.monthResetAtUtc.getTime()).toBeGreaterThan(now.getTime());
     });
 
     it('allows a bulk batch that fits exactly inside the remaining budget', async () => {

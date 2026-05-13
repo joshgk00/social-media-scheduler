@@ -62,8 +62,11 @@ export async function loadTwitterUsage(
     now === undefined
       ? DateTime.utc()
       : DateTime.fromJSDate(now, { zone: 'utc' });
-  const monthStartUtc = nowUtc.startOf('month').toJSDate();
-  const monthResetAtUtc = nowUtc.startOf('month').plus({ months: 1 }).toJSDate();
+  // Anchor both boundaries to the same instant so reset is guaranteed to be
+  // exactly one month after start (invariant the issue-#35 tests assert).
+  const monthStart = nowUtc.startOf('month');
+  const monthStartUtc = monthStart.toJSDate();
+  const monthResetAtUtc = monthStart.plus({ months: 1 }).toJSDate();
 
   const [profileRow] = await db
     .select({
@@ -420,6 +423,7 @@ export async function checkPlatformBudgetWithDb(
     const result = await checkTwitterBudgetWithDb(db, {
       profileId: args.profileId,
       additionalPostCount: args.additionalCount,
+      now: args.now, // parity with the linkedin/facebook branches below
     });
     return {
       blockThresholdHit: result.wouldExceed,
