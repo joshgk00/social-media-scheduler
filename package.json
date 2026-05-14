@@ -7,6 +7,7 @@
     "build": "pnpm -r build",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "typecheck": "pnpm -r typecheck",
     "pretest": "pnpm -r build",
     "test": "pnpm -r test -- --run",
     "db:generate": "pnpm --filter @sms/db exec drizzle-kit generate",

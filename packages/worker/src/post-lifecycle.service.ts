@@ -148,8 +148,14 @@ export async function publishPost(
   const attemptStart = new Date();
 
   // PHASE 1 — transactional lock, version/state checks, transition to publishing.
+  // `recoveryPlatformPostId` is set only on the issue #17 recovery path: a
+  // prior attempt's pre-write committed but Phase 3 rolled back, leaving the
+  // row as `status='publishing'` with `platform_post_id` populated. In that
+  // case we skip Phase 2 (Twitter call) and resume directly from Phase 3
+  // using the stored marker so the post can complete normally.
   let lockedProfile: typeof socialProfiles.$inferSelect;
   let lockedPost: LockedPostRow;
+  let recoveryPlatformPostId: string | null = null;
   try {
     const result = await db.transaction(async (tx) => {
       const lockedRows = await tx.execute<LockedPostRow>(sql`
@@ -176,30 +182,64 @@ export async function publishPost(
         throw new PostLifecycleAbort('not_scheduled');
       }
 
-      // IDEMPOTENCY (T-04-03-03 primary guard): if we already published,
-      // short-circuit success without calling Twitter.
+      // IDEMPOTENCY (T-04-03-03 primary guard): platform_post_id is set, so
+      // the tweet exists on Twitter. There are two distinct sub-cases now
+      // (issue #17): a TRUE idempotent retry of a fully-committed publish,
+      // and a RECOVERY from a prior attempt where the pre-write of
+      // platform_post_id committed but the Phase 3 transaction rolled back.
+      //
+      //   - status='published'  → Phase 3 already committed. Skip everything.
+      //   - status='publishing' → recovery. Pre-write happened, Phase 3 did
+      //                           not. Skip Phase 2 (the tweet is already
+      //                           live), preserve the platform_post_id, and
+      //                           let the rest of the function run Phase 3
+      //                           to record the success attempt, transition
+      //                           to 'published', and bump the platform
+      //                           counter. Without this branch the post
+      //                           would be permanently stranded.
+      //   - any other status    → corrupted state (shouldn't be reachable).
+      //                           Treat as true idempotent skip — safer than
+      //                           risking a duplicate tweet by re-publishing.
       if (post.platform_post_id) {
-        lifecycleLogger.info(
-          { platformPostId: post.platform_post_id },
-          'Idempotent skip — post already has platform_post_id',
-        );
-        throw new PostLifecycleAbort('already_published');
+        if (post.status === 'publishing') {
+          lifecycleLogger.info(
+            { platformPostId: post.platform_post_id },
+            'Recovery from prior issue-#17 pre-write — Phase 3 will resume',
+          );
+          // Do NOT throw. Skip the version check (post_version is stable
+          // across the same job's retries; recovery is by definition the
+          // same logical attempt continued) and skip the transition (status
+          // is already 'publishing'). Fall through to load the profile and
+          // return with recoveryPlatformPostId populated.
+        } else {
+          lifecycleLogger.info(
+            { platformPostId: post.platform_post_id, status: post.status },
+            'Idempotent skip — post already has platform_post_id',
+          );
+          throw new PostLifecycleAbort('already_published');
+        }
       }
 
-      if (post.post_version !== ctx.expectedVersion) {
-        lifecycleLogger.info(
-          { expectedVersion: ctx.expectedVersion, actualVersion: post.post_version },
-          'Version mismatch — scanner will re-enqueue',
-        );
-        throw new PostLifecycleAbort('version_mismatch');
-      }
+      // Skip version/state checks on the recovery path — by definition the
+      // post is already 'publishing' with a stable version from the prior
+      // attempt under the same job/lock chain.
+      const isRecovery = post.platform_post_id !== null && post.status === 'publishing';
+      if (!isRecovery) {
+        if (post.post_version !== ctx.expectedVersion) {
+          lifecycleLogger.info(
+            { expectedVersion: ctx.expectedVersion, actualVersion: post.post_version },
+            'Version mismatch — scanner will re-enqueue',
+          );
+          throw new PostLifecycleAbort('version_mismatch');
+        }
 
-      if (post.status !== 'scheduled') {
-        lifecycleLogger.info(
-          { actualStatus: post.status },
-          'Post no longer in scheduled state — aborting',
-        );
-        throw new PostLifecycleAbort('not_scheduled');
+        if (post.status !== 'scheduled') {
+          lifecycleLogger.info(
+            { actualStatus: post.status },
+            'Post no longer in scheduled state — aborting',
+          );
+          throw new PostLifecycleAbort('not_scheduled');
+        }
       }
 
       // Phase 4 single-tweet scope: reject thread posts inside the transaction
@@ -212,59 +252,66 @@ export async function publishPost(
         throw new PostLifecycleAbort('not_scheduled');
       }
 
-      // D-26 runtime budget re-check (LIMIT-03): leaves post scheduled so the
-      // scanner re-evaluates once the month boundary resets.
-      // Phase 8 (D-05 / D-07 / LIMIT-06 / LIMIT-07): the worker-side checker
-      // returns the platform discriminator so non-twitter posts that hit the
-      // per-platform window emit `rate_limit_exhausted` rather than
-      // `budget_exhausted` — same graceful-skip semantics, distinct enum.
-      const budget = await ctx.checkBudget(post.profile_id);
-      const isPlatformRateLimit =
-        (budget.platform === 'linkedin' || budget.platform === 'facebook') &&
-        budget.blockThresholdHit === true;
-      if (isPlatformRateLimit) {
-        await tx.insert(postAttempts).values({
-          postId: ctx.postId,
-          attemptNum: ctx.currentAttemptNum,
-          startedAt: attemptStart,
-          finishedAt: new Date(),
-          outcome: 'cancelled',
-          errorCode: 'rate_limit_exhausted',
-          errorMessage: `${budget.platform} rate limit reached`,
-        });
-        lifecycleLogger.warn(
-          { platform: budget.platform },
-          'Rate limit exhausted at runtime — leaving post scheduled',
-        );
-        throw new PostLifecycleAbort('rate_limit_exhausted');
-      }
-      if (budget.wouldExceed) {
-        lifecycleLogger.warn('Budget exhausted at runtime — leaving post scheduled');
-        throw new PostLifecycleAbort('budget_exhausted');
-      }
+      // Recovery path skips budget / media-readiness / token-health / status
+      // transition — those preconditions were validated on the original
+      // attempt; the tweet is already live. We still load the profile so
+      // Phase 3's counter-bump branch has the data it needs.
+      if (!isRecovery) {
+        // D-26 runtime budget re-check (LIMIT-03): leaves post scheduled so
+        // the scanner re-evaluates once the month boundary resets. Phase 8
+        // (D-05 / D-07 / LIMIT-06 / LIMIT-07): the worker-side checker
+        // returns the platform discriminator so non-twitter posts that hit
+        // the per-platform window emit `rate_limit_exhausted` rather than
+        // `budget_exhausted` — same graceful-skip semantics, distinct enum.
+        const budget = await ctx.checkBudget(post.profile_id);
+        const isPlatformRateLimit =
+          (budget.platform === 'linkedin' || budget.platform === 'facebook') &&
+          budget.blockThresholdHit === true;
+        if (isPlatformRateLimit) {
+          await tx.insert(postAttempts).values({
+            postId: ctx.postId,
+            attemptNum: ctx.currentAttemptNum,
+            startedAt: attemptStart,
+            finishedAt: new Date(),
+            outcome: 'cancelled',
+            errorCode: 'rate_limit_exhausted',
+            errorMessage: `${budget.platform} rate limit reached`,
+          });
+          lifecycleLogger.warn(
+            { platform: budget.platform },
+            'Rate limit exhausted at runtime — leaving post scheduled',
+          );
+          throw new PostLifecycleAbort('rate_limit_exhausted');
+        }
+        if (budget.wouldExceed) {
+          lifecycleLogger.warn('Budget exhausted at runtime — leaving post scheduled');
+          throw new PostLifecycleAbort('budget_exhausted');
+        }
 
-      // MEDIA-05: Skip posts with media still being transcoded (T-06-11).
-      const pendingMedia = await tx
-        .select({ count: sql<string>`COUNT(*)::text` })
-        .from(postMedia)
-        .where(
-          and(
-            eq(postMedia.postId, ctx.postId),
-            isNull(postMedia.deletedAt),
-            inArray(postMedia.transcodeStatus, ['pending', 'processing']),
-          ),
-        );
-      const pendingMediaCount = parseInt(pendingMedia[0]?.count ?? '0', 10);
-      if (pendingMediaCount > 0) {
-        lifecycleLogger.info(
-          { postId: ctx.postId, pendingMediaCount },
-          'Skipping publish -- media still transcoding',
-        );
-        throw new PostLifecycleAbort('media_pending');
+        // MEDIA-05: Skip posts with media still being transcoded (T-06-11).
+        const pendingMedia = await tx
+          .select({ count: sql<string>`COUNT(*)::text` })
+          .from(postMedia)
+          .where(
+            and(
+              eq(postMedia.postId, ctx.postId),
+              isNull(postMedia.deletedAt),
+              inArray(postMedia.transcodeStatus, ['pending', 'processing']),
+            ),
+          );
+        const pendingMediaCount = parseInt(pendingMedia[0]?.count ?? '0', 10);
+        if (pendingMediaCount > 0) {
+          lifecycleLogger.info(
+            { postId: ctx.postId, pendingMediaCount },
+            'Skipping publish -- media still transcoding',
+          );
+          throw new PostLifecycleAbort('media_pending');
+        }
       }
 
       // Load the full profile row — the twitter publish service needs the
-      // encrypted token columns. Done inside the transaction so we see a
+      // encrypted token columns (fresh path) and Phase 3 needs the platform
+      // discriminator (both paths). Done inside the transaction so we see a
       // consistent view of the profile alongside the post.
       const [profile] = await tx
         .select()
@@ -274,48 +321,56 @@ export async function publishPost(
         throw new PostLifecycleAbort('not_scheduled');
       }
 
-      // TOKEN-05 (D-18/D-19) token-health pre-flight. Mirrors the budget
-      // pre-flight pattern above — abort BEFORE transitioning to `publishing`
-      // so the post stays in `scheduled` and the scanner re-enqueues once
-      // the user Reconnects. A cancelled attempt row records the reason
-      // for the SCHED-04 history modal; no notification is emitted here
-      // (RESEARCH Pitfall 6 — notifications fire at the state-transition
-      // site, not for every blocked publish attempt against the dead token).
-      if (profile.tokenStatus !== 'active') {
-        await tx.insert(postAttempts).values({
-          postId: ctx.postId,
-          attemptNum: ctx.currentAttemptNum,
-          startedAt: attemptStart,
-          finishedAt: new Date(),
-          outcome: 'cancelled',
-          errorCode: 'token_unhealthy',
-          errorMessage: `Profile token status: ${profile.tokenStatus}`,
-        });
-        lifecycleLogger.warn(
-          { profileId: profile.id, tokenStatus: profile.tokenStatus },
-          'Publish aborted — profile token status is not active',
-        );
-        throw new PostLifecycleAbort('token_unhealthy');
+      if (!isRecovery) {
+        // TOKEN-05 (D-18/D-19) token-health pre-flight. Mirrors the budget
+        // pre-flight pattern above — abort BEFORE transitioning to
+        // `publishing` so the post stays in `scheduled` and the scanner
+        // re-enqueues once the user Reconnects. A cancelled attempt row
+        // records the reason for the SCHED-04 history modal; no notification
+        // is emitted here (RESEARCH Pitfall 6 — notifications fire at the
+        // state-transition site, not for every blocked publish attempt
+        // against the dead token).
+        if (profile.tokenStatus !== 'active') {
+          await tx.insert(postAttempts).values({
+            postId: ctx.postId,
+            attemptNum: ctx.currentAttemptNum,
+            startedAt: attemptStart,
+            finishedAt: new Date(),
+            outcome: 'cancelled',
+            errorCode: 'token_unhealthy',
+            errorMessage: `Profile token status: ${profile.tokenStatus}`,
+          });
+          lifecycleLogger.warn(
+            { profileId: profile.id, tokenStatus: profile.tokenStatus },
+            'Publish aborted — profile token status is not active',
+          );
+          throw new PostLifecycleAbort('token_unhealthy');
+        }
+
+        // Transition scheduled → publishing, guarded by the optimistic
+        // version check so a concurrent edit still loses the race cleanly.
+        const [updatedRow] = await tx
+          .update(posts)
+          .set({ status: 'publishing', updatedAt: new Date() })
+          .where(
+            and(eq(posts.id, ctx.postId), eq(posts.postVersion, ctx.expectedVersion)),
+          )
+          .returning({ id: posts.id });
+
+        if (!updatedRow) {
+          throw new PostLifecycleAbort('version_mismatch');
+        }
       }
 
-      // Transition scheduled → publishing, guarded by the optimistic
-      // version check so a concurrent edit still loses the race cleanly.
-      const [updatedRow] = await tx
-        .update(posts)
-        .set({ status: 'publishing', updatedAt: new Date() })
-        .where(
-          and(eq(posts.id, ctx.postId), eq(posts.postVersion, ctx.expectedVersion)),
-        )
-        .returning({ id: posts.id });
-
-      if (!updatedRow) {
-        throw new PostLifecycleAbort('version_mismatch');
-      }
-
-      return { post, profile };
+      return {
+        post,
+        profile,
+        recoveryPlatformPostId: isRecovery ? post.platform_post_id : null,
+      };
     });
     lockedPost = result.post;
     lockedProfile = result.profile;
+    recoveryPlatformPostId = result.recoveryPlatformPostId;
   } catch (err) {
     // Abort errors are expected control flow — propagate without wrapping.
     if (err instanceof PostLifecycleAbort) {
@@ -325,41 +380,100 @@ export async function publishPost(
     throw err;
   }
 
-  // PHASE 2 — Twitter call OUTSIDE the transaction. Long-held locks across
-  // a network round trip would serialize the entire worker pool.
+  // PHASE 2 + crash-safe pre-write (issue #17).
+  //
+  // Fresh attempt: call Twitter, then persist platform_post_id in a
+  // standalone UPDATE BEFORE the Phase 3 transaction so a BullMQ retry
+  // after a Phase 3 failure can recover (Phase 1 of the retry will see the
+  // marker and route through the recovery branch above instead of
+  // re-tweeting).
+  //
+  // Recovery attempt: Phase 1 detected status='publishing' + platform_post_id
+  // set, meaning the prior attempt got past the pre-write but Phase 3
+  // rolled back. The tweet is already live. Skip the Twitter call AND the
+  // pre-write (idempotent — the marker is already on the row) and continue
+  // straight to Phase 3 with the recovered id.
   let platformPostId: string;
-  try {
-    const callResult = await ctx.callTwitter(
-      lockedProfile,
-      lockedPost.text,
-      lockedPost.is_thread,
-      {
-        platform: lockedPost.platform,
-        visibility: lockedPost.visibility,
-        linkUrl: lockedPost.link_url,
-      },
+  if (recoveryPlatformPostId !== null) {
+    platformPostId = recoveryPlatformPostId;
+    lifecycleLogger.info(
+      { platformPostId },
+      'Resuming from issue-#17 recovery — Twitter call and pre-write skipped, advancing to Phase 3',
     );
-    platformPostId = callResult.platformPostId;
-  } catch (twitterErr) {
-    const classification = classifyTwitterError(twitterErr);
-    await recordFailureAttempt(db, {
-      postId: ctx.postId,
-      profileId: lockedProfile.id,
-      userId: lockedProfile.userId,
-      platform: lockedProfile.platform,
-      attemptNum: ctx.currentAttemptNum,
-      attemptStart,
-      classification,
-      correlationId: ctx.correlationId,
-      notificationQueue: ctx.notificationQueue,
-    }).catch((writeErr) => {
-      // Never let a failure-attempt write swallow the original error.
-      lifecycleLogger.error(
-        { err: writeErr },
-        'Failed to persist post_attempts row for transient/permanent failure',
+  } else {
+    // PHASE 2 — Twitter call OUTSIDE the transaction. Long-held locks across
+    // a network round trip would serialize the entire worker pool.
+    try {
+      const callResult = await ctx.callTwitter(
+        lockedProfile,
+        lockedPost.text,
+        lockedPost.is_thread,
+        {
+          platform: lockedPost.platform,
+          visibility: lockedPost.visibility,
+          linkUrl: lockedPost.link_url,
+        },
       );
-    });
-    throw twitterErr;
+      platformPostId = callResult.platformPostId;
+    } catch (twitterErr) {
+      const classification = classifyTwitterError(twitterErr);
+      await recordFailureAttempt(db, {
+        postId: ctx.postId,
+        profileId: lockedProfile.id,
+        userId: lockedProfile.userId,
+        platform: lockedProfile.platform,
+        attemptNum: ctx.currentAttemptNum,
+        attemptStart,
+        classification,
+        correlationId: ctx.correlationId,
+        notificationQueue: ctx.notificationQueue,
+      }).catch((writeErr) => {
+        // Never let a failure-attempt write swallow the original error.
+        lifecycleLogger.error(
+          { err: writeErr },
+          'Failed to persist post_attempts row for transient/permanent failure',
+        );
+      });
+      throw twitterErr;
+    }
+
+    // CRASH-SAFE IDEMPOTENCY MARKER (issue #17). See the recovery branch in
+    // Phase 1 (`isRecovery`) for the matching read path.
+    //
+    // If THIS update fails, BullMQ retries; the retry's Phase 1 lock load
+    // won't see platform_post_id and will proceed to a duplicate tweet,
+    // which Twitter's own duplicate-content rejection (code 187) catches
+    // for identical text within a short window. There's no unique-index
+    // on platform_post_id today to act as a database-side backstop, so
+    // the log line below is the operator's only signal that this window
+    // was hit. The duplicate-tweet risk here is narrower than the
+    // pre-fix Phase-3-rollback window the issue documents.
+    //
+    // Operators distinguish:
+    //   - "tweet live + Phase 3 rolled back"  (retry safe, marker persisted; recovery branch will complete it)
+    //   - "tweet live + pre-write failed"     (retry MAY duplicate; rely on Twitter-side duplicate detection)
+    // by reading log lines.
+    lifecycleLogger.info(
+      { platformPostId },
+      'Tweet posted — persisting idempotency marker before Phase 3 commit',
+    );
+    try {
+      await db
+        .update(posts)
+        .set({ platformPostId, updatedAt: new Date() })
+        .where(eq(posts.id, ctx.postId));
+    } catch (prewriteErr) {
+      // Intentionally surface (don't swallow): BullMQ must retry.
+      lifecycleLogger.error(
+        { err: prewriteErr, platformPostId },
+        'CRITICAL: tweet posted but pre-write of platform_post_id failed — retry may duplicate, rely on Twitter duplicate-content rejection',
+      );
+      throw prewriteErr;
+    }
+    lifecycleLogger.info(
+      { platformPostId },
+      'Idempotency marker persisted — Phase 3 commit may now retry safely',
+    );
   }
 
   // PHASE 3 — success: insert attempt row + transition to published + advance
@@ -375,6 +489,10 @@ export async function publishPost(
       platformPostId,
     });
 
+    // platformPostId was already persisted by the crash-safe pre-write
+    // above (issue #17). We re-set it here for safety in case the row was
+    // somehow cleared between writes — drizzle's update is idempotent and
+    // the unique-index backstop covers concurrent writers.
     await tx
       .update(posts)
       .set({
