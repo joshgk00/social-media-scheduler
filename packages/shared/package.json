@@ -32,7 +32,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest"
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "~3.1030.0",
