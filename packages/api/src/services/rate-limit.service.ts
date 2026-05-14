@@ -32,6 +32,13 @@ export interface UsageSnapshot {
   monthlyBudget: number;
   warnThresholdPercent: number;
   monthStartUtc: Date;
+  /**
+   * Start of the NEXT UTC calendar month — the moment the Twitter monthly
+   * budget resets. Always strictly in the future relative to `now`. The
+   * dashboard's "Resets …" row reads this, NOT `monthStartUtc` (which is the
+   * start of the current window and would always render in the past).
+   */
+  monthResetAtUtc: Date;
 }
 
 /**
@@ -41,12 +48,25 @@ export interface UsageSnapshot {
  * Throws if the profile does not exist. Callers that already verified
  * ownership can let the error propagate to the 404 handler; other callers
  * should catch and map it.
+ *
+ * `now` is injectable for deterministic unit tests; when omitted we read
+ * the clock via Luxon so existing tests that pin `Settings.now` keep
+ * working (production reads the wall clock).
  */
 export async function loadTwitterUsage(
   db: Db,
   profileId: string,
+  now?: Date,
 ): Promise<UsageSnapshot> {
-  const monthStartUtc = DateTime.utc().startOf('month').toJSDate();
+  const nowUtc =
+    now === undefined
+      ? DateTime.utc()
+      : DateTime.fromJSDate(now, { zone: 'utc' });
+  // Anchor both boundaries to the same instant so reset is guaranteed to be
+  // exactly one month after start (invariant the issue-#35 tests assert).
+  const monthStart = nowUtc.startOf('month');
+  const monthStartUtc = monthStart.toJSDate();
+  const monthResetAtUtc = monthStart.plus({ months: 1 }).toJSDate();
 
   const [profileRow] = await db
     .select({
@@ -76,6 +96,7 @@ export async function loadTwitterUsage(
     monthlyBudget: profileRow.monthlyBudget,
     warnThresholdPercent: profileRow.warnThresholdPercent,
     monthStartUtc,
+    monthResetAtUtc,
   };
 }
 
@@ -85,16 +106,20 @@ export async function loadTwitterUsage(
  */
 export async function checkTwitterBudgetWithDb(
   db: Db,
-  args: { profileId: string; additionalPostCount: number },
-): Promise<BudgetCheckResult & { monthStartUtc: Date }> {
-  const snapshot = await loadTwitterUsage(db, args.profileId);
+  args: { profileId: string; additionalPostCount: number; now?: Date },
+): Promise<BudgetCheckResult & { monthStartUtc: Date; monthResetAtUtc: Date }> {
+  const snapshot = await loadTwitterUsage(db, args.profileId, args.now);
   const result = checkTwitterBudget({
     currentUsage: snapshot.currentUsage,
     monthlyBudget: snapshot.monthlyBudget,
     warnThresholdPercent: snapshot.warnThresholdPercent,
     additionalCount: args.additionalPostCount,
   });
-  return { ...result, monthStartUtc: snapshot.monthStartUtc };
+  return {
+    ...result,
+    monthStartUtc: snapshot.monthStartUtc,
+    monthResetAtUtc: snapshot.monthResetAtUtc,
+  };
 }
 
 /**
@@ -105,16 +130,20 @@ export async function checkTwitterBudgetWithDb(
  */
 export async function checkBulkBudgetWithDb(
   db: Db,
-  args: { profileId: string; additionalCount: number },
-): Promise<BudgetCheckResult & { monthStartUtc: Date }> {
-  const snapshot = await loadTwitterUsage(db, args.profileId);
+  args: { profileId: string; additionalCount: number; now?: Date },
+): Promise<BudgetCheckResult & { monthStartUtc: Date; monthResetAtUtc: Date }> {
+  const snapshot = await loadTwitterUsage(db, args.profileId, args.now);
   const result = checkBulkBudget({
     currentUsage: snapshot.currentUsage,
     monthlyBudget: snapshot.monthlyBudget,
     warnThresholdPercent: snapshot.warnThresholdPercent,
     additionalCount: args.additionalCount,
   });
-  return { ...result, monthStartUtc: snapshot.monthStartUtc };
+  return {
+    ...result,
+    monthStartUtc: snapshot.monthStartUtc,
+    monthResetAtUtc: snapshot.monthResetAtUtc,
+  };
 }
 
 // ============================================================================
@@ -394,6 +423,7 @@ export async function checkPlatformBudgetWithDb(
     const result = await checkTwitterBudgetWithDb(db, {
       profileId: args.profileId,
       additionalPostCount: args.additionalCount,
+      now: args.now, // parity with the linkedin/facebook branches below
     });
     return {
       blockThresholdHit: result.wouldExceed,

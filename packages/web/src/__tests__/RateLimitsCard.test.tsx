@@ -4,7 +4,7 @@
 // deterministic.
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RateLimitsCard } from '../components/dashboard/RateLimitsCard';
@@ -124,6 +124,47 @@ describe('<RateLimitsCard />', () => {
     const dot = screen.getByLabelText(/usage band: red/i);
     expect(dot).toBeInTheDocument();
     expect(dot).toHaveClass('bg-destructive');
+  });
+
+  // Issue #35: the Twitter row must render a FUTURE reset date. Before the
+  // fix the row displayed `monthStartUtc` and showed a past date like
+  // "Resets Mar 31" on May 13. Pin the clock so the relative-time assertion
+  // is deterministic and so we can also assert the buggy past-date label
+  // is gone.
+  describe('Twitter reset date (issue #35)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-13T12:00:00Z'));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('renders the relative future reset and not the past month-start', () => {
+      useAllProfilesRateLimitsMock.mockReturnValue({
+        data: [
+          {
+            profileId: 'p-twitter',
+            platform: 'twitter',
+            handle: 'tester',
+            currentCount: 10,
+            budget: 500,
+            // Start of next UTC month relative to pinned now (= 18d ahead).
+            windowResetAt: '2026-06-01T00:00:00.000Z',
+            monthStartUtc: '2026-05-01T00:00:00.000Z',
+          },
+        ],
+        isLoading: false,
+        isError: false,
+      });
+      renderWithQuery(<RateLimitsCard />);
+
+      // Positive: deterministic relative copy from formatResetTime.
+      expect(screen.getByText(/Resets in 18d/)).toBeInTheDocument();
+      // Negative: the buggy "Resets May 1" label (monthStartUtc-as-reset)
+      // must not render. Anchors the assertion to the actual bug shape.
+      expect(screen.queryByText(/Resets May 1\b/)).not.toBeInTheDocument();
+    });
   });
 
   it('progress bar exposes role="progressbar" with aria-valuenow + aria-valuemax + aria-label', () => {

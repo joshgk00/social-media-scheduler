@@ -79,7 +79,8 @@ async function buildRateLimitState(
       warnThresholdHit: state.warnThresholdHit,
       blockThresholdHit: state.blockThresholdHit,
       windowStartUtc: state.monthStartUtc.toISOString(),
-      windowResetAt: state.monthStartUtc.toISOString(),
+      // fix #35 — see UsageSnapshot.monthResetAtUtc
+      windowResetAt: state.monthResetAtUtc.toISOString(),
       monthStartUtc: state.monthStartUtc.toISOString(),
     };
   }

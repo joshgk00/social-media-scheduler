@@ -188,20 +188,10 @@ export function RateLimitsCard() {
               const percent =
                 limit > 0 ? Math.round((row.currentCount / limit) * 100) : 0;
               const band = resolveBand(percent);
-              const reset =
-                row.platform === 'twitter'
-                  ? {
-                      relative: '',
-                      absolute: row.monthStartUtc
-                        ? new Date(row.monthStartUtc).toLocaleDateString(
-                            undefined,
-                            { month: 'short', day: 'numeric' },
-                          )
-                        : '1st of next month',
-                    }
-                  : row.windowResetAt
-                  ? formatResetTime(row.windowResetAt, row.platform)
-                  : { relative: '', absolute: '' };
+              // fix #35 — Twitter's windowResetAt is the future month boundary; no platform branch needed.
+              const reset = row.windowResetAt
+                ? formatResetTime(row.windowResetAt, row.platform)
+                : { relative: '', absolute: '' };
 
               const profileLabel = row.handle ?? row.profileId.slice(0, 8);
 
