@@ -269,18 +269,18 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
     db = createMockWorkerDb();
   });
 
+  // Pre-write matcher uses EXACT key-set equality so an unrelated future
+  // update of {platformPostId, updatedAt} (e.g., a media-attach restamp)
+  // can't silently masquerade as the issue #17 pre-write. Combined with the
+  // "exactly one" assertion below, this is robust against extra writes.
+  // NB: db.__updates is a single shared log; createMockWorkerDb's
+  // `transaction(handler) => handler(db)` flattens tx-scoped writes onto
+  // it in real call order, which is what makes cross-Phase ordering checks
+  // meaningful (helpers/mock-db.ts:99).
   function findPlatformPostIdPrewrite(db: MockWorkerDb) {
-    // The pre-write is the ONLY update whose set patch is {platformPostId, updatedAt}
-    // with no `status` field. The Phase 3 update also sets platformPostId but
-    // includes status='published'.
     return db.__updates.find((u) => {
-      const set = u.set as Record<string, unknown>;
-      return (
-        'platformPostId' in set &&
-        'updatedAt' in set &&
-        !('status' in set) &&
-        !('publishedAt' in set)
-      );
+      const keys = Object.keys(u.set).sort();
+      return keys.length === 2 && keys[0] === 'platformPostId' && keys[1] === 'updatedAt';
     });
   }
 
@@ -293,12 +293,16 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
       ctx,
     );
 
-    // The standalone pre-write must exist, carry the Twitter id, and have
-    // ONLY {platformPostId, updatedAt} — Phase 3's update is distinguished
-    // by also setting status='published' / publishedAt.
-    const prewrite = findPlatformPostIdPrewrite(db);
-    expect(prewrite).toBeDefined();
-    expect((prewrite?.set as { platformPostId?: string }).platformPostId).toBe(
+    // Exactly one pre-write — matched by EXACT key set, so an unrelated
+    // {platformPostId, updatedAt} update introduced later can't silently
+    // pass this test.
+    const prewrites = db.__updates.filter((u) => {
+      const keys = Object.keys(u.set).sort();
+      return keys.length === 2 && keys[0] === 'platformPostId' && keys[1] === 'updatedAt';
+    });
+    expect(prewrites).toHaveLength(1);
+    const prewrite = prewrites[0];
+    expect((prewrite.set as { platformPostId?: string }).platformPostId).toBe(
       'tw_test_777',
     );
 
@@ -311,7 +315,7 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
     const publishingIdx = db.__updates.findIndex(
       (u) => (u.set as { status?: string }).status === 'publishing',
     );
-    const prewriteIdx = db.__updates.indexOf(prewrite!);
+    const prewriteIdx = db.__updates.indexOf(prewrite);
     const publishedIdx = db.__updates.findIndex(
       (u) => (u.set as { status?: string }).status === 'published',
     );
@@ -319,12 +323,20 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
     expect(prewriteIdx).toBeGreaterThan(publishingIdx);
     expect(publishedIdx).toBeGreaterThan(prewriteIdx);
 
-    // The pre-write also predates the success postAttempts row written by
-    // Phase 3 — needed to guarantee the crash-safe ordering BullMQ relies on.
+    // Cross-collection ordering: the pre-write must precede the success
+    // postAttempts insert. We compare each operation's vitest invocationCallOrder
+    // — a global monotonic counter across all spies in the test — so this
+    // assertion remains correct even if a future change splits the updates
+    // and inserts onto separate logs.
+    const updateOrders = (db.update as Mock).mock.invocationCallOrder;
+    const insertOrders = (db.insert as Mock).mock.invocationCallOrder;
+    const prewriteOrder = updateOrders[prewriteIdx];
     const successInsertIdx = db.__insertedRows.findIndex(
       (row) => (row as { outcome?: string }).outcome === 'success',
     );
     expect(successInsertIdx).toBeGreaterThanOrEqual(0);
+    const successOrder = insertOrders[successInsertIdx];
+    expect(prewriteOrder).toBeLessThan(successOrder);
   });
 
   it('preserves the pre-write when the Phase 3 transaction throws (retry sees platform_post_id)', async () => {
@@ -358,11 +370,67 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
       'tw_test_777',
     );
 
+    // Anchor: the pre-write must have happened BEFORE the throwing Phase 3
+    // transaction — otherwise a future refactor that moves the pre-write
+    // INTO the Phase 3 tx wrapper would still leave the marker visible to
+    // this test even though the crash-safety contract is broken.
+    const updateOrders = (db.update as Mock).mock.invocationCallOrder;
+    const txOrders = (db.transaction as Mock).mock.invocationCallOrder;
+    const prewriteIdx = db.__updates.indexOf(prewrite!);
+    const prewriteOrder = updateOrders[prewriteIdx];
+    const phase3TxOrder = txOrders[1];
+    expect(prewriteOrder).toBeLessThan(phase3TxOrder);
+
     // No success postAttempts row should have been written (Phase 3 rolled back).
     const successInsert = db.__insertedRows.find(
       (row) => (row as { outcome?: string }).outcome === 'success',
     );
     expect(successInsert).toBeUndefined();
+  });
+
+  it('surfaces the error when the standalone pre-write itself fails (retry stays safe)', async () => {
+    seedHappyPath(db);
+    const ctx = buildCtx();
+
+    // The service comment explicitly contracts: if the pre-write fails, the
+    // error must propagate so BullMQ retries — DO NOT silently swallow. We
+    // assert that contract here by making the SECOND db.update call (the
+    // standalone pre-write; the first is Phase 1's status='publishing')
+    // reject, then verifying the error reaches the caller and no Phase 3
+    // side effects occurred.
+    const prewriteErr = new Error('simulated db blip during platform_post_id pre-write');
+    let updateCount = 0;
+    const originalUpdate = (db.update as Mock).getMockImplementation();
+    (db.update as Mock).mockImplementation((...args: unknown[]) => {
+      updateCount += 1;
+      if (updateCount === 2) {
+        // Mimic the Drizzle chain shape — .set(...) returns an object with .where(...)
+        // and .where(...) returns a rejecting promise (mirroring helpers/mock-db.ts).
+        return {
+          set: vi.fn().mockImplementation(() => ({
+            where: vi.fn().mockRejectedValue(prewriteErr),
+          })),
+        };
+      }
+      return (originalUpdate as (...a: unknown[]) => unknown)(...args);
+    });
+
+    await expect(
+      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
+    ).rejects.toBe(prewriteErr);
+
+    // The tweet was sent (we can't recall it) — exactly once.
+    expect(ctx.callTwitter).toHaveBeenCalledTimes(1);
+
+    // Phase 3 never ran: no success postAttempts row, no status='published'.
+    const successInsert = db.__insertedRows.find(
+      (row) => (row as { outcome?: string }).outcome === 'success',
+    );
+    expect(successInsert).toBeUndefined();
+    const publishedUpdate = db.__updates.find(
+      (u) => (u.set as { status?: string }).status === 'published',
+    );
+    expect(publishedUpdate).toBeUndefined();
   });
 });
 

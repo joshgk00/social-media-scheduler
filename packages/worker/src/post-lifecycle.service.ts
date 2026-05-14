@@ -378,10 +378,35 @@ export async function publishPost(
   // Twitter call), but the unique index on platform_post_id (see header
   // comment, invariant 4b) is still the hard backstop. Phase 3 still does
   // status/publishedAt/updatedAt + counters in one tx as before.
-  await db
-    .update(posts)
-    .set({ platformPostId, updatedAt: new Date() })
-    .where(eq(posts.id, ctx.postId));
+  //
+  // We log a breadcrumb on either side so operators can distinguish
+  //   - "tweet live + Phase 3 rolled back"  (retry safe, marker persisted)
+  // from
+  //   - "tweet live + pre-write failed"     (retry MAY duplicate)
+  // by reading log lines alone — see error-handling-reviewer issue #17 / finding 2.
+  lifecycleLogger.info(
+    { platformPostId },
+    'Tweet posted — persisting idempotency marker before Phase 3 commit',
+  );
+  try {
+    await db
+      .update(posts)
+      .set({ platformPostId, updatedAt: new Date() })
+      .where(eq(posts.id, ctx.postId));
+  } catch (prewriteErr) {
+    // Intentionally surface (don't swallow): BullMQ must retry. The retry
+    // hits the unique-index backstop on duplicate tweet, and the log line
+    // below tells the operator which side of the window the failure was on.
+    lifecycleLogger.error(
+      { err: prewriteErr, platformPostId },
+      'CRITICAL: tweet posted but pre-write of platform_post_id failed — retry may duplicate (unique-index backstop applies)',
+    );
+    throw prewriteErr;
+  }
+  lifecycleLogger.info(
+    { platformPostId },
+    'Idempotency marker persisted — Phase 3 commit may now retry safely',
+  );
 
   // PHASE 3 — success: insert attempt row + transition to published + advance
   // per-platform window counter atomically (T-API-02 / T-LIMITS-01).
