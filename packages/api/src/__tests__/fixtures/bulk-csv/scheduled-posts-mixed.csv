@@ -1,0 +1,11 @@
+text,scheduled_at,tags,spinnable,auto_destruct_after,recycle,notes
+Valid launch,2026-05-01T14:00:00Z,launch,false,7d,,Valid row 1
+﻿BOM-prefixed text cell,2026-05-01T15:00:00Z,bom,false,,,Invalid BOM-prefixed text cell
+Valid spin {A|B},2026-05-02T14:00:00Z,spin,true,,,Valid row 3
+Valid tags,2026-05-03T14:00:00Z,one;two,false,,,Valid row 4
+Bad date,next Tuesday,date,false,,,Invalid date row
+Valid no tags,2026-05-04T14:00:00Z,,false,,,Valid row 6
+Valid auto destruct,2026-05-05T14:00:00Z,cleanup,false,12h,,Valid row 7
+,2026-05-06T14:00:00Z,missing,false,,,Invalid missing text
+Valid final,2026-05-07T14:00:00Z,final,false,,,Valid row 9
+Valid notes,2026-05-08T14:00:00Z,notes,false,,,Valid row 10

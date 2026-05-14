@@ -1,0 +1,76 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1775682303098,
+      "tag": "0000_daily_invaders",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775738928586,
+      "tag": "0001_next_phalanx",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775783951260,
+      "tag": "0002_phase-04-publish-worker",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776333213279,
+      "tag": "0003_phase-06-media-handling",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1745366400000,
+      "tag": "0004_fix-post-media-cascade",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776977789844,
+      "tag": "0005_phase-07-oauth-token-lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777212449652,
+      "tag": "0006_phase-08-rate-limit-windows",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777412448917,
+      "tag": "0007_foamy_speed",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777507200000,
+      "tag": "0008_phase-10-bulk-operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777677670589,
+      "tag": "0009_phase-11-snippets-fts-calendar",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "phase": "2",
+  "phase_name": "Authentication & User Account",
+  "timestamp": "2026-04-07T22:30:00Z",
+  "areas_completed": ["Initial account setup"],
+  "areas_remaining": ["Account recovery flow", "2FA experience", "Settings page layout"],
+  "decisions": {
+    "Initial account setup": [
+      {"question": "How should the first user account be created?", "answer": "Setup wizard", "options_presented": ["Setup wizard", "CLI seed command", "Environment variables"]},
+      {"question": "Should the setup wizard also prompt for timezone and date format?", "answer": "Credentials + timezone", "options_presented": ["Credentials + timezone", "Credentials only", "Full settings"]},
+      {"question": "After setup, should the app enforce that only one user can ever exist?", "answer": "Hard single-user", "options_presented": ["Hard single-user", "Soft single-user", "Max-user config"]},
+      {"question": "Should unauthenticated visitors see a branded login page, or a minimal form?", "answer": "You decide", "options_presented": ["Minimal form", "Branded login", "You decide"]},
+      {"question": "Should all routes redirect to login when unauthenticated?", "answer": "Redirect to login", "options_presented": ["Redirect to login", "API returns 401", "Both"]},
+      {"question": "Should login have a 'remember me' checkbox?", "answer": "No remember me", "options_presented": ["No remember me", "Remember me 7 day", "Remember me 30 day"]},
+      {"question": "Should login rate-limit after repeated failures?", "answer": "Rate limit after 5 failures, 15 min lockout", "options_presented": ["Rate limit after 5 failures", "No rate limiting", "CAPTCHA after 3 failures"]},
+      {"question": "Where should the setup wizard live?", "answer": "SPA route (/setup)", "options_presented": ["SPA route", "Server-rendered page", "You decide"]}
+    ]
+  },
+  "deferred_ideas": [],
+  "canonical_refs": []
+}

@@ -1,0 +1,6 @@
+text,scheduled_at,tags,spinnable,auto_destruct_after,recycle,notes
+Launch day post,2026-05-01T14:00:00Z,launch;product;monthly,false,7d,,First campaign row
+{Hi|Hello} world,2026-05-02T15:30:00Z,greeting,true,,,Spin syntax preserved
+Monthly update,2026-05-03T16:45:00Z,monthly,false,12h,,Uses auto destruct hours
+Customer quote,2026-05-04T17:15:00Z,testimonial;social,false,,,Quote post
+Evergreen tip,2026-05-05T18:00:00Z,evergreen;tips,false,30m,,Short auto destruct duration

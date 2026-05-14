@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+# Drizzle migration snapshots are auto-generated during drizzle-kit generate
+# but migration SQL files and the journal are tracked in version control
+packages/db/drizzle/*_snapshot.json
+.DS_Store
+*.log
+coverage/

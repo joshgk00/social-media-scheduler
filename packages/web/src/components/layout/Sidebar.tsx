@@ -1,0 +1,98 @@
+import { NavLink } from 'react-router';
+import {
+  LayoutDashboard,
+  FileText,
+  ListOrdered,
+  Calendar,
+  PenSquare,
+  Users,
+  Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Activity,
+  Upload,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { getAdminQueuesUrl } from '@/lib/admin-queues-url';
+import { Button } from '@/components/ui/button';
+
+interface SidebarProps {
+  isCollapsed: boolean;
+  onToggle: () => void;
+}
+
+const navItems = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  { to: '/posts', icon: FileText, label: 'Posts' },
+  { to: '/queues', icon: ListOrdered, label: 'Queues' },
+  { to: '/calendar', icon: Calendar, label: 'Calendar' },
+  { to: '/posts/new', icon: PenSquare, label: 'New Post', isAction: true },
+  { to: '/posts/import', icon: Upload, label: 'Import Posts' },
+  { to: '/profiles', icon: Users, label: 'Profiles' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/admin/queues', icon: Activity, label: 'Admin queues', external: true },
+] as const;
+
+export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
+  return (
+    <nav
+      aria-label="Main navigation"
+      className={cn(
+        'flex flex-col border-r border-border bg-card transition-[width] duration-200',
+        isCollapsed ? 'w-14' : 'w-60',
+      )}
+    >
+      <div className={cn('flex items-center border-b border-border p-2', isCollapsed ? 'justify-center' : 'justify-end')}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggle}
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="h-8 w-8"
+        >
+          {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        </Button>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-1 p-2">
+        {navItems.map((item) => {
+          if ('external' in item && item.external) {
+            return (
+              <a
+                key={item.to}
+                href={getAdminQueuesUrl()}
+                className={cn(
+                  'flex items-center rounded-md text-sm transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                  isCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2',
+                )}
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                {!isCollapsed && <span>{item.label}</span>}
+              </a>
+            );
+          }
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={'end' in item ? item.end : undefined}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center rounded-md text-sm transition-colors',
+                  isCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2',
+                  'isAction' in item && item.isAction && !isActive && 'bg-primary text-primary-foreground hover:bg-primary/90',
+                  'isAction' in item && item.isAction && isActive && 'bg-primary text-primary-foreground',
+                  !('isAction' in item && item.isAction) && isActive && 'border-l-2 border-primary bg-accent text-accent-foreground',
+                  !('isAction' in item && item.isAction) && !isActive && 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                )
+              }
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              {!isCollapsed && <span>{item.label}</span>}
+            </NavLink>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}

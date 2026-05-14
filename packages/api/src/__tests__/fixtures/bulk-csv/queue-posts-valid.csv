@@ -1,0 +1,6 @@
+text,queue_name,position,tags,spinnable,auto_destruct_after,notes
+Queue launch,Main Queue,1,launch;queue,false,7d,First queue row
+{Morning|Afternoon} reminder,Main Queue,2,reminder,true,,Spin syntax preserved
+Append me later,Main Queue,,maintenance,false,,Blank position appends
+Customer story,Stories Queue,1,testimonial,false,12h,Second queue target
+Evergreen queue tip,Main Queue,5,evergreen;tips,false,30m,Position with gap
