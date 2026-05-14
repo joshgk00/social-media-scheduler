@@ -69,3 +69,43 @@ describe('Middleware', () => {
     expect(res.headers['x-request-id']).toBe(customId);
   });
 });
+
+describe('trust proxy (issue #50)', () => {
+  beforeEach(() => {
+    process.env.CSRF_SECRET = 'a'.repeat(64);
+  });
+
+  // Express stores `trust proxy` as a settings key. The exact value depends
+  // on how it's set: `1` becomes a function that trusts one hop and the
+  // setting key `'trust proxy fn'` becomes truthy. We assert the setting
+  // exists rather than coupling to the internal representation.
+  it('enables `trust proxy` so X-Forwarded-Proto is honored behind a reverse proxy', () => {
+    const app = createTestApp();
+    // Express normalizes any non-false `trust proxy` setting into a function
+    // and stores the original at `'trust proxy'` plus the resolved fn at
+    // `'trust proxy fn'`. Both must be set when trust-proxy is enabled.
+    expect(app.get('trust proxy')).not.toBe(false);
+    expect(app.get('trust proxy fn')).toBeDefined();
+    expect(typeof app.get('trust proxy fn')).toBe('function');
+  });
+
+  it('trust-proxy fn accepts the immediately-upstream proxy', () => {
+    // Express stores trust-proxy as a compiled function `(addr, hopIdx) => boolean`.
+    // With `app.set('trust proxy', 1)`, the function trusts ONE hop — i.e.
+    // returns true at hopIdx=0 regardless of the address, so req.protocol /
+    // req.secure / req.ip are read from X-Forwarded-* headers set by the
+    // first proxy upstream of Express. This is the API behavior on which
+    // the session and CSRF cookie-secure logic depends; without trust proxy
+    // configured, this function would always return false.
+    const app = createTestApp();
+    const trustFn = app.get('trust proxy fn') as (
+      addr: string,
+      hopIdx: number,
+    ) => boolean;
+    expect(typeof trustFn).toBe('function');
+    expect(trustFn('10.0.0.1', 0)).toBe(true);
+    // Past the first hop, trust is denied — guards against header spoofing
+    // through additional unknown proxies.
+    expect(trustFn('10.0.0.1', 1)).toBe(false);
+  });
+});
