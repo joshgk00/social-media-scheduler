@@ -108,4 +108,79 @@ describe('trust proxy (issue #50)', () => {
     // through additional unknown proxies.
     expect(trustFn('10.0.0.1', 1)).toBe(false);
   });
+
+  // End-to-end coverage of the production failure mode (Copilot review #51):
+  // it's not enough to verify that `trust proxy` is set — we need to confirm
+  // that a request with `X-Forwarded-Proto: https` actually causes the
+  // session cookie to be issued with the `Secure` attribute. Without trust
+  // proxy, Express would treat the request as insecure and emit the cookie
+  // WITHOUT the Secure flag (or, with secure:true and saveUninitialized:true,
+  // the cookie still gets written but the browser would reject it on the
+  // next non-HTTPS request because we'd be in an inconsistent state). Either
+  // way, `Secure` in the Set-Cookie header is the load-bearing observable.
+  // Helper: build an app with a clean Redis mock so the session middleware
+  // can actually create + persist sessions (the shared `createTestApp` helper
+  // overrides `redis.get` to a non-JSON value, which prevents connect-redis
+  // from issuing the session cookie).
+  function appWithCleanRedis() {
+    return createApp({
+      redis: createMockRedis(),
+      sql: createMockSql(),
+      db: {} as any,
+      sessionSecret: 'test-secret-that-is-long-enough-for-session',
+    });
+  }
+
+  it('issues session cookie with Secure flag when X-Forwarded-Proto: https in production', async () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const app = appWithCleanRedis();
+      const res = await request(app)
+        .get('/health')
+        .set('X-Forwarded-Proto', 'https');
+      // saveUninitialized:true in session middleware means EVERY first
+      // request gets a sms.sid cookie set in the response, even if no
+      // session data is mutated.
+      const setCookies = res.headers['set-cookie'];
+      expect(setCookies).toBeDefined();
+      const cookieArray = Array.isArray(setCookies) ? setCookies : [setCookies];
+      const sessionCookie = cookieArray.find((c) => c.startsWith('sms.sid='));
+      expect(sessionCookie).toBeDefined();
+      // The smoking-gun observable: Secure attribute is present.
+      expect(sessionCookie).toMatch(/;\s*Secure(?:;|$)/);
+    } finally {
+      process.env.NODE_ENV = prevNodeEnv;
+    }
+  });
+
+  it('does NOT issue the secure session cookie over plain HTTP in production (no leak)', async () => {
+    // Negative case for the original production bug: with X-Forwarded-Proto:
+    // http and cookie.secure:true, express-session refuses to set the cookie
+    // at all — exactly the production failure mode that motivated issue #50.
+    // The fix is upstream: an external reverse proxy MUST forward
+    // X-Forwarded-Proto: https for cookies to flow. This test pins the safety
+    // semantic so a misconfigured proxy never silently exposes the cookie
+    // over plain HTTP.
+    const prevNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const app = appWithCleanRedis();
+      const res = await request(app)
+        .get('/health')
+        .set('X-Forwarded-Proto', 'http');
+      const setCookies = res.headers['set-cookie'];
+      const cookieArray = Array.isArray(setCookies)
+        ? setCookies
+        : setCookies
+        ? [setCookies]
+        : [];
+      const sessionCookie = cookieArray.find(
+        (c) => typeof c === 'string' && c.startsWith('sms.sid='),
+      );
+      expect(sessionCookie).toBeUndefined();
+    } finally {
+      process.env.NODE_ENV = prevNodeEnv;
+    }
+  });
 });
