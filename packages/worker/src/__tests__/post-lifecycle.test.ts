@@ -66,8 +66,14 @@ describe('publishPost lifecycle', () => {
     );
   });
 
-  it('aborts with already_published when platform_post_id is set and does NOT call twitter', async () => {
-    const lockedPost = seedLockedPost({ platformPostId: 'tw_already_789' });
+  it('aborts with already_published when platform_post_id is set AND status is already published', async () => {
+    // True idempotent retry of a fully-committed publish: Phase 3 already
+    // ran on a prior attempt. We must not re-tweet and we must not run
+    // Phase 3 again (counters would double-bump).
+    const lockedPost = seedLockedPost({
+      platformPostId: 'tw_already_789',
+      status: 'published',
+    });
     db.__pushExecute(() => [lockedPost]);
     const ctx = buildCtx();
 
@@ -386,6 +392,50 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
       (row) => (row as { outcome?: string }).outcome === 'success',
     );
     expect(successInsert).toBeUndefined();
+  });
+
+  it('recovers from a stranded publishing+pre-write state by skipping Twitter and running Phase 3', async () => {
+    // This is the retry that lands AFTER a prior attempt's pre-write
+    // committed but Phase 3 rolled back. Without the recovery branch the
+    // post would be permanently stuck in status='publishing' with the
+    // tweet live but no success postAttempts row and no counter bump.
+    const lockedPost = seedLockedPost({
+      platformPostId: 'tw_recovery_123',
+      status: 'publishing',
+    });
+    const profile = seedSocialProfile();
+    db.__pushExecute(() => [lockedPost]);
+    // Recovery path skips budget/media/token checks and loads only the
+    // profile — single select instead of the happy-path's media+profile.
+    db.__pushSelect(() => [profile]);
+    const ctx = buildCtx();
+
+    const result = await publishPost(
+      db as unknown as Parameters<typeof publishPost>[0],
+      ctx,
+    );
+
+    // Returns the recovered id without re-calling Twitter.
+    expect(result.platformPostId).toBe('tw_recovery_123');
+    expect(ctx.callTwitter).not.toHaveBeenCalled();
+
+    // No duplicate pre-write — the marker was already on the row.
+    const prewrite = findPlatformPostIdPrewrite(db);
+    expect(prewrite).toBeUndefined();
+
+    // Phase 3 completes the lifecycle: success postAttempts row with the
+    // recovered id, and the post transitions to 'published'.
+    const successAttempt = db.__insertedRows.find(
+      (row) => (row as { outcome?: string }).outcome === 'success',
+    ) as { platformPostId?: string } | undefined;
+    expect(successAttempt?.platformPostId).toBe('tw_recovery_123');
+    const publishedUpdate = db.__updates.find(
+      (u) => (u.set as { status?: string }).status === 'published',
+    );
+    expect(publishedUpdate).toBeDefined();
+    expect((publishedUpdate?.set as { platformPostId?: string }).platformPostId).toBe(
+      'tw_recovery_123',
+    );
   });
 
   it('surfaces the error when the standalone pre-write itself fails (retry stays safe)', async () => {
