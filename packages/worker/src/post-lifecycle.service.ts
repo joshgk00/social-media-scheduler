@@ -362,6 +362,27 @@ export async function publishPost(
     throw twitterErr;
   }
 
+  // CRASH-SAFE IDEMPOTENCY MARKER (issue #17). Persist platform_post_id in a
+  // standalone UPDATE BEFORE the Phase 3 transaction. The tweet is already
+  // live on Twitter at this point; if the Phase 3 commit fails (DB blip,
+  // worker crash, etc.) and BullMQ retries the job, the retry's FOR UPDATE
+  // load in Phase 1 will see platform_post_id set and abort with
+  // `already_published` instead of calling Twitter a second time. Without
+  // this pre-write, platform_post_id only lands inside the Phase 3 tx — so
+  // a Phase 3 failure rolls it back and the retry re-tweets.
+  //
+  // If THIS update fails, retry is still safe: we surface the error so
+  // BullMQ retries; the retry's Phase 1 lock load won't see platform_post_id
+  // and will proceed to a duplicate tweet. The duplicate risk window is the
+  // same as before for this narrow case (DB unreachable immediately after
+  // Twitter call), but the unique index on platform_post_id (see header
+  // comment, invariant 4b) is still the hard backstop. Phase 3 still does
+  // status/publishedAt/updatedAt + counters in one tx as before.
+  await db
+    .update(posts)
+    .set({ platformPostId, updatedAt: new Date() })
+    .where(eq(posts.id, ctx.postId));
+
   // PHASE 3 — success: insert attempt row + transition to published + advance
   // per-platform window counter atomically (T-API-02 / T-LIMITS-01).
   await db.transaction(async (tx) => {
@@ -375,6 +396,10 @@ export async function publishPost(
       platformPostId,
     });
 
+    // platformPostId was already persisted by the crash-safe pre-write
+    // above (issue #17). We re-set it here for safety in case the row was
+    // somehow cleared between writes — drizzle's update is idempotent and
+    // the unique-index backstop covers concurrent writers.
     await tx
       .update(posts)
       .set({

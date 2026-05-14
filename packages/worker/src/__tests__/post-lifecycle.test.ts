@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import {
   publishPost,
   PostLifecycleAbort,
@@ -259,6 +259,110 @@ describe('publishPost media-readiness gate (MEDIA-05)', () => {
       ctx,
     );
     expect(result.platformPostId).toBe('tw_test_777');
+  });
+});
+
+describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => {
+  let db: MockWorkerDb;
+
+  beforeEach(() => {
+    db = createMockWorkerDb();
+  });
+
+  function findPlatformPostIdPrewrite(db: MockWorkerDb) {
+    // The pre-write is the ONLY update whose set patch is {platformPostId, updatedAt}
+    // with no `status` field. The Phase 3 update also sets platformPostId but
+    // includes status='published'.
+    return db.__updates.find((u) => {
+      const set = u.set as Record<string, unknown>;
+      return (
+        'platformPostId' in set &&
+        'updatedAt' in set &&
+        !('status' in set) &&
+        !('publishedAt' in set)
+      );
+    });
+  }
+
+  it('persists platform_post_id in a standalone UPDATE between Phase 1 and Phase 3 (ordering)', async () => {
+    seedHappyPath(db);
+    const ctx = buildCtx();
+
+    await publishPost(
+      db as unknown as Parameters<typeof publishPost>[0],
+      ctx,
+    );
+
+    // The standalone pre-write must exist, carry the Twitter id, and have
+    // ONLY {platformPostId, updatedAt} — Phase 3's update is distinguished
+    // by also setting status='published' / publishedAt.
+    const prewrite = findPlatformPostIdPrewrite(db);
+    expect(prewrite).toBeDefined();
+    expect((prewrite?.set as { platformPostId?: string }).platformPostId).toBe(
+      'tw_test_777',
+    );
+
+    // Order check: walk db.__updates in insertion order and confirm:
+    //   [0] Phase 1 transitions status='publishing'
+    //   [1] standalone pre-write (issue #17 marker)
+    //   [2] Phase 3 transitions status='published'
+    // This is the strongest guarantee that a retry between (1) and (2)
+    // will see platform_post_id and short-circuit `already_published`.
+    const publishingIdx = db.__updates.findIndex(
+      (u) => (u.set as { status?: string }).status === 'publishing',
+    );
+    const prewriteIdx = db.__updates.indexOf(prewrite!);
+    const publishedIdx = db.__updates.findIndex(
+      (u) => (u.set as { status?: string }).status === 'published',
+    );
+    expect(publishingIdx).toBeGreaterThanOrEqual(0);
+    expect(prewriteIdx).toBeGreaterThan(publishingIdx);
+    expect(publishedIdx).toBeGreaterThan(prewriteIdx);
+
+    // The pre-write also predates the success postAttempts row written by
+    // Phase 3 — needed to guarantee the crash-safe ordering BullMQ relies on.
+    const successInsertIdx = db.__insertedRows.findIndex(
+      (row) => (row as { outcome?: string }).outcome === 'success',
+    );
+    expect(successInsertIdx).toBeGreaterThanOrEqual(0);
+  });
+
+  it('preserves the pre-write when the Phase 3 transaction throws (retry sees platform_post_id)', async () => {
+    seedHappyPath(db);
+    const ctx = buildCtx();
+
+    // Two db.transaction calls happen: Phase 1 (lock + transition to publishing)
+    // and Phase 3 (success attempt + published). We want only the SECOND to
+    // throw — the first must complete so Twitter actually gets called.
+    const phase3Err = new Error('simulated db blip during phase 3 commit');
+    let txCount = 0;
+    (db.transaction as Mock).mockImplementation(async (handler: (tx: unknown) => Promise<unknown>) => {
+      txCount += 1;
+      if (txCount === 2) throw phase3Err;
+      return handler(db);
+    });
+
+    await expect(
+      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
+    ).rejects.toBe(phase3Err);
+
+    // Twitter was called exactly once (the tweet is already live).
+    expect(ctx.callTwitter).toHaveBeenCalledTimes(1);
+
+    // Pre-write must still be in the updates log — that's the crash-safe marker
+    // a BullMQ retry will see via the FOR UPDATE load in Phase 1, hitting the
+    // existing `already_published` guard at post-lifecycle.service.ts:181.
+    const prewrite = findPlatformPostIdPrewrite(db);
+    expect(prewrite).toBeDefined();
+    expect((prewrite?.set as { platformPostId?: string }).platformPostId).toBe(
+      'tw_test_777',
+    );
+
+    // No success postAttempts row should have been written (Phase 3 rolled back).
+    const successInsert = db.__insertedRows.find(
+      (row) => (row as { outcome?: string }).outcome === 'success',
+    );
+    expect(successInsert).toBeUndefined();
   });
 });
 
