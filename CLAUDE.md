@@ -276,6 +276,22 @@ Use these entry points:
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
 <!-- GSD:workflow-end -->
 
+## Definition of Done
+
+A unit of work is "done" — and a `BACKLOG.md` row is only flippable to `[x]` — when **all** of the following pass from the repo root:
+
+1. `pnpm test` — runs all packages' tests in non-watch mode (the `pretest` hook builds first, so this also confirms the build is green)
+2. `pnpm typecheck` — runs `tsc --noEmit` across all packages
+3. `pnpm lint` — runs `eslint .` across the monorepo
+4. Any new files are committed (no orphaned working-tree state)
+5. For refactor work, the acceptance criteria in the linked GitHub issue are all met
+
+Do not mark a `BACKLOG.md` row `[x]` and do not declare an issue closeable while any of the above is failing. Re-run after every change of scope, not just at the very end.
+
+For in-loop iteration, package-scoped equivalents are fine (e.g., `pnpm --filter @sms/api test`, `pnpm --filter @sms/worker typecheck`). The full monorepo run is the gate before declaring done.
+
+If a test failure is unrelated to the work in progress (pre-existing failure on `develop`), surface it explicitly and decide with the user whether to fix it inline or file a separate issue. Never paper over a failure to make a green claim.
+
 ## Backlog Workflow
 
 [`BACKLOG.md`](./BACKLOG.md) at the repo root is the single index of pending work — open GitHub issues, locked refactor designs, and deferred candidates. Keep it aligned with `gh issue list` so an automated workflow can read one ordered queue.

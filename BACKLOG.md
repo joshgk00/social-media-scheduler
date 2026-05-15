@@ -10,6 +10,8 @@ Single index of pending work: open GitHub issues + architectural refactors with 
 
 **Status legend:** `[ ]` pending · `[~]` in progress · `[x]` done · `[-]` deferred / blocked
 
+**Definition of Done:** A row only flips to `[x]` when `pnpm test`, `pnpm typecheck`, and `pnpm lint` all pass from the repo root, every new file is committed, and the linked issue's acceptance criteria are met. See [CLAUDE.md → Definition of Done](./CLAUDE.md#definition-of-done).
+
 ---
 
 ## Next up
