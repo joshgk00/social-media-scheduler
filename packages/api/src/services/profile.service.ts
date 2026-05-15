@@ -34,7 +34,7 @@ export interface ProfileListItem {
 export interface DeletePreview {
   drafts: number;
   scheduled: number;
-  queueMemberships: number;
+  ownedQueues: number;
   tagsLosingLastUse: number;
   // inFlight > 0 blocks deletion in the existing deleteProfile transaction.
   inFlight: number;
@@ -44,10 +44,13 @@ const logger = createLogger('profile-service');
 const IN_FLIGHT_STATES = ['queued', 'publishing', 'auto_destructing'] as const;
 
 // Subclass exists so structured logs show 'ProfileServiceError' instead of 'AppError'.
-// All behavior comes from AppError; the subclass adds no fields or methods.
+// Optional codes let route-level fallbacks return stable support identifiers.
 export class ProfileServiceError extends AppError {
-  constructor(message: string, statusCode: number) {
+  public readonly code?: string;
+
+  constructor(message: string, statusCode: number, code?: string) {
     super(message, statusCode);
+    this.code = code;
   }
 }
 
@@ -327,9 +330,13 @@ export async function deleteProfile(db: Db, userId: string, profileId: string): 
       );
     }
 
+    // Do this explicitly rather than relying solely on FK side effects so the
+    // application owns the full disconnect semantics: posts are preserved, their
+    // now-deleted queue links are cleared, and empty queue definitions are
+    // removed in the same transaction as the profile row.
     const detachedPosts = await tx
       .update(posts)
-      .set({ profileId: null, queueId: null, updatedAt: new Date() })
+      .set({ profileId: null, queueId: null })
       .where(
         and(
           eq(posts.profileId, profileId),
@@ -713,7 +720,7 @@ export async function getDeletePreview(
 
   // Queue ownership is modeled by queues.profileId. Count queue definitions
   // directly so empty queues are visible in the destructive-action preview.
-  const [queueMembershipsRow] = await db
+  const [ownedQueuesRow] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(queues)
     .where(
@@ -759,7 +766,7 @@ export async function getDeletePreview(
   return {
     drafts: Number(draftsRow?.count ?? 0),
     scheduled: Number(scheduledRow?.count ?? 0),
-    queueMemberships: Number(queueMembershipsRow?.count ?? 0),
+    ownedQueues: Number(ownedQueuesRow?.count ?? 0),
     inFlight: Number(inFlightRow?.count ?? 0),
     tagsLosingLastUse,
   };

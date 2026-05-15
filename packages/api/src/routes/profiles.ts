@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
+import { Router, type NextFunction } from 'express';
 import { and, eq } from 'drizzle-orm';
 import {
   createProfileSchema,
@@ -24,6 +25,11 @@ import { profileLimiter } from '../middleware/rate-limiter.js';
 import { validateUuidParam } from '../middleware/validation.js';
 
 const logger = createLogger('profiles-router');
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requestCorrelationId(req: { id?: string }): string {
+  return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
+}
 
 interface ProfilesDependencies {
   db: Db;
@@ -66,7 +72,7 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
     res.json(profile);
   });
 
-  router.delete('/api/profiles/:id', requireAuth, async (req, res) => {
+  router.delete('/api/profiles/:id', requireAuth, async (req, res, next: NextFunction) => {
     const profileId = validateUuidParam(req.params.id as string);
     const userId = req.session.userId!;
     try {
@@ -81,16 +87,17 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
-      const correlationId = (req as { id?: string }).id ?? 'unknown';
+      const correlationId = requestCorrelationId(req as { id?: string });
+      (req as { id?: string }).id = correlationId;
       logger.error(
         { err, profileId, userId, correlationId },
         'Profile delete failed',
       );
-      res.status(500).json({
-        error: 'Could not delete profile. Try again or contact support with this request ID.',
-        code: 'profile_delete_failed',
-        correlationId,
-      });
+      next(new ProfileServiceError(
+        'Could not delete profile. Try again or contact support with this request ID.',
+        500,
+        'profile_delete_failed',
+      ));
     }
   });
 

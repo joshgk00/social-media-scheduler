@@ -7,7 +7,12 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
   logger.error({ err, correlationId }, 'Unhandled error');
 
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: err.message, correlationId });
+    const code = (err as { code?: unknown }).code;
+    res.status(err.statusCode).json({
+      error: err.message,
+      ...(typeof code === 'string' ? { code } : {}),
+      correlationId,
+    });
     return;
   }
 

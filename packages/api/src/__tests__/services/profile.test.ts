@@ -395,8 +395,10 @@ describe('profile.service', () => {
       expect(updateChain.set).toHaveBeenCalledWith({
         profileId: null,
         queueId: null,
-        updatedAt: expect.any(Date),
       });
+      expect(tx.select.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.update.mock.invocationCallOrder[0],
+      );
       expect(tx.delete).toHaveBeenNthCalledWith(1, mockQueues);
       expect(queueDeleteChain.returning).toHaveBeenCalledWith({ id: mockQueues.id });
       expect(tx.delete).toHaveBeenNthCalledWith(2, mockSocialProfiles);
@@ -408,9 +410,11 @@ describe('profile.service', () => {
       await expect(deleteProfile(db, USER_ID, PROFILE_ID)).resolves.toBe(false);
     });
 
-    it('blocks deletion when the profile has in-flight posts', async () => {
+    it('blocks deletion before partial cleanup when any in-flight post exists', async () => {
       const { db, tx } = createDeleteProfileDb({
-        inFlightPosts: [{ id: 'post-1' }],
+        inFlightPosts: [{ id: 'queued-post' }],
+        detachedPosts: [{ id: 'scheduled-post' }],
+        deletedQueues: [{ id: 'queue-1' }],
       });
 
       await expect(deleteProfile(db, USER_ID, PROFILE_ID)).rejects.toMatchObject({

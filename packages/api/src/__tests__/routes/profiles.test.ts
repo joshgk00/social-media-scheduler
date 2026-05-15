@@ -11,11 +11,19 @@ const mockDeleteProfile = vi.fn();
 const mockUpdateProfileMetadata = vi.fn();
 const mockGetDeletePreview = vi.fn();
 
-vi.mock('../../services/profile.service.js', () => {
-  class ProfileServiceError extends Error {
-    constructor(message: string, public readonly statusCode: number) {
-      super(message);
-      this.name = 'ProfileServiceError';
+vi.mock('../../services/profile.service.js', async () => {
+  const { AppError } = await vi.importActual<typeof import('@sms/shared')>('@sms/shared');
+
+  class ProfileServiceError extends AppError {
+    public readonly code?: string;
+
+    constructor(
+      message: string,
+      statusCode: number,
+      code?: string,
+    ) {
+      super(message, statusCode);
+      this.code = code;
     }
   }
   return {
@@ -326,16 +334,17 @@ describe('profiles routes', () => {
     it('returns a stable error code and correlation id for unexpected delete failures', async () => {
       mockDeleteProfile.mockRejectedValueOnce(new Error('foreign key violation'));
       const agent = await authenticatedAgent();
+      const requestId = '550e8400-e29b-41d4-a716-446655440000';
 
       const res = await agent
         .delete(`/api/profiles/${PROFILE_UUID}`)
-        .set('x-request-id', 'delete-profile-request-id');
+        .set('x-request-id', requestId);
 
       expect(res.status).toBe(500);
       expect(res.body).toMatchObject({
         error: 'Could not delete profile. Try again or contact support with this request ID.',
         code: 'profile_delete_failed',
-        correlationId: 'delete-profile-request-id',
+        correlationId: requestId,
       });
     });
   });
@@ -490,7 +499,7 @@ describe('profiles routes', () => {
       mockGetDeletePreview.mockResolvedValueOnce({
         drafts: 3,
         scheduled: 5,
-        queueMemberships: 2,
+        ownedQueues: 2,
         tagsLosingLastUse: 1,
         inFlight: 0,
       });
@@ -502,7 +511,7 @@ describe('profiles routes', () => {
       expect(res.body).toEqual({
         drafts: 3,
         scheduled: 5,
-        queueMemberships: 2,
+        ownedQueues: 2,
         tagsLosingLastUse: 1,
         inFlight: 0,
       });

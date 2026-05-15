@@ -37,8 +37,8 @@ function buildCascadeLines(preview: DeletePreview): CascadeLine[] {
       copy: `${preview.scheduled} scheduled posts will be deleted`,
     },
     {
-      count: preview.queueMemberships,
-      copy: `${preview.queueMemberships} queues will be deleted`,
+      count: preview.ownedQueues,
+      copy: `${preview.ownedQueues} queues will be deleted`,
     },
     {
       count: preview.tagsLosingLastUse,
