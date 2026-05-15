@@ -627,18 +627,23 @@ describe('getDeletePreview', () => {
 
   /**
    * Builds a mock db whose select().from(posts).where(...) resolves to a
-   * list of count rows — one per COUNT query. Queue counts hit the same
-   * `posts` table (via queueId IS NOT NULL) so one sequence is sufficient.
+   * list of count rows — one per COUNT query. Owned queue counts hit the
+   * `queues` table, but the fluent count stub can return them in sequence.
    * The tagsLosingLastUse query uses db.execute with raw SQL.
    */
   function setupCounts(counts: {
     drafts: number;
     scheduled: number;
-    queueMemberships: number;
+    ownedQueues: number;
     inFlight: number;
     tagsLosingLastUse: number;
   }) {
-    const sequence: number[] = [counts.drafts, counts.scheduled, counts.queueMemberships, counts.inFlight];
+    const sequence: number[] = [
+      counts.drafts,
+      counts.scheduled,
+      counts.ownedQueues,
+      counts.inFlight,
+    ];
     const db = createMockDb();
     let selectCallIndex = 0;
 
@@ -659,7 +664,7 @@ describe('getDeletePreview', () => {
     const db = setupCounts({
       drafts: 3,
       scheduled: 5,
-      queueMemberships: 2,
+      ownedQueues: 2,
       inFlight: 1,
       tagsLosingLastUse: 4,
     });
@@ -669,7 +674,7 @@ describe('getDeletePreview', () => {
     expect(preview).toEqual({
       drafts: 3,
       scheduled: 5,
-      queueMemberships: 2,
+      ownedQueues: 2,
       inFlight: 1,
       tagsLosingLastUse: 4,
     });
@@ -679,7 +684,7 @@ describe('getDeletePreview', () => {
     const db = setupCounts({
       drafts: 0,
       scheduled: 0,
-      queueMemberships: 0,
+      ownedQueues: 0,
       inFlight: 0,
       tagsLosingLastUse: 0,
     });
@@ -689,7 +694,7 @@ describe('getDeletePreview', () => {
     expect(preview).toEqual({
       drafts: 0,
       scheduled: 0,
-      queueMemberships: 0,
+      ownedQueues: 0,
       inFlight: 0,
       tagsLosingLastUse: 0,
     });
@@ -699,7 +704,7 @@ describe('getDeletePreview', () => {
     const db = setupCounts({
       drafts: 0,
       scheduled: 0,
-      queueMemberships: 0,
+      ownedQueues: 0,
       inFlight: 0,
       tagsLosingLastUse: 1,
     });

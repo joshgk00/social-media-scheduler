@@ -22,9 +22,15 @@ const socialProfileColumns = [
 ];
 
 const mockSocialProfiles = makeTableStub('social_profiles', socialProfileColumns);
+const mockPosts = makeTableStub('posts', [
+  'id', 'userId', 'profileId', 'queueId', 'status', 'updatedAt',
+]);
+const mockQueues = makeTableStub('queues', ['id', 'userId', 'profileId']);
 
 vi.mock('@sms/db', () => ({
   socialProfiles: mockSocialProfiles,
+  posts: mockPosts,
+  queues: mockQueues,
 }));
 
 const mockEncrypt = vi.fn().mockReturnValue({
@@ -77,6 +83,8 @@ const SAFE_PROFILE = {
   connectedAt: new Date(),
   lastPublishedAt: null,
 };
+const USER_ID = 'user-1';
+const PROFILE_ID = 'profile-uuid-1';
 
 function createMockDb(overrides: {
   selectResult?: unknown[];
@@ -109,6 +117,50 @@ function createMockDb(overrides: {
   } as any;
 }
 
+function chainReturning(result: unknown[]) {
+  const chain: Record<string, any> = {};
+  for (const method of ['from', 'where', 'limit', 'set', 'returning']) {
+    chain[method] = vi.fn().mockReturnValue(chain);
+  }
+  chain.then = (resolve: (v: unknown) => void) => resolve(result);
+  return chain;
+}
+
+function createDeleteProfileDb(overrides: {
+  inFlightPosts?: unknown[];
+  detachedPosts?: unknown[];
+  deletedQueues?: unknown[];
+  deletedProfiles?: unknown[];
+} = {}) {
+  const inFlightChain = chainReturning(overrides.inFlightPosts ?? []);
+  const updateChain = chainReturning(overrides.detachedPosts ?? []);
+  const queueDeleteChain = chainReturning(overrides.deletedQueues ?? []);
+  const profileDeleteChain = chainReturning(
+    overrides.deletedProfiles ?? [{ id: 'profile-uuid-1' }],
+  );
+
+  const tx = {
+    select: vi.fn().mockReturnValue(inFlightChain),
+    update: vi.fn().mockReturnValue(updateChain),
+    delete: vi.fn()
+      .mockReturnValueOnce(queueDeleteChain)
+      .mockReturnValueOnce(profileDeleteChain),
+  };
+
+  const db = {
+    transaction: vi.fn(async (callback: (tx: unknown) => unknown) => callback(tx)),
+  };
+
+  return {
+    db: db as any,
+    tx,
+    inFlightChain,
+    updateChain,
+    queueDeleteChain,
+    profileDeleteChain,
+  };
+}
+
 const TEST_CREDENTIALS = {
   consumerKey: 'ck-test-value-abc123',
   consumerSecret: 'cs-test-value-def456',
@@ -120,6 +172,7 @@ describe('profile.service', () => {
   let createProfile: typeof import('../../services/profile.service.js').createProfile;
   let getProfiles: typeof import('../../services/profile.service.js').getProfiles;
   let validateTwitterCredentials: typeof import('../../services/profile.service.js').validateTwitterCredentials;
+  let deleteProfile: typeof import('../../services/profile.service.js').deleteProfile;
 
   beforeEach(async () => {
     mockEncrypt.mockClear();
@@ -156,6 +209,7 @@ describe('profile.service', () => {
     createProfile = mod.createProfile;
     getProfiles = mod.getProfiles;
     validateTwitterCredentials = mod.validateTwitterCredentials;
+    deleteProfile = mod.deleteProfile;
   });
 
   describe('createProfile', () => {
@@ -326,7 +380,48 @@ describe('profile.service', () => {
   });
 
   describe('deleteProfile', () => {
-    it.todo('deletes profile by id and userId');
-    it.todo('returns false when profile does not exist');
+    it('detaches related posts, deletes queues, and deletes the profile in one transaction', async () => {
+      const { db, tx, updateChain, queueDeleteChain } = createDeleteProfileDb({
+        detachedPosts: [{ id: 'post-1' }],
+        deletedQueues: [{ id: 'queue-1' }],
+        deletedProfiles: [{ id: PROFILE_ID }],
+      });
+
+      const result = await deleteProfile(db, USER_ID, PROFILE_ID);
+
+      expect(result).toBe(true);
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(tx.update).toHaveBeenCalledWith(mockPosts);
+      expect(updateChain.set).toHaveBeenCalledWith({
+        profileId: null,
+        queueId: null,
+      });
+      expect(tx.select.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.update.mock.invocationCallOrder[0],
+      );
+      expect(tx.delete).toHaveBeenNthCalledWith(1, mockQueues);
+      expect(queueDeleteChain.returning).toHaveBeenCalledWith({ id: mockQueues.id });
+      expect(tx.delete).toHaveBeenNthCalledWith(2, mockSocialProfiles);
+    });
+
+    it('returns false when profile does not exist', async () => {
+      const { db } = createDeleteProfileDb({ deletedProfiles: [] });
+
+      await expect(deleteProfile(db, USER_ID, PROFILE_ID)).resolves.toBe(false);
+    });
+
+    it('blocks deletion before partial cleanup when any in-flight post exists', async () => {
+      const { db, tx } = createDeleteProfileDb({
+        inFlightPosts: [{ id: 'queued-post' }],
+        detachedPosts: [{ id: 'scheduled-post' }],
+        deletedQueues: [{ id: 'queue-1' }],
+      });
+
+      await expect(deleteProfile(db, USER_ID, PROFILE_ID)).rejects.toMatchObject({
+        statusCode: 409,
+      });
+      expect(tx.update).not.toHaveBeenCalled();
+      expect(tx.delete).not.toHaveBeenCalled();
+    });
   });
 });
