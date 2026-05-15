@@ -7,7 +7,7 @@ export type Platform = 'twitter' | 'linkedin' | 'facebook';
 export interface DeletePreview {
   drafts: number;
   scheduled: number;
-  queueMemberships: number;
+  ownedQueues: number;
   tagsLosingLastUse: number;
   inFlight: number;
 }

@@ -51,6 +51,26 @@ describe('errorHandler middleware', () => {
     expect(res.body.error).toBe('This post was modified elsewhere.');
   });
 
+  it('includes AppError subclass code when present', async () => {
+    class TestServiceError extends AppError {
+      public readonly code = 'profile_delete_failed';
+    }
+
+    const app = createTestApp();
+    app.get('/fail', (_req, _res, next) => {
+      next(new TestServiceError('Could not delete profile.', 500));
+    });
+    app.use(errorHandler);
+
+    const res = await request(app).get('/fail');
+
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({
+      error: 'Could not delete profile.',
+      code: 'profile_delete_failed',
+    });
+  });
+
   it('returns 500 for generic errors', async () => {
     const app = createTestApp();
     app.get('/fail', (_req, _res, next) => {

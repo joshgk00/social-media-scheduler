@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
+import { Router, type NextFunction } from 'express';
 import { and, eq } from 'drizzle-orm';
 import {
   createProfileSchema,
@@ -7,6 +8,7 @@ import {
 } from '@sms/shared';
 import type { Db } from '@sms/db';
 import { socialProfiles } from '@sms/db';
+import { createLogger } from '@sms/shared/logger';
 
 import {
   createProfile,
@@ -21,6 +23,13 @@ import { checkTwitterBudgetWithDb } from '../services/rate-limit.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { profileLimiter } from '../middleware/rate-limiter.js';
 import { validateUuidParam } from '../middleware/validation.js';
+
+const logger = createLogger('profiles-router');
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requestCorrelationId(req: { id?: string }): string {
+  return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
+}
 
 interface ProfilesDependencies {
   db: Db;
@@ -63,10 +72,11 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
     res.json(profile);
   });
 
-  router.delete('/api/profiles/:id', requireAuth, async (req, res) => {
+  router.delete('/api/profiles/:id', requireAuth, async (req, res, next: NextFunction) => {
     const profileId = validateUuidParam(req.params.id as string);
+    const userId = req.session.userId!;
     try {
-      const isDeleted = await deleteProfile(db, req.session.userId!, profileId);
+      const isDeleted = await deleteProfile(db, userId, profileId);
       if (!isDeleted) {
         res.status(404).json({ error: 'Profile not found' });
         return;
@@ -77,7 +87,17 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
-      throw err;
+      const correlationId = requestCorrelationId(req as { id?: string });
+      (req as { id?: string }).id = correlationId;
+      logger.error(
+        { err, profileId, userId, correlationId },
+        'Profile delete failed',
+      );
+      next(new ProfileServiceError(
+        'Could not delete profile. Try again or contact support with this request ID.',
+        500,
+        'profile_delete_failed',
+      ));
     }
   });
 
