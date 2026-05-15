@@ -276,7 +276,27 @@ Use these entry points:
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
 <!-- GSD:workflow-end -->
 
+## Backlog Workflow
 
+[`BACKLOG.md`](./BACKLOG.md) at the repo root is the single index of pending work — open GitHub issues, locked refactor designs, and deferred candidates. Keep it aligned with `gh issue list` so an automated workflow can read one ordered queue.
+
+**The flow is bi-directional. Whenever a concrete unit of work is identified — during grilling sessions, architecture reviews, ad-hoc discussions, or in response to a user request — create the GitHub issue *and* add the BACKLOG.md row in the same step.** Don't leave actionable work floating in chat history or in a doc only. If a discussion produces "this should be its own PR / change" as an outcome, that outcome becomes an issue before the conversation moves on.
+
+**When creating a GitHub issue**, also add a corresponding row to `BACKLOG.md`. Row format:
+
+```md
+- [ ] **gh#NN** — Issue title (one line)
+```
+
+Place the row under:
+- `## Next up` → `P0` if it's a production blocker, `P1` if it's a security or infra-correctness issue.
+- `## Open issues — by category` → the matching subsection (Bugs / Performance / Refactoring / Tests / Enhancements) otherwise.
+
+**When closing a GitHub issue**, flip `[ ]` → `[x]` on the row (do not delete — leaves a record).
+
+**When deferring a GitHub issue**, flip `[ ]` → `[-]` and append a brief reason: `*pending X*`.
+
+**Architectural refactor rows** (`R1.1`, `R2.3`, etc.) follow the same lifecycle, but their identifier comes from the candidate they belong to. When a refactor PR merges, flip its row and link the PR number: `[x] **R1.1** — … (PR #NN)`.
 
 <!-- GSD:profile-start -->
 ## Developer Profile
