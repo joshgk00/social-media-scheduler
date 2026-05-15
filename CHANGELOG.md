@@ -4,6 +4,38 @@ All notable changes to the Social Media Scheduler are recorded here. Format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-05-14
+
+Hotfix for the first-deploy CSRF / session-cookie failure surfaced by
+the v1.0.0 production deploy. Without this patch, ANY POST behind a
+TLS-terminating reverse proxy returns `403 invalid csrf token` —
+including `/api/auth/setup`, blocking initial account creation.
+
+### Fixed
+
+- **Trust-proxy + X-Forwarded-Proto passthrough** (#50) — `packages/api/src/app.ts`
+  now trusts only loopback and Docker's private proxy range so Express
+  honors `X-Forwarded-Proto` from the bundled nginx without accepting
+  spoofed forwarded headers from arbitrary clients. Secure session and
+  CSRF cookies now actually get set in production. `nginx/nginx.conf`
+  overwrites `X-Forwarded-For` with `$remote_addr` and accepts only
+  `http` / `https` `X-Forwarded-Proto` values from the external reverse
+  proxy, falling back to `$scheme` otherwise.
+  Regression tests in `packages/api/src/__tests__/middleware.test.ts`
+  pin the configuration.
+
+### Operator note for v1.0.0 → v1.0.1
+
+External reverse proxies in front of the LXC should already be setting
+`X-Forwarded-Proto: https` — Cloudflare Tunnel, Caddy, and Traefik do
+this by default. Custom nginx LAN reverse proxies need:
+
+```nginx
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+To upgrade in place: `git pull && git checkout v1.0.1 && docker compose up -d --build`.
+
 ## [1.0.0] — 2026-05-14
 
 First production release. Brings the self-hosted scheduler from empty
@@ -138,4 +170,5 @@ Initial deployment guidance:
 4. Back up `ENCRYPTION_KEY` out-of-band: losing it bricks every
    connected social profile.
 
+[1.0.1]: https://github.com/joshgk00/social-media-scheduler/releases/tag/v1.0.1
 [1.0.0]: https://github.com/joshgk00/social-media-scheduler/releases/tag/v1.0.0

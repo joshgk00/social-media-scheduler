@@ -50,6 +50,8 @@ interface AppDependencies {
   transcodeQueue?: Queue;
 }
 
+const TRUSTED_PROXY_CIDRS = ['loopback', '172.16.0.0/12'];
+
 export function createApp({
   redis,
   sql,
@@ -62,6 +64,13 @@ export function createApp({
   transcodeQueue,
 }: AppDependencies) {
   const app = express();
+
+  // Trust only loopback test/dev callers and the Docker private range where
+  // the bundled nginx reaches the API. This lets Express honor nginx's
+  // X-Forwarded-* headers for secure-cookie detection while avoiding the
+  // "trust any immediate hop" behavior that lets arbitrary clients spoof
+  // req.ip and bypass per-IP rate limiters. See issue #50.
+  app.set('trust proxy', TRUSTED_PROXY_CIDRS);
 
   app.use(correlationId);
   app.use(httpLogger);

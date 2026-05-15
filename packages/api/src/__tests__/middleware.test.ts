@@ -1,14 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import { createMockRedis } from './helpers/mock-redis.js';
-
-function createMockSql() {
-  return Object.assign(
-    (strings: TemplateStringsArray) => Promise.resolve([{ '?column?': 1 }]),
-    { end: vi.fn() },
-  );
-}
+import { createMockSql } from './helpers/mock-sql.js';
 
 function createTestApp() {
   return createApp({
@@ -21,9 +16,40 @@ function createTestApp() {
   });
 }
 
+function appWithCleanRedis(appFactory = createApp) {
+  return appFactory({
+    redis: createMockRedis(),
+    sql: createMockSql(),
+    db: {} as any,
+    sessionSecret: 'test-secret-that-is-long-enough-for-session',
+  });
+}
+
+async function appWithFreshEnv(nodeEnv: 'development' | 'production') {
+  vi.resetModules();
+  vi.stubEnv('NODE_ENV', nodeEnv);
+  vi.stubEnv('CSRF_SECRET', 'a'.repeat(64));
+  const { createApp: createFreshApp } = await import('../app.js');
+  return appWithCleanRedis(createFreshApp);
+}
+
+function getSetCookies(res: { headers: Record<string, string | string[] | undefined> }) {
+  const setCookies = res.headers['set-cookie'];
+  if (!setCookies) return [];
+  return Array.isArray(setCookies) ? setCookies : [setCookies];
+}
+
+function findCookie(cookies: string[], name: string) {
+  return cookies.find((cookie) => cookie.startsWith(`${name}=`));
+}
+
 describe('Middleware', () => {
   beforeEach(() => {
-    process.env.CSRF_SECRET = 'a'.repeat(64);
+    vi.stubEnv('CSRF_SECRET', 'a'.repeat(64));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('responses include X-Request-Id header with UUID format', async () => {
@@ -67,5 +93,108 @@ describe('Middleware', () => {
       .set('X-Request-Id', customId);
 
     expect(res.headers['x-request-id']).toBe(customId);
+  });
+});
+
+describe('trust proxy (issue #50)', () => {
+  beforeEach(() => {
+    vi.stubEnv('CSRF_SECRET', 'a'.repeat(64));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('enables `trust proxy` so X-Forwarded-Proto is honored behind a reverse proxy', () => {
+    const app = createTestApp();
+    // Express normalizes any non-false `trust proxy` setting into a function
+    // and stores the original at `'trust proxy'` plus the resolved fn at
+    // `'trust proxy fn'`. Both must be set when trust-proxy is enabled.
+    expect(app.get('trust proxy')).not.toBe(false);
+    expect(app.get('trust proxy fn')).toBeDefined();
+    expect(typeof app.get('trust proxy fn')).toBe('function');
+  });
+
+  it('trust-proxy fn accepts only loopback and the bundled Docker proxy range', () => {
+    // Express stores trust-proxy as a compiled function `(addr, hopIdx) => boolean`.
+    // The bundled nginx reaches the API from Docker's private 172.16/12
+    // range; arbitrary LAN or sidecar sources should not be able to forge
+    // X-Forwarded-* and affect req.ip/rate-limit keys.
+    const app = createTestApp();
+    const trustFn = app.get('trust proxy fn') as (
+      addr: string,
+      hopIdx: number,
+    ) => boolean;
+    expect(typeof trustFn).toBe('function');
+    expect(trustFn('127.0.0.1', 0)).toBe(true);
+    expect(trustFn('172.18.0.5', 0)).toBe(true);
+    expect(trustFn('10.0.0.1', 0)).toBe(false);
+    expect(trustFn('192.168.1.10', 0)).toBe(false);
+  });
+
+  it('nginx overwrites spoofable forwarded headers before proxying to the API', () => {
+    const prodConfig = readFileSync(new URL('../../../../nginx/nginx.conf', import.meta.url), 'utf8');
+    const devConfig = readFileSync(new URL('../../../../nginx/nginx.dev.conf', import.meta.url), 'utf8');
+
+    expect(prodConfig).not.toContain('$proxy_add_x_forwarded_for');
+    expect(devConfig).not.toContain('$proxy_add_x_forwarded_for');
+    expect(prodConfig.match(/proxy_set_header X-Forwarded-For \$remote_addr;/g)).toHaveLength(4);
+    expect(devConfig.match(/proxy_set_header X-Forwarded-For \$remote_addr;/g)).toHaveLength(5);
+    expect(prodConfig).toContain('default $scheme;');
+    expect(prodConfig).toContain('"http"  http;');
+    expect(prodConfig).toContain('"https" https;');
+  });
+
+  it('issues session and CSRF cookies with Secure flag when X-Forwarded-Proto: https in production', async () => {
+    const app = await appWithFreshEnv('production');
+    const res = await request(app)
+      .get('/api/auth/csrf-token')
+      .set('X-Forwarded-Proto', 'https');
+    const cookies = getSetCookies(res);
+    const sessionCookie = findCookie(cookies, 'sms.sid');
+    const csrfCookie = findCookie(cookies, '__csrf');
+
+    expect(sessionCookie).toBeDefined();
+    expect(csrfCookie).toBeDefined();
+    expect(sessionCookie).toMatch(/;\s*Secure(?:;|$)/);
+    expect(csrfCookie).toMatch(/;\s*Secure(?:;|$)/);
+  });
+
+  it('does NOT issue the secure session cookie over plain HTTP in production (no leak)', async () => {
+    // Negative case for the original production bug: with X-Forwarded-Proto:
+    // http and cookie.secure:true, express-session refuses to set the cookie
+    // at all — exactly the production failure mode that motivated issue #50.
+    // The fix is upstream: an external reverse proxy MUST forward
+    // X-Forwarded-Proto: https for cookies to flow. This test pins the safety
+    // semantic so a misconfigured proxy never silently exposes the cookie
+    // over plain HTTP.
+    const app = await appWithFreshEnv('production');
+    const res = await request(app)
+      .get('/health')
+      .set('X-Forwarded-Proto', 'http');
+    const sessionCookie = findCookie(getSetCookies(res), 'sms.sid');
+    expect(sessionCookie).toBeUndefined();
+  });
+
+  it('does NOT issue the secure session cookie in production when X-Forwarded-Proto is absent', async () => {
+    const app = await appWithFreshEnv('production');
+    const res = await request(app).get('/health');
+    const sessionCookie = findCookie(getSetCookies(res), 'sms.sid');
+    expect(sessionCookie).toBeUndefined();
+  });
+
+  it('issues non-Secure session and CSRF cookies in development even when X-Forwarded-Proto is https', async () => {
+    const app = await appWithFreshEnv('development');
+    const res = await request(app)
+      .get('/api/auth/csrf-token')
+      .set('X-Forwarded-Proto', 'https');
+    const cookies = getSetCookies(res);
+    const sessionCookie = findCookie(cookies, 'sms.sid');
+    const csrfCookie = findCookie(cookies, '__csrf');
+
+    expect(sessionCookie).toBeDefined();
+    expect(csrfCookie).toBeDefined();
+    expect(sessionCookie).not.toMatch(/;\s*Secure(?:;|$)/);
+    expect(csrfCookie).not.toMatch(/;\s*Secure(?:;|$)/);
   });
 });
