@@ -50,6 +50,8 @@ interface AppDependencies {
   transcodeQueue?: Queue;
 }
 
+const TRUSTED_PROXY_CIDRS = ['loopback', '172.16.0.0/12'];
+
 export function createApp({
   redis,
   sql,
@@ -63,17 +65,12 @@ export function createApp({
 }: AppDependencies) {
   const app = express();
 
-  // Trust the immediately-upstream proxy (the bundled nginx in the docker
-  // network) so Express reads `req.secure` and `req.ip` from the X-Forwarded-*
-  // headers it sets. Required for production deployments behind a TLS-
-  // terminating reverse proxy — without this, the session and CSRF cookies
-  // (both `cookie.secure: true` in production) silently never get set,
-  // every request gets a fresh session, and CSRF double-submit verification
-  // always fails. The value `1` trusts exactly one hop (nginx); the bundled
-  // nginx is responsible for honoring/passing whatever the external reverse
-  // proxy already forwarded, so this stays correct under chained proxies
-  // (Cloudflare → LAN reverse proxy → bundled nginx → api). See issue #50.
-  app.set('trust proxy', 1);
+  // Trust only loopback test/dev callers and the Docker private range where
+  // the bundled nginx reaches the API. This lets Express honor nginx's
+  // X-Forwarded-* headers for secure-cookie detection while avoiding the
+  // "trust any immediate hop" behavior that lets arbitrary clients spoof
+  // req.ip and bypass per-IP rate limiters. See issue #50.
+  app.set('trust proxy', TRUSTED_PROXY_CIDRS);
 
   app.use(correlationId);
   app.use(httpLogger);

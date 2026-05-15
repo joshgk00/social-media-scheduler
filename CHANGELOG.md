@@ -14,13 +14,13 @@ including `/api/auth/setup`, blocking initial account creation.
 ### Fixed
 
 - **Trust-proxy + X-Forwarded-Proto passthrough** (#50) — `packages/api/src/app.ts`
-  now calls `app.set('trust proxy', 1)` so Express honors `X-Forwarded-Proto`
-  set by the immediately-upstream nginx; secure session and CSRF cookies
-  now actually get set in production. `nginx/nginx.conf` no longer
-  overwrites `X-Forwarded-Proto` with `$scheme` — it passes through what
-  the external reverse proxy (Cloudflare Tunnel / Caddy / Traefik /
-  external nginx) already forwarded, falling back to `$scheme` only when
-  the upstream chain didn't send the header at all (direct LAN access).
+  now trusts only loopback and Docker's private proxy range so Express
+  honors `X-Forwarded-Proto` from the bundled nginx without accepting
+  spoofed forwarded headers from arbitrary clients. Secure session and
+  CSRF cookies now actually get set in production. `nginx/nginx.conf`
+  overwrites `X-Forwarded-For` with `$remote_addr` and accepts only
+  `http` / `https` `X-Forwarded-Proto` values from the external reverse
+  proxy, falling back to `$scheme` otherwise.
   Regression tests in `packages/api/src/__tests__/middleware.test.ts`
   pin the configuration.
 
