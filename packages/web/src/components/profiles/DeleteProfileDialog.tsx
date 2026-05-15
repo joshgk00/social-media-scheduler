@@ -38,7 +38,7 @@ function buildCascadeLines(preview: DeletePreview): CascadeLine[] {
     },
     {
       count: preview.queueMemberships,
-      copy: `${preview.queueMemberships} queue memberships will be removed`,
+      copy: `${preview.queueMemberships} queues will be deleted`,
     },
     {
       count: preview.tagsLosingLastUse,

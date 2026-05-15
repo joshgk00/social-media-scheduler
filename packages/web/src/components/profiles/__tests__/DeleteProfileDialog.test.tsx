@@ -82,9 +82,7 @@ describe('DeleteProfileDialog', () => {
 
     await screen.findByText('2 draft posts will be deleted');
     expect(screen.getByText('1 scheduled posts will be deleted')).toBeInTheDocument();
-    expect(
-      screen.getByText('3 queue memberships will be removed'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('3 queues will be deleted')).toBeInTheDocument();
     // Tags line hidden (zero count).
     expect(
       screen.queryByText(/tags will have no remaining profile/),

@@ -3,7 +3,7 @@ import { encrypt, validateEncryptionKey } from '@sms/shared/encryption';
 import { AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
-import { socialProfiles, posts } from '@sms/db';
+import { socialProfiles, posts, queues } from '@sms/db';
 import { TwitterApi } from 'twitter-api-v2';
 import { OAuthServiceError, MismatchedAccountError } from './oauth.service.js';
 
@@ -41,6 +41,7 @@ export interface DeletePreview {
 }
 
 const logger = createLogger('profile-service');
+const IN_FLIGHT_STATES = ['queued', 'publishing', 'auto_destructing'] as const;
 
 // Subclass exists so structured logs show 'ProfileServiceError' instead of 'AppError'.
 // All behavior comes from AppError; the subclass adds no fields or methods.
@@ -304,8 +305,6 @@ export async function getProfileById(db: Db, userId: string, profileId: string) 
 }
 
 export async function deleteProfile(db: Db, userId: string, profileId: string): Promise<boolean> {
-  const IN_FLIGHT_STATES = ['queued', 'publishing', 'auto_destructing'] as const;
-
   return db.transaction(async (tx) => {
     const inFlightPosts = await tx
       .select({ id: posts.id })
@@ -328,6 +327,27 @@ export async function deleteProfile(db: Db, userId: string, profileId: string): 
       );
     }
 
+    const detachedPosts = await tx
+      .update(posts)
+      .set({ profileId: null, queueId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(posts.profileId, profileId),
+          eq(posts.userId, userId),
+        ),
+      )
+      .returning({ id: posts.id });
+
+    const deletedQueues = await tx
+      .delete(queues)
+      .where(
+        and(
+          eq(queues.profileId, profileId),
+          eq(queues.userId, userId),
+        ),
+      )
+      .returning({ id: queues.id });
+
     const deleted = await tx
       .delete(socialProfiles)
       .where(
@@ -337,6 +357,18 @@ export async function deleteProfile(db: Db, userId: string, profileId: string): 
         ),
       )
       .returning({ id: socialProfiles.id });
+
+    if (deleted.length > 0) {
+      logger.info(
+        {
+          profileId,
+          userId,
+          detachedPostCount: detachedPosts.length,
+          deletedQueueCount: deletedQueues.length,
+        },
+        'Profile deleted',
+      );
+    }
 
     return deleted.length > 0;
   });
@@ -648,8 +680,6 @@ export async function updateProfileMetadata(
   return refreshed;
 }
 
-const IN_FLIGHT_STATES = ['queued', 'publishing', 'auto_destructing'] as const;
-
 // GET /api/profiles/:id/delete-preview handler path. Counts are all
 // ownership-scoped via user_id in the WHERE clause. Returns zeros (never
 // throws) when no matches — the endpoint is idempotent and safe to call
@@ -681,17 +711,15 @@ export async function getDeletePreview(
       ),
     );
 
-  // Queue membership is modeled as posts.queueId IS NOT NULL (no separate
-  // queue_posts join table). We count distinct queue rows so a queue holding
-  // many posts shows as a single "queue membership".
+  // Queue ownership is modeled by queues.profileId. Count queue definitions
+  // directly so empty queues are visible in the destructive-action preview.
   const [queueMembershipsRow] = await db
-    .select({ count: sql<number>`count(DISTINCT ${posts.queueId})::int` })
-    .from(posts)
+    .select({ count: sql<number>`count(*)::int` })
+    .from(queues)
     .where(
       and(
-        eq(posts.profileId, profileId),
-        eq(posts.userId, userId),
-        sql`${posts.queueId} IS NOT NULL`,
+        eq(queues.profileId, profileId),
+        eq(queues.userId, userId),
       ),
     );
 

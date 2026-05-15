@@ -322,6 +322,22 @@ describe('profiles routes', () => {
       expect(res.status).toBe(409);
       expect(res.body.error).toContain('in-flight posts');
     });
+
+    it('returns a stable error code and correlation id for unexpected delete failures', async () => {
+      mockDeleteProfile.mockRejectedValueOnce(new Error('foreign key violation'));
+      const agent = await authenticatedAgent();
+
+      const res = await agent
+        .delete(`/api/profiles/${PROFILE_UUID}`)
+        .set('x-request-id', 'delete-profile-request-id');
+
+      expect(res.status).toBe(500);
+      expect(res.body).toMatchObject({
+        error: 'Could not delete profile. Try again or contact support with this request ID.',
+        code: 'profile_delete_failed',
+        correlationId: 'delete-profile-request-id',
+      });
+    });
   });
 
   // Phase 7 Plan 05 — PATCH metadata + delete-preview + extended GET list
