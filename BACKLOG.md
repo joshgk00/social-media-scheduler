@@ -20,9 +20,9 @@ Top-of-queue. An automated workflow should pull from here first.
 
 ### P0 — Production blockers
 
-- [~] **gh#54** — Profile edit returns 500 (`Couldn't save profile: Internal server error`) *(in worktree `.claude/worktrees/54-profile-edit-returns-500-couldn-t-save-profile-int/`)*
+- [x] **gh#54** — Profile edit returns 500 (`Couldn't save profile: Internal server error`) *(merged in #77 / 93510a0)*
 - [x] **gh#53** — Profile delete returns 500 (`Couldn't delete profile: Internal server error`) *(merged in cbde4a0)*
-- [ ] **gh#49** — Prod docker-compose.yml doesn't pass OAuth/notification env vars to api+worker containers
+- [x] **gh#49** — Prod docker-compose.yml doesn't pass OAuth/notification env vars to api+worker containers
 
 ### P1 — Security & infra correctness
 
@@ -122,6 +122,7 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 
 ### Refactoring / type safety
 
+- [ ] **gh#78** — Express Request module augmentation for `req.id` to remove ad-hoc type casts *(follow-up from PR #77 review)*
 - [ ] **gh#10** — Split `media.service.ts` god module
 - [ ] **gh#11** — Move `@aws-sdk/client-s3` out of `@sms/shared`
 - [-] **gh#14** — Extract shared Twitter client factory from publish/delete services *(superseded by R1.5 / gh#60 — will close on that PR's merge)*
@@ -139,6 +140,8 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 - [ ] **gh#41** — Phase 11 follow-up: SnippetPicker arrow-nav + Enter regression test
 - [ ] **gh#42** — Phase 11 follow-up: calendar today-cell highlighting regression test
 - [ ] **gh#43** — Phase 11 follow-up: calendar conflict tooltip interaction regression test
+- [ ] **gh#79** — Assert handler-level + central log both fire on PATCH 500 (prevent silent regression) *(follow-up from PR #77 review)*
+- [ ] **gh#80** — Refactor `error-handler.test.ts` — hoist `logger.error` spy setup to helper or `beforeEach` *(follow-up from PR #77 review)*
 
 ### Enhancements / config
 
