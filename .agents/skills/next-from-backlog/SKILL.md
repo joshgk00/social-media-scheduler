@@ -106,12 +106,14 @@ Derive a slug from the issue title:
 - Replace any non-alphanumeric character with `-`
 - Collapse runs of `-`
 - Trim trailing `-`
-- Truncate to 50 characters max, then trim trailing `-` again
+- Truncate to 50 characters max
+- **Trim back to the last `-` boundary** so the slug ends at a complete token rather than mid-word. If there's no `-` in the first 50 characters (single very long word), keep the truncated form as-is.
+- Trim any trailing `-` produced by the boundary trim.
 
 Final branch name: `{gh-num}-{slug}`. Examples:
 
-- gh#54 "Profile edit returns 500 ..." → `54-profile-edit-returns-500`
-- gh#56 "R1.1 — Add Publisher interface + PublishFailure to @sms/shared" → `56-add-publisher-interface-publishfailure-to-sms-shared`
+- gh#54 `Profile edit returns 500 "Couldn't save profile: Internal server error"` → after 50-char truncate `profile-edit-returns-500-couldn-t-save-profile-int` → after boundary trim → `54-profile-edit-returns-500-couldn-t-save-profile`
+- gh#56 `R1.1 — Add Publisher interface + PublishFailure to @sms/shared` → `56-add-publisher-interface-publishfailure-to-sms`
 
 This pattern uses the GitHub issue number in place of the ADO work-item number from the user's global git-conventions rule.
 
