@@ -12,6 +12,7 @@
 // 'auto_destructing', rethrows for BullMQ retry (D-12).
 
 import { sql, eq } from 'drizzle-orm';
+import { UnrecoverableError } from 'bullmq';
 import { ApiResponseError } from 'twitter-api-v2';
 import { posts, socialProfiles } from '@sms/db';
 import { transitionPost, type PostStatus } from '@sms/shared';
@@ -123,12 +124,14 @@ export async function autoDestructPost(
     }
 
     // Error classification: 401/403 are credential failures that won't
-    // resolve on retry -- throw immediately so BullMQ treats it as a
-    // permanent failure. 429 and 5xx are transient -- rethrow to retry.
+    // resolve on retry -- throw UnrecoverableError so BullMQ skips the
+    // remaining retry attempts (D-12 cadence would otherwise burn ~36
+    // minutes before the failed listener fires). 429 and 5xx are
+    // transient -- rethrow to retry.
     if (deleteErr instanceof ApiResponseError) {
       const httpStatus = deleteErr.code;
       if (httpStatus === 401 || httpStatus === 403) {
-        throw new Error(
+        throw new UnrecoverableError(
           `Auto-destruct failed: credentials invalid or revoked (HTTP ${httpStatus})`,
         );
       }

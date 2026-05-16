@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Queue, Job } from 'bullmq';
+import { UnrecoverableError, type Queue, type Job } from 'bullmq';
 import type { WorkerDb } from '../db.js';
 
 vi.mock('@sms/shared/logger', () => ({
@@ -200,6 +200,63 @@ describe('Auto-Destruct System', () => {
       // Pitfall 1: Must use job payload platformPostId, not DB row's
       expect(callDelete).toHaveBeenCalledWith(profile, 'correct-tweet-from-job');
     });
+
+    it.each([401, 403] as const)(
+      'throws UnrecoverableError on HTTP %i so BullMQ skips remaining retries',
+      async (httpStatus) => {
+        const { autoDestructPost } = await import('../auto-destruct-lifecycle.service.js');
+        const profile = createMockProfile();
+
+        const txMock = {
+          execute: vi.fn().mockResolvedValue([{
+            id: 'post-1',
+            status: 'published',
+            profile_id: 'profile-1',
+          }]),
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([profile]),
+            }),
+          }),
+          update: vi.fn().mockReturnValue({
+            set: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue(undefined),
+            }),
+          }),
+        };
+
+        const updateSetWhere = vi.fn().mockResolvedValue(undefined);
+        const updateSet = vi.fn().mockReturnValue({ where: updateSetWhere });
+        const outerUpdate = vi.fn().mockReturnValue({ set: updateSet });
+
+        const db = {
+          transaction: vi.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(txMock)),
+          update: outerUpdate,
+        } as unknown as WorkerDb;
+
+        const credentialError = new MockApiResponseError(
+          `Authorization failure (HTTP ${httpStatus})`,
+          { code: httpStatus },
+        );
+        const callDelete = vi.fn().mockRejectedValue(credentialError);
+
+        const rejection = autoDestructPost(db, {
+          postId: 'post-1',
+          platformPostId: 'tweet-revoked',
+          correlationId: 'corr-revoked',
+          callDelete,
+        });
+
+        await expect(rejection).rejects.toBeInstanceOf(UnrecoverableError);
+        await expect(rejection).rejects.toMatchObject({
+          name: 'UnrecoverableError',
+          message: `Auto-destruct failed: credentials invalid or revoked (HTTP ${httpStatus})`,
+        });
+
+        // failureReason still persisted before the throw so operators see context
+        expect(outerUpdate).toHaveBeenCalled();
+      },
+    );
 
     it('sets failureReason and rethrows on delete failure', async () => {
       const { autoDestructPost } = await import('../auto-destruct-lifecycle.service.js');
