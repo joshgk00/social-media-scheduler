@@ -483,6 +483,24 @@ describe('profiles routes', () => {
       expect(res.status).toBe(401);
     });
 
+    it('returns 500 with stable code and correlation id for unexpected update failures (gh#54)', async () => {
+      mockUpdateProfileMetadata.mockRejectedValueOnce(new Error('underlying driver failure'));
+      const agent = await authenticatedAgent();
+      const requestId = '550e8400-e29b-41d4-a716-446655440000';
+
+      const res = await agent
+        .patch(`/api/profiles/${PROFILE_UUID}`)
+        .set('x-request-id', requestId)
+        .send({ displayName: 'JS (deprecated)' });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toMatchObject({
+        error: 'Could not save profile. Try again or contact support with this request ID.',
+        code: 'profile_update_failed',
+        correlationId: requestId,
+      });
+    });
+
     it('returns 400 when :id is not a valid UUID', async () => {
       const agent = await authenticatedAgent();
 

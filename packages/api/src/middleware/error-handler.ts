@@ -4,7 +4,12 @@ import { logger } from './logger.js';
 
 export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
   const correlationId = (req as any).id || 'unknown';
-  logger.error({ err, correlationId }, 'Unhandled error');
+  // gh#54 acceptance: structured log MUST carry correlationId, route, and the
+  // underlying error class. `err` is serialized by pino's default error
+  // serializer (name, message, stack); `method` + `route` are explicit so
+  // grep-by-endpoint works without re-instrumenting.
+  const route = req.originalUrl || req.url;
+  logger.error({ err, correlationId, method: req.method, route }, 'Unhandled error');
 
   if (err instanceof AppError) {
     const code = (err as { code?: unknown }).code;

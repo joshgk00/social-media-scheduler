@@ -156,4 +156,30 @@ describe('errorHandler middleware', () => {
 
     expect(res.body.correlationId).toBe(customId);
   });
+
+  it('logs request method and route alongside correlationId (gh#54 acceptance)', async () => {
+    const logSpy = vi.spyOn(await import('../middleware/logger.js').then(m => m.logger), 'error');
+    const app = createTestApp();
+    app.patch('/api/profiles/:id', (_req, _res, next) => {
+      next(new Error('boom'));
+    });
+    app.use(errorHandler);
+
+    const customId = '550e8400-e29b-41d4-a716-446655440000';
+    await request(app)
+      .patch('/api/profiles/abc-123')
+      .set('X-Request-Id', customId);
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        correlationId: customId,
+        method: 'PATCH',
+        route: '/api/profiles/abc-123',
+        err: expect.any(Error),
+      }),
+      'Unhandled error',
+    );
+    logSpy.mockRestore();
+  });
+
 });
