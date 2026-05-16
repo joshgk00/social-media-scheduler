@@ -107,7 +107,7 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
   // Ownership lives in the UPDATE WHERE clause inside updateProfileMetadata
   // (no read-before-write race, T-07-06). CSRF is enforced by the
   // `doubleCsrfProtection` middleware already mounted in app.ts.
-  router.patch('/api/profiles/:id', requireAuth, async (req, res) => {
+  router.patch('/api/profiles/:id', requireAuth, async (req, res, next: NextFunction) => {
     const profileId = validateUuidParam(req.params.id as string);
     const userId = req.session.userId!;
 
@@ -133,7 +133,21 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
-      throw err;
+      // Mirror the DELETE handler: capture a correlationId, emit a structured
+      // log entry with the original error so future repros are diagnosable
+      // from logs alone (gh#54), then forward a typed 500 with a stable code
+      // so the client can surface a request-id to the user.
+      const correlationId = requestCorrelationId(req as { id?: string });
+      (req as { id?: string }).id = correlationId;
+      logger.error(
+        { err, profileId, userId, correlationId },
+        'Profile update failed',
+      );
+      next(new ProfileServiceError(
+        'Could not save profile. Try again or contact support with this request ID.',
+        500,
+        'profile_update_failed',
+      ));
     }
   });
 
