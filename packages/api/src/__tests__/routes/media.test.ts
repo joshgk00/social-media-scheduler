@@ -8,6 +8,11 @@ const mockProcessVideoUpload = vi.fn();
 const mockGetMediaStatus = vi.fn();
 const mockSoftDeleteMedia = vi.fn();
 const mockRetryTranscode = vi.fn();
+const mockUnlink = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('node:fs/promises', () => ({
+  unlink: (...args: unknown[]) => mockUnlink(...args),
+}));
 
 vi.mock('../../services/media.service.js', () => ({
   processImageUpload: (...args: unknown[]) => mockProcessImageUpload(...args),
@@ -255,6 +260,7 @@ describe('media routes', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Profile not found');
+      expect(mockUnlink).toHaveBeenCalledWith('/tmp/photo.jpg');
       expect(mockProcessImageUpload).not.toHaveBeenCalled();
       expect(mockProcessVideoUpload).not.toHaveBeenCalled();
     });
