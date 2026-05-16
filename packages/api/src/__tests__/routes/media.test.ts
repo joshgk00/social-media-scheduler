@@ -8,6 +8,11 @@ const mockProcessVideoUpload = vi.fn();
 const mockGetMediaStatus = vi.fn();
 const mockSoftDeleteMedia = vi.fn();
 const mockRetryTranscode = vi.fn();
+const mockUnlink = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('node:fs/promises', () => ({
+  unlink: (...args: unknown[]) => mockUnlink(...args),
+}));
 
 vi.mock('../../services/media.service.js', () => ({
   processImageUpload: (...args: unknown[]) => mockProcessImageUpload(...args),
@@ -73,8 +78,14 @@ function createTestApp(authenticated = true) {
     close: vi.fn().mockResolvedValue(undefined),
   } as unknown as Queue;
 
+  const createSelectChain = (rows: unknown[]) => ({
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue(rows),
+  });
+
   const mockDb: any = {
-    select: vi.fn(),
+    select: vi.fn().mockReturnValue(createSelectChain([{ id: '550e8400-e29b-41d4-a716-446655440000', platform: 'twitter' }])),
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -167,6 +178,12 @@ describe('media routes', () => {
           transcodeStatus: 'not_applicable',
         }),
       );
+      expect(mockProcessImageUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-id',
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+        }),
+      );
     });
 
     it('with valid video returns 201 with id, thumbnailUrl=null, transcodeStatus=pending', async () => {
@@ -207,6 +224,78 @@ describe('media routes', () => {
           transcodeStatus: 'pending',
         }),
       );
+      expect(mockProcessVideoUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-id',
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+        }),
+      );
+    });
+
+    it('returns 404 when the profile is not owned by the caller', async () => {
+      const { app, mockDb } = createTestApp();
+      mockDb.select.mockReturnValue({
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue([]),
+      });
+
+      const wrappedApp = withUpload(
+        app,
+        {
+          fieldname: 'file',
+          originalname: 'photo.jpg',
+          mimetype: 'image/jpeg',
+          size: 5000,
+          path: '/tmp/photo.jpg',
+        },
+        {
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+          platform: 'twitter',
+        },
+      );
+
+      const response = await request(wrappedApp)
+        .post('/api/media/upload');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Profile not found');
+      expect(mockUnlink).toHaveBeenCalledWith('/tmp/photo.jpg');
+      expect(mockProcessImageUpload).not.toHaveBeenCalled();
+      expect(mockProcessVideoUpload).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when the requested platform does not match the owned profile', async () => {
+      const { app, mockDb } = createTestApp();
+      mockDb.select.mockReturnValue({
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue([{ id: '550e8400-e29b-41d4-a716-446655440000', platform: 'linkedin' }]),
+      });
+
+      const wrappedApp = withUpload(
+        app,
+        {
+          fieldname: 'file',
+          originalname: 'photo.jpg',
+          mimetype: 'image/jpeg',
+          size: 5000,
+          path: '/tmp/photo.jpg',
+        },
+        {
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+          platform: 'twitter',
+        },
+      );
+
+      const response = await request(wrappedApp)
+        .post('/api/media/upload');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe("Profile is on 'linkedin', not 'twitter'.");
+      expect(mockUnlink).toHaveBeenCalledWith('/tmp/photo.jpg');
+      expect(mockProcessImageUpload).not.toHaveBeenCalled();
+      expect(mockProcessVideoUpload).not.toHaveBeenCalled();
     });
 
     it('with oversized file returns 400 with error message', async () => {
@@ -279,6 +368,11 @@ describe('media routes', () => {
           transcodeStatus: 'processing',
         }),
       );
+      expect(mockGetMediaStatus).toHaveBeenCalledWith(
+        expect.anything(),
+        'test-user-id',
+        '550e8400-e29b-41d4-a716-446655440001',
+      );
     });
   });
 
@@ -296,6 +390,12 @@ describe('media routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.transcodeStatus).toBe('pending');
+      expect(mockRetryTranscode).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'test-user-id',
+        '550e8400-e29b-41d4-a716-446655440001',
+      );
     });
 
     it('returns 404 for non-failed media', async () => {
@@ -322,7 +422,11 @@ describe('media routes', () => {
         .delete('/api/media/550e8400-e29b-41d4-a716-446655440001');
 
       expect(response.status).toBe(204);
-      expect(mockSoftDeleteMedia).toHaveBeenCalled();
+      expect(mockSoftDeleteMedia).toHaveBeenCalledWith(
+        expect.anything(),
+        'test-user-id',
+        '550e8400-e29b-41d4-a716-446655440001',
+      );
     });
   });
 });

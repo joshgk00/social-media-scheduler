@@ -90,6 +90,7 @@ describe('media.service', () => {
       tempFilePath: '/tmp/test-file.jpg',
       originalName: 'photo.jpg',
       mimeType: 'image/jpeg',
+      userId: 'user-1',
       profileId: '550e8400-e29b-41d4-a716-446655440000',
       platform: 'twitter',
       storage: null as any,
@@ -203,6 +204,13 @@ describe('media.service', () => {
         }),
       );
     });
+
+    it('stores the owning user id on the media row', async () => {
+      await processImageUpload(baseParams);
+
+      const valuesCall = mockDb.insert.mock.results[0].value.values.mock.calls[0][0];
+      expect(valuesCall.userId).toBe('user-1');
+    });
   });
 
   describe('processVideoUpload', () => {
@@ -211,6 +219,7 @@ describe('media.service', () => {
       originalName: 'video.mp4',
       mimeType: 'video/mp4',
       fileSize: 10_000_000,
+      userId: 'user-1',
       profileId: '550e8400-e29b-41d4-a716-446655440000',
       storage: null as any,
       db: null as any,
@@ -260,6 +269,13 @@ describe('media.service', () => {
         }),
       );
     });
+
+    it('stores the owning user id on the video media row', async () => {
+      await processVideoUpload(baseParams);
+
+      const valuesCall = mockDb.insert.mock.results[0].value.values.mock.calls[0][0];
+      expect(valuesCall.userId).toBe('user-1');
+    });
   });
 
   describe('getMediaStatus', () => {
@@ -274,7 +290,7 @@ describe('media.service', () => {
       };
       mockDb.select.mockReturnValue(selectChain);
 
-      const result = await getMediaStatus(mockDb, 'media-1');
+      const result = await getMediaStatus(mockDb, 'user-1', 'media-1');
 
       expect(result).toEqual({
         id: 'media-1',
@@ -292,7 +308,7 @@ describe('media.service', () => {
       };
       mockDb.update.mockReturnValue(updateChain);
 
-      await softDeleteMedia(mockDb, 'media-1');
+      await softDeleteMedia(mockDb, 'user-1', 'media-1');
 
       expect(mockDb.update).toHaveBeenCalled();
       const setCall = updateChain.set.mock.calls[0][0];
@@ -312,7 +328,7 @@ describe('media.service', () => {
       };
       mockDb.update.mockReturnValue(updateChain);
 
-      const count = await softDeleteMediaForPost(mockDb, 'post-id-1');
+      const count = await softDeleteMediaForPost(mockDb, 'user-1', 'post-id-1');
 
       expect(mockDb.update).toHaveBeenCalled();
       expect(count).toBe(2);
@@ -339,7 +355,7 @@ describe('media.service', () => {
       };
       mockDb.update.mockReturnValue(updateChain);
 
-      const result = await retryTranscode(mockDb, mockQueue, 'media-1');
+      const result = await retryTranscode(mockDb, mockQueue, 'user-1', 'media-1');
 
       expect(result.transcodeStatus).toBe('pending');
       expect(mockQueue.add).toHaveBeenCalledWith(
@@ -362,7 +378,7 @@ describe('media.service', () => {
       mockDb.select.mockReturnValue(selectChain);
 
       await expect(
-        retryTranscode(mockDb, mockQueue, 'media-1'),
+        retryTranscode(mockDb, mockQueue, 'user-1', 'media-1'),
       ).rejects.toThrow();
     });
 
@@ -374,7 +390,7 @@ describe('media.service', () => {
       mockDb.select.mockReturnValue(selectChain);
 
       await expect(
-        retryTranscode(mockDb, mockQueue, 'nonexistent'),
+        retryTranscode(mockDb, mockQueue, 'user-1', 'nonexistent'),
       ).rejects.toThrow();
     });
   });
@@ -382,8 +398,13 @@ describe('media.service', () => {
   describe('associateMediaToPost', () => {
     it('sets postId + sortOrder for each media id', async () => {
       const mediaIds = ['media-1', 'media-2', 'media-3'];
+      const selectChain: any = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue(mediaIds.map((id) => ({ id }))),
+      };
+      mockDb.select.mockReturnValue(selectChain);
 
-      await associateMediaToPost(mockDb, 'post-id-1', mediaIds);
+      await associateMediaToPost(mockDb, 'user-1', 'post-id-1', mediaIds);
 
       // Should have called update for each media id directly (no inner transaction)
       expect(mockDb.update).toHaveBeenCalledTimes(3);
@@ -394,12 +415,31 @@ describe('media.service', () => {
       // are naturally excluded. We verify the update is called with the right
       // condition pattern (the service uses AND postId IS NULL).
       const mediaIds = ['media-1'];
+      const selectChain: any = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([{ id: 'media-1' }]),
+      };
+      mockDb.select.mockReturnValue(selectChain);
 
-      await associateMediaToPost(mockDb, 'post-id-1', mediaIds);
+      await associateMediaToPost(mockDb, 'user-1', 'post-id-1', mediaIds);
 
       expect(mockDb.update).toHaveBeenCalled();
       // The actual SQL condition includes isNull(postMedia.postId) -- verified
       // by the fact that the service code uses `isNull` in the where clause
+    });
+
+    it('rejects media ids not owned by the caller', async () => {
+      const selectChain: any = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockResolvedValue([{ id: 'media-1' }]),
+      };
+      mockDb.select.mockReturnValue(selectChain);
+
+      await expect(
+        associateMediaToPost(mockDb, 'user-1', 'post-id-1', ['media-1', 'other-user-media']),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 });
