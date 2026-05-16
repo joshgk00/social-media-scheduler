@@ -1,7 +1,7 @@
 ---
 slug: 26-web-non-root
 github_issue: 26
-status: in-progress
+status: complete
 created: 2026-05-16
 updated: 2026-05-16
 worktree: .claude/worktrees/26-security-web-production-docker-stage-runs-as-root

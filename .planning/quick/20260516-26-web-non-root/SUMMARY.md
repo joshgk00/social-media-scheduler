@@ -11,7 +11,7 @@ worktree: .claude/worktrees/26-security-web-production-docker-stage-runs-as-root
 
 ## What changed
 
-Five files. Net diff: pure infra — no application code or test code touched.
+**Five infra/runtime files** (Dockerfile, both nginx configs, both compose files). The PR diff also includes this PLAN.md plus its sibling SUMMARY.md under `.planning/quick/` — those are the audit-trail artifacts, not part of the runtime change. Net runtime diff: pure infra — no application code or test code touched.
 
 | File | Change |
 |---|---|
