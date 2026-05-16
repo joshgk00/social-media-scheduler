@@ -146,7 +146,7 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
     }
 
     if (input.mediaIds && input.mediaIds.length > 0) {
-      await associateMediaToPost(tx, insertedPost.id, input.mediaIds);
+      await associateMediaToPost(tx, userId, insertedPost.id, input.mediaIds);
     }
 
     return insertedPost;
@@ -316,10 +316,10 @@ export async function updatePost(
       await tx
         .update(postMedia)
         .set({ postId: null })
-        .where(eq(postMedia.postId, postId));
+        .where(and(eq(postMedia.postId, postId), eq(postMedia.userId, userId)));
 
       if (input.mediaIds.length > 0) {
-        await associateMediaToPost(tx, postId, input.mediaIds);
+        await associateMediaToPost(tx, userId, postId, input.mediaIds);
       }
     }
   });
@@ -339,7 +339,7 @@ export async function deletePost(
     // The SET NULL FK on post_media.postId nulls post_id when the post is deleted,
     // but deletedAt persists so the weekly cleanup worker finds and removes storage files.
     // Both operations share a transaction so a failure in either rolls back the other.
-    const softDeletedMediaCount = await softDeleteMediaForPost(tx, postId);
+    const softDeletedMediaCount = await softDeleteMediaForPost(tx, userId, postId);
     if (softDeletedMediaCount > 0) {
       logger.info({ postId, softDeletedMediaCount }, 'Soft-deleted media for post deletion');
     }
@@ -412,7 +412,7 @@ export async function getPostById(db: Db, userId: string, postId: string) {
       transcodeStatus: postMedia.transcodeStatus,
     })
     .from(postMedia)
-    .where(and(eq(postMedia.postId, post.id), isNull(postMedia.deletedAt)))
+    .where(and(eq(postMedia.postId, post.id), eq(postMedia.userId, userId), isNull(postMedia.deletedAt)))
     .orderBy(postMedia.sortOrder);
 
   return { ...post, tags: postTagRows, media: mediaRows };

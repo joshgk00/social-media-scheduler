@@ -24,7 +24,7 @@ const mockTags = makeTableStub('tags', ['id', 'name', 'color', 'userId', 'create
 const mockPostTags = makeTableStub('post_tags', ['postId', 'tagId']);
 const mockSocialProfiles = makeTableStub('social_profiles', ['id', 'userId']);
 const mockPostMedia = makeTableStub('post_media', [
-  'id', 'postId', 'filePath', 'fileName', 'mimeType', 'fileSize', 'width', 'height',
+  'id', 'userId', 'postId', 'filePath', 'fileName', 'mimeType', 'fileSize', 'width', 'height',
   'thumbnailPath', 'sortOrder', 'transcodeStatus', 'transcodeError', 'deletedAt', 'createdAt',
 ]);
 
@@ -460,6 +460,7 @@ describe('post.service', () => {
       expect(mockAssociateMediaToPost).toHaveBeenCalledTimes(1);
       expect(mockAssociateMediaToPost).toHaveBeenCalledWith(
         expect.anything(),
+        'user-1',
         'post-1',
         ['media-1', 'media-2'],
       );
@@ -658,6 +659,7 @@ describe('post.service', () => {
       expect(clearCall).toBeDefined();
       expect(mockAssociateMediaToPost).toHaveBeenCalledWith(
         expect.anything(),
+        'user-1',
         'post-1',
         ['media-3'],
       );
@@ -987,9 +989,10 @@ describe('post.service', () => {
     it('calls softDeleteMediaForPost before hard-deleting the post (Test 6)', async () => {
       const db = createDeleteMockDb({ deleteResult: [{ id: 'post-1' }] });
       await deletePost(db, 'user-1', 'post-1');
-      // softDeleteMediaForPost must have been called with the same tx handle and correct postId
+      // softDeleteMediaForPost must have been called with the same tx handle,
+      // owning user, and correct postId.
       expect(mockSoftDeleteMediaForPost).toHaveBeenCalledTimes(1);
-      expect(mockSoftDeleteMediaForPost).toHaveBeenCalledWith(db, 'post-1');
+      expect(mockSoftDeleteMediaForPost).toHaveBeenCalledWith(db, 'user-1', 'post-1');
       // hard-delete of the post row also ran
       expect(db.delete).toHaveBeenCalledTimes(1);
     });
