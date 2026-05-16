@@ -170,15 +170,49 @@ describe('errorHandler middleware', () => {
       .patch('/api/profiles/abc-123')
       .set('X-Request-Id', customId);
 
+    // Codex PR review (#77): the structured log records the matched route
+    // PATTERN, not the concrete URL — so capability tokens or UUIDs carried
+    // in path params never reach logs while the endpoint stays identifiable.
     expect(logSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         correlationId: customId,
         method: 'PATCH',
-        route: '/api/profiles/abc-123',
+        route: '/api/profiles/:id',
         err: expect.any(Error),
       }),
       'Unhandled error',
     );
+    logSpy.mockRestore();
+  });
+
+  it('logs the route pattern, not concrete path params — prevents URL-param secret leakage', async () => {
+    const logSpy = vi.spyOn(await import('../middleware/logger.js').then(m => m.logger), 'error');
+    const app = createTestApp();
+    app.get('/api/oauth/pending/:tempToken', (_req, _res, next) => {
+      next(new Error('redis down'));
+    });
+    app.use(errorHandler);
+
+    await request(app).get('/api/oauth/pending/SECRET-TOKEN-DO-NOT-LEAK');
+
+    const callArg = logSpy.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(callArg.route).toBe('/api/oauth/pending/:tempToken');
+    expect(String(callArg.route)).not.toContain('SECRET-TOKEN-DO-NOT-LEAK');
+    logSpy.mockRestore();
+  });
+
+  it('logs <unrouted> when no route matched, so 404 paths cannot leak secrets', async () => {
+    const logSpy = vi.spyOn(await import('../middleware/logger.js').then(m => m.logger), 'error');
+    const app = createTestApp();
+    // No routes defined; middleware throws before any route matches.
+    app.use((_req, _res, next) => next(new Error('boom from middleware')));
+    app.use(errorHandler);
+
+    await request(app).get('/some/random/path/with/maybe-a-secret');
+
+    const callArg = logSpy.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(callArg.route).toBe('<unrouted>');
+    expect(String(callArg.route)).not.toContain('maybe-a-secret');
     logSpy.mockRestore();
   });
 
