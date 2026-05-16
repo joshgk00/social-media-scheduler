@@ -74,12 +74,15 @@ services:
       context: .
       target: web-production
     ports:
-      - "${NGINX_PORT:-8080}:80"
+      # Container-internal port is 8080 (nginx runs as non-root and can't bind
+      # < 1024). Host-visible port stays 8080 by default so external callers
+      # are unaffected. gh#26.
+      - "${NGINX_PORT:-8080}:8080"
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
       interval: 15s
       timeout: 5s
       retries: 3
