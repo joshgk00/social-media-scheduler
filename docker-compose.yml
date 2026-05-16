@@ -28,6 +28,8 @@ services:
     build:
       context: .
       target: api-production
+    env_file:
+      - .env
     volumes:
       - media_data:/app/data/media
     environment:
@@ -52,6 +54,8 @@ services:
     build:
       context: .
       target: worker-production
+    env_file:
+      - .env
     volumes:
       - media_data:/app/data/media
     environment:
