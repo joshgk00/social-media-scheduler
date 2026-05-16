@@ -60,9 +60,22 @@ WORKDIR /app
 USER appuser
 CMD ["node", "dist/index.js"]
 
-# Web production image (nginx + built SPA assets)
-FROM nginx:1.27-alpine AS web-production
+# Web production image (nginx + built SPA assets).
+#
+# Uses the official non-root nginx variant (nginxinc/nginx-unprivileged)
+# rather than nginx:1.27-alpine + a manual addgroup/adduser. The variant
+# ships USER nginx (UID 101), listens on 8080 by default, writes pid to
+# /tmp/nginx.pid, and chowns runtime dirs for the nginx user — so the
+# manual chown footprint is gone.
+#
+# This deliberately deviates from the api/worker pattern (where we create
+# our own appuser:appgroup). The web container runs upstream nginx, not
+# our code, so using the upstream-blessed nginx user is the cleaner match.
+# gh#26 / CLAUDE.md "Containers: non-root user via USER directive."
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS web-production
+USER root
 RUN apk add --no-cache wget
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /app/packages/web/dist /usr/share/nginx/html
-EXPOSE 80
+USER nginx
+EXPOSE 8080

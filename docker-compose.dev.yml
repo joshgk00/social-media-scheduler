@@ -65,8 +65,11 @@ services:
   nginx:
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+    # Dev reuses the production web image (nginxinc/nginx-unprivileged) which
+    # listens on 8080 inside the container, so the host:container mapping
+    # targets 8080, not 80. gh#26.
     ports: !override
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8080:8080"
 
 volumes:
   web_node_modules:
