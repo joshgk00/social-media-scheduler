@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import type { Queue } from 'bullmq';
+import { and, eq } from 'drizzle-orm';
 import { PLATFORM_MEDIA_LIMITS } from '@sms/shared';
 import type { StorageBackend } from '@sms/shared/storage';
-import type { Db } from '@sms/db';
+import { socialProfiles, type Db } from '@sms/db';
 
 import {
   processImageUpload,
@@ -36,6 +37,7 @@ export function createMediaRouter({ db, storage, transcodeQueue }: MediaRouterDe
 
     const profileId = req.body.profileId as string;
     const platform = req.body.platform as string;
+    const userId = req.session.userId!;
 
     if (!profileId || !UUID_PATTERN.test(profileId)) {
       res.status(400).json({ error: 'A valid profileId is required.' });
@@ -44,6 +46,17 @@ export function createMediaRouter({ db, storage, transcodeQueue }: MediaRouterDe
 
     if (!platform || !VALID_PLATFORMS.has(platform)) {
       res.status(400).json({ error: `Platform must be one of: ${[...VALID_PLATFORMS].join(', ')}` });
+      return;
+    }
+
+    const [ownedProfile] = await db
+      .select({ id: socialProfiles.id })
+      .from(socialProfiles)
+      .where(and(eq(socialProfiles.id, profileId), eq(socialProfiles.userId, userId)))
+      .limit(1);
+
+    if (!ownedProfile) {
+      res.status(404).json({ error: 'Profile not found' });
       return;
     }
 
@@ -92,6 +105,7 @@ export function createMediaRouter({ db, storage, transcodeQueue }: MediaRouterDe
         tempFilePath: file.path,
         originalName: file.originalname,
         mimeType: file.mimetype,
+        userId,
         profileId,
         platform,
         storage,
@@ -106,6 +120,7 @@ export function createMediaRouter({ db, storage, transcodeQueue }: MediaRouterDe
       originalName: file.originalname,
       mimeType: file.mimetype,
       fileSize: file.size,
+      userId,
       profileId,
       storage,
       db,
@@ -116,7 +131,7 @@ export function createMediaRouter({ db, storage, transcodeQueue }: MediaRouterDe
 
   router.get('/:id/status', requireAuth, async (req, res) => {
     const mediaId = validateUuidParam(req.params.id as string);
-    const status = await getMediaStatus(db, mediaId);
+    const status = await getMediaStatus(db, req.session.userId!, mediaId);
 
     if (!status) {
       res.status(404).json({ error: 'Media not found' });
@@ -128,13 +143,13 @@ export function createMediaRouter({ db, storage, transcodeQueue }: MediaRouterDe
 
   router.post('/:id/retry', requireAuth, async (req, res) => {
     const mediaId = validateUuidParam(req.params.id as string);
-    const result = await retryTranscode(db, transcodeQueue, mediaId);
+    const result = await retryTranscode(db, transcodeQueue, req.session.userId!, mediaId);
     res.json(result);
   });
 
   router.delete('/:id', requireAuth, async (req, res) => {
     const mediaId = validateUuidParam(req.params.id as string);
-    await softDeleteMedia(db, mediaId);
+    await softDeleteMedia(db, req.session.userId!, mediaId);
     res.status(204).send();
   });
 

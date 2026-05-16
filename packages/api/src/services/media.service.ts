@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import sharp from 'sharp';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
 import { PLATFORM_MEDIA_LIMITS, JOB_NAMES, AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -45,6 +45,7 @@ interface ProcessImageParams {
   tempFilePath: string;
   originalName: string;
   mimeType: string;
+  userId: string;
   profileId: string;
   platform: string;
   storage: StorageBackend;
@@ -52,7 +53,7 @@ interface ProcessImageParams {
 }
 
 export async function processImageUpload(params: ProcessImageParams) {
-  const { tempFilePath, originalName, mimeType, profileId, platform, storage, db } = params;
+  const { tempFilePath, originalName, mimeType, userId, profileId, platform, storage, db } = params;
 
   if (!IMAGE_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix))) {
     throw new Error(`${originalName} is not a supported image type.`);
@@ -101,6 +102,7 @@ export async function processImageUpload(params: ProcessImageParams) {
     await storage.save(thumbnailKey, thumbnailBuffer, mimeType);
 
     const insertChain = db.insert(postMedia).values({
+      userId,
       postId: null,
       filePath: storageKey,
       fileName: originalName,
@@ -144,6 +146,7 @@ interface ProcessVideoParams {
   originalName: string;
   mimeType: string;
   fileSize: number;
+  userId: string;
   profileId: string;
   storage: StorageBackend;
   db: Db;
@@ -151,7 +154,7 @@ interface ProcessVideoParams {
 }
 
 export async function processVideoUpload(params: ProcessVideoParams) {
-  const { tempFilePath, originalName, mimeType, fileSize, profileId, storage, db, transcodeQueue } = params;
+  const { tempFilePath, originalName, mimeType, fileSize, userId, profileId, storage, db, transcodeQueue } = params;
   const fileUuid = randomUUID();
   const ext = originalName.split('.').pop() || 'mp4';
   const storageKey = buildStorageKey(profileId, `${fileUuid}_original`, ext);
@@ -161,6 +164,7 @@ export async function processVideoUpload(params: ProcessVideoParams) {
     await storage.save(storageKey, fileStream, mimeType);
 
     const insertChain = db.insert(postMedia).values({
+      userId,
       postId: null,
       filePath: storageKey,
       fileName: originalName,
@@ -201,7 +205,7 @@ export async function processVideoUpload(params: ProcessVideoParams) {
   }
 }
 
-export async function getMediaStatus(db: Db, mediaId: string) {
+export async function getMediaStatus(db: Db, userId: string, mediaId: string) {
   const rows = await db
     .select({
       id: postMedia.id,
@@ -209,7 +213,7 @@ export async function getMediaStatus(db: Db, mediaId: string) {
       transcodeError: postMedia.transcodeError,
     })
     .from(postMedia)
-    .where(and(eq(postMedia.id, mediaId), isNull(postMedia.deletedAt)));
+    .where(and(eq(postMedia.id, mediaId), eq(postMedia.userId, userId), isNull(postMedia.deletedAt)));
 
   if (rows.length === 0) {
     return null;
@@ -220,22 +224,24 @@ export async function getMediaStatus(db: Db, mediaId: string) {
 
 export async function softDeleteMedia(
   db: Db,
+  userId: string,
   mediaId: string,
 ): Promise<void> {
   await db
     .update(postMedia)
     .set({ deletedAt: new Date() })
-    .where(and(eq(postMedia.id, mediaId), isNull(postMedia.deletedAt)));
+    .where(and(eq(postMedia.id, mediaId), eq(postMedia.userId, userId), isNull(postMedia.deletedAt)));
 }
 
 export async function softDeleteMediaForPost(
   db: Db,
+  userId: string,
   postId: string,
 ): Promise<number> {
   const updatedRows = await db
     .update(postMedia)
     .set({ deletedAt: new Date() })
-    .where(and(eq(postMedia.postId, postId), isNull(postMedia.deletedAt)))
+    .where(and(eq(postMedia.postId, postId), eq(postMedia.userId, userId), isNull(postMedia.deletedAt)))
     .returning({ id: postMedia.id });
 
   return updatedRows.length;
@@ -244,6 +250,7 @@ export async function softDeleteMediaForPost(
 export async function retryTranscode(
   db: Db,
   transcodeQueue: Queue,
+  userId: string,
   mediaId: string,
 ) {
   const rows = await db
@@ -254,7 +261,7 @@ export async function retryTranscode(
       filePath: postMedia.filePath,
     })
     .from(postMedia)
-    .where(and(eq(postMedia.id, mediaId), isNull(postMedia.deletedAt)));
+    .where(and(eq(postMedia.id, mediaId), eq(postMedia.userId, userId), isNull(postMedia.deletedAt)));
 
   if (rows.length === 0 || rows[0].transcodeStatus !== 'failed') {
     throw new MediaServiceError('Media not found or not in failed state', 404);
@@ -265,7 +272,7 @@ export async function retryTranscode(
   await db
     .update(postMedia)
     .set({ transcodeStatus: 'pending', transcodeError: null })
-    .where(eq(postMedia.id, mediaId));
+    .where(and(eq(postMedia.id, mediaId), eq(postMedia.userId, userId), isNull(postMedia.deletedAt)));
 
   // Derive profileId from the file path pattern: media/{profileId}/...
   const pathSegments = mediaRow.filePath.split('/');
@@ -287,14 +294,38 @@ export async function retryTranscode(
 
 export async function associateMediaToPost(
   db: Db,
+  userId: string,
   postId: string,
   mediaIds: string[],
 ): Promise<void> {
+  if (mediaIds.length === 0) {
+    return;
+  }
+
+  const ownedUnclaimedMediaRows = await db
+    .select({ id: postMedia.id })
+    .from(postMedia)
+    .where(and(
+      inArray(postMedia.id, mediaIds),
+      eq(postMedia.userId, userId),
+      isNull(postMedia.postId),
+      isNull(postMedia.deletedAt),
+    ));
+
+  if (ownedUnclaimedMediaRows.length !== mediaIds.length) {
+    throw new MediaServiceError('One or more media files not found', 400);
+  }
+
   for (let sortOrder = 0; sortOrder < mediaIds.length; sortOrder++) {
     const mediaId = mediaIds[sortOrder];
     await db
       .update(postMedia)
       .set({ postId, sortOrder })
-      .where(and(eq(postMedia.id, mediaId), isNull(postMedia.postId)));
+      .where(and(
+        eq(postMedia.id, mediaId),
+        eq(postMedia.userId, userId),
+        isNull(postMedia.postId),
+        isNull(postMedia.deletedAt),
+      ));
   }
 }

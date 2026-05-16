@@ -1,5 +1,6 @@
 import { pgTable, pgEnum, uuid, text, varchar, timestamp, integer, index } from 'drizzle-orm/pg-core';
 import { posts } from './posts.js';
+import { users } from './users.js';
 
 export const transcodeStatusEnum = pgEnum('transcode_status', [
   'pending',
@@ -11,6 +12,7 @@ export const transcodeStatusEnum = pgEnum('transcode_status', [
 
 export const postMedia = pgTable('post_media', {
   id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   postId: uuid('post_id').references(() => posts.id, { onDelete: 'set null' }),
   filePath: text('file_path').notNull(),
   fileName: varchar('file_name', { length: 255 }).notNull(),
@@ -25,6 +27,7 @@ export const postMedia = pgTable('post_media', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
+  index('post_media_user_id').on(table.userId),
   index('post_media_post_id').on(table.postId),
   index('post_media_deleted_at').on(table.deletedAt),
   index('post_media_transcode_status').on(table.transcodeStatus),
