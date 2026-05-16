@@ -85,7 +85,7 @@ function createTestApp(authenticated = true) {
   });
 
   const mockDb: any = {
-    select: vi.fn().mockReturnValue(createSelectChain([{ id: '550e8400-e29b-41d4-a716-446655440000' }])),
+    select: vi.fn().mockReturnValue(createSelectChain([{ id: '550e8400-e29b-41d4-a716-446655440000', platform: 'twitter' }])),
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -260,6 +260,39 @@ describe('media routes', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Profile not found');
+      expect(mockUnlink).toHaveBeenCalledWith('/tmp/photo.jpg');
+      expect(mockProcessImageUpload).not.toHaveBeenCalled();
+      expect(mockProcessVideoUpload).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when the requested platform does not match the owned profile', async () => {
+      const { app, mockDb } = createTestApp();
+      mockDb.select.mockReturnValue({
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue([{ id: '550e8400-e29b-41d4-a716-446655440000', platform: 'linkedin' }]),
+      });
+
+      const wrappedApp = withUpload(
+        app,
+        {
+          fieldname: 'file',
+          originalname: 'photo.jpg',
+          mimetype: 'image/jpeg',
+          size: 5000,
+          path: '/tmp/photo.jpg',
+        },
+        {
+          profileId: '550e8400-e29b-41d4-a716-446655440000',
+          platform: 'twitter',
+        },
+      );
+
+      const response = await request(wrappedApp)
+        .post('/api/media/upload');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe("Profile is on 'linkedin', not 'twitter'.");
       expect(mockUnlink).toHaveBeenCalledWith('/tmp/photo.jpg');
       expect(mockProcessImageUpload).not.toHaveBeenCalled();
       expect(mockProcessVideoUpload).not.toHaveBeenCalled();

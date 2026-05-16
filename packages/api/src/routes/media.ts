@@ -72,13 +72,20 @@ export function createMediaRouter({ db, storage, transcodeQueue }: MediaRouterDe
     }
 
     const [ownedProfile] = await db
-      .select({ id: socialProfiles.id })
+      .select({ id: socialProfiles.id, platform: socialProfiles.platform })
       .from(socialProfiles)
       .where(and(eq(socialProfiles.id, profileId), eq(socialProfiles.userId, userId)))
       .limit(1);
 
     if (!ownedProfile) {
       await rejectUpload(res, file, 404, { error: 'Profile not found' });
+      return;
+    }
+
+    if (ownedProfile.platform !== platform) {
+      await rejectUpload(res, file, 400, {
+        error: `Profile is on '${ownedProfile.platform}', not '${platform}'.`,
+      });
       return;
     }
 
