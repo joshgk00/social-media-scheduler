@@ -28,7 +28,7 @@ Top-of-queue. An automated workflow should pull from here first.
 
 - [x] **gh#6** — Add `user_id` column to `post_media` to prevent IDOR *(merged in #81 / 293fc46)*
 - [x] **gh#26** — Web-production Docker stage runs as root *(merged in #82 / 8e32ee8)*
-- [~] **gh#25** — Add nginx security headers and rate limiting *(in worktree `.claude/worktrees/25-security-add-nginx-security-headers-and-rate/`)*
+- [x] **gh#25** — Add nginx security headers and rate limiting *(implemented in PR #83)*
 - [~] **gh#15** — Auto-destruct 401/403 should throw `UnrecoverableError` *(in worktree `.claude/worktrees/15-fix-auto-destruct-401-403-should-throw/`)*
 - [ ] **gh#18** — Media cleanup deletes storage before DB row (ordering risk)
 - [ ] **gh#36** — Dev images bake `packages/shared/dist` at build time, breaking after shared exports change
