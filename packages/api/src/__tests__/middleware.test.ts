@@ -198,3 +198,28 @@ describe('trust proxy (issue #50)', () => {
     expect(csrfCookie).not.toMatch(/;\s*Secure(?:;|$)/);
   });
 });
+
+describe('production nginx security controls (issue #25)', () => {
+  const prodConfig = readFileSync(new URL('../../../../nginx/nginx.conf', import.meta.url), 'utf8');
+
+  it('adds security headers at the reverse proxy and static asset layers', () => {
+    expect(prodConfig.match(/add_header X-Frame-Options "DENY" always;/g)).toHaveLength(4);
+    expect(prodConfig.match(/add_header X-Content-Type-Options "nosniff" always;/g)).toHaveLength(4);
+    expect(prodConfig.match(/add_header Referrer-Policy "strict-origin-when-cross-origin" always;/g)).toHaveLength(4);
+  });
+
+  it('rate limits API and admin traffic with 429 responses', () => {
+    expect(prodConfig).toContain('limit_req_status 429;');
+    expect(prodConfig).toContain('limit_req_zone $binary_remote_addr zone=api_per_ip:10m rate=10r/s;');
+    expect(prodConfig).toContain('limit_req zone=api_per_ip burst=20 nodelay;');
+    expect(prodConfig).toContain('limit_req_zone $binary_remote_addr zone=admin_per_ip:10m rate=2r/s;');
+    expect(prodConfig).toContain('limit_req zone=admin_per_ip burst=10 nodelay;');
+  });
+
+  it('compresses proxied responses and prevents SPA index caching', () => {
+    expect(prodConfig).toContain('gzip_proxied any;');
+    expect(prodConfig).toContain('location = /index.html');
+    expect(prodConfig.match(/add_header Cache-Control "no-cache";/g)).toHaveLength(2);
+    expect(prodConfig).toContain('add_header Cache-Control "public, immutable";');
+  });
+});
