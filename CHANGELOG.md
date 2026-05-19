@@ -126,6 +126,16 @@ externally-visible port default is unchanged (`8080:8080` was
 needed; if you proxy directly to the container, point your upstream at
 `:8080`.
 
+If you run this nginx behind another TLS-terminating proxy (Cloudflare
+Tunnel, Caddy, Traefik, custom LAN nginx): the per-IP rate-limit zones
+on `/api/` and `/admin/` key on the immediate peer, so all users behind
+that upstream proxy share a single bucket, and Express `req.ip`
+resolves to the upstream proxy, not the real client. This is the same
+behaviour as v1.0.0 — the rate-limit zones are new, but they inherit
+the X-Forwarded-For overwrite from the #50 hotfix. Real-ip module
+support to per-real-client rate limit behind trusted upstreams is
+tracked in #87.
+
 To upgrade in place: `git pull && git checkout v1.0.1 && docker compose up -d --build`.
 
 ## [1.0.0] — 2026-05-14
