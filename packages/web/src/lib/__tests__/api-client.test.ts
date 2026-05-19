@@ -53,6 +53,96 @@ describe('apiClient cache directive contract', () => {
     expect(init.cache).toBeUndefined();
   });
 
+  it('post() refreshes the CSRF token and retries once after a generic production 403', async () => {
+    let tokenRequests = 0;
+    let postRequests = 0;
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      if (typeof input === 'string' && input === '/api/auth/csrf-token') {
+        tokenRequests += 1;
+        return new Response(JSON.stringify({ token: `csrf-refresh-${tokenRequests}` }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (typeof input === 'string' && input === '/api/posts') {
+        postRequests += 1;
+        if (postRequests === 1) {
+          return new Response(JSON.stringify({ error: 'Internal server error' }), {
+            status: 403,
+            statusText: 'Forbidden',
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ id: 'post-1' }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    });
+
+    await expect(apiClient.post('/api/posts', { text: 'hello' })).resolves.toEqual({ id: 'post-1' });
+
+    const postCalls = fetchSpy.mock.calls.filter(
+      (call: [RequestInfo | URL, RequestInit | undefined]) =>
+        typeof call[0] === 'string' && call[0] === '/api/posts',
+    );
+    expect(postRequests).toBe(2);
+    expect(tokenRequests).toBeGreaterThanOrEqual(1);
+    expect((postCalls.at(-1)?.[1] as RequestInit).headers).toMatchObject({
+      'x-csrf-token': `csrf-refresh-${tokenRequests}`,
+    });
+  });
+
+  it('postFormData() refreshes the CSRF token and retries once after a generic production 403', async () => {
+    let tokenRequests = 0;
+    let uploadRequests = 0;
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      if (typeof input === 'string' && input === '/api/auth/csrf-token') {
+        tokenRequests += 1;
+        return new Response(JSON.stringify({ token: `csrf-upload-${tokenRequests}` }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (typeof input === 'string' && input === '/api/media') {
+        uploadRequests += 1;
+        if (uploadRequests === 1) {
+          return new Response(JSON.stringify({ error: 'Internal server error' }), {
+            status: 403,
+            statusText: 'Forbidden',
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ id: 'media-1' }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    });
+
+    const formData = new FormData();
+    formData.append('file', new Blob(['hello']), 'hello.txt');
+
+    await expect(apiClient.postFormData('/api/media', formData)).resolves.toEqual({ id: 'media-1' });
+
+    const uploadCalls = fetchSpy.mock.calls.filter(
+      (call: [RequestInfo | URL, RequestInit | undefined]) =>
+        typeof call[0] === 'string' && call[0] === '/api/media',
+    );
+    expect(uploadRequests).toBe(2);
+    expect(tokenRequests).toBeGreaterThanOrEqual(1);
+    expect((uploadCalls.at(-1)?.[1] as RequestInit).headers).toMatchObject({
+      'x-csrf-token': `csrf-upload-${tokenRequests}`,
+    });
+    expect((uploadCalls.at(-1)?.[1] as RequestInit).headers).not.toHaveProperty('Content-Type');
+  });
+
   it("patch() does NOT pass cache: 'no-store'", async () => {
     await apiClient.patch('/api/users/me/notification-prefs', { rows: [] });
 

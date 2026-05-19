@@ -24,6 +24,8 @@ interface SharedPostFieldsProps {
 
   scheduledAt: string | null;
   onScheduledAtChange: (utcIso: string | null, wasAdjusted: boolean) => void;
+  scheduledAtError?: string | null;
+  scheduleInputRef?: RefObject<HTMLInputElement | null>;
 
   tagIds: string[];
   onTagIdsChange: (ids: string[]) => void;
@@ -69,6 +71,8 @@ export function SharedPostFields({
   excludePostId,
   scheduledAt,
   onScheduledAtChange,
+  scheduledAtError,
+  scheduleInputRef,
   tagIds,
   onTagIdsChange,
   onOpenTagManagement,
@@ -109,13 +113,22 @@ export function SharedPostFields({
           <Label htmlFor="schedule-datetime">Schedule</Label>
           <Input
             id="schedule-datetime"
+            ref={scheduleInputRef}
             type="datetime-local"
             value={scheduledAt ? utcToLocalInput(scheduledAt, userTimezone) : ''}
             onChange={(event) => handleScheduledAtInputChange(event.target.value)}
+            aria-invalid={scheduledAtError ? 'true' : undefined}
+            aria-describedby={scheduledAtError ? 'schedule-datetime-error schedule-datetime-help' : 'schedule-datetime-help'}
+            className={scheduledAtError ? 'border-destructive focus-visible:ring-destructive' : undefined}
           />
-          <p className="text-xs text-muted-foreground">
+          <p id="schedule-datetime-help" className="text-xs text-muted-foreground">
             Times shown in {userTimezone.replace(/_/g, ' ')}
           </p>
+          {scheduledAtError && (
+            <p id="schedule-datetime-error" className="text-sm text-destructive">
+              {scheduledAtError}
+            </p>
+          )}
           {/* POST-CMN-07: conflict warning when another scheduled post exists at the same time */}
           {conflicts && conflicts.length > 0 && (
             <ScheduleConflictBanner conflicts={conflicts} />
