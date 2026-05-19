@@ -59,7 +59,7 @@
     "secrets",
     "concurrency"
   ],
-  "status": "needs-fix",
+  "status": "fixed",
   "lock": null,
   "findingIds": [
     "fnd_sig-gh-56-265ece221a_271a494b6e"
@@ -76,5 +76,5 @@
     }
   ],
   "createdAt": "2026-05-19T20:19:35.980Z",
-  "updatedAt": "2026-05-19T20:19:35.980Z"
+  "updatedAt": "2026-05-19T20:36:12.053Z"
 }

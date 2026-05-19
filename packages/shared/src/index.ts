@@ -37,6 +37,7 @@ export * from './constants/queues.js';
 export * from './constants/media-limits.js';
 export * from './schemas/queues.js';
 export * from './schemas/media.js';
+export * from './publisher.js';
 // error-classifier intentionally NOT re-exported — it imports twitter-api-v2
 // (Node-only deps via `events`/`stream`) which crashes browser bundles.
 // Server-only consumers must import directly:

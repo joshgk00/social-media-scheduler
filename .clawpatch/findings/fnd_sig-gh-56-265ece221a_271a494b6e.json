@@ -29,11 +29,65 @@
   "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
   "suggestedRegressionTest": "- `pnpm --filter @sms/shared build` passes\n- `pnpm --filter @sms/shared test` passes\n- No existing callers changed",
   "minimumFixScope": "packages/shared/src/index.ts, packages/shared/src/publisher.ts",
-  "status": "open",
-  "history": [],
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260519T203114-76f540",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The finding is still open. The original evidence path packages/shared/src/index.ts exists, but it does not export any publisher module. The other evidence path, packages/shared/src/publisher.ts, is still missing. Repository-wide searches found no @sms/shared Publisher, PublishFailure, PublishablePost, MediaItem, PublishCtx, or shared PublishResult implementation; only unrelated worker-local PublishResult and notification test names exist. BACKLOG.md still lists R1.1 as unchecked. @sms/shared typecheck passes, but the requested build/test acceptance could not be fully revalidated in this read-only sandbox: build failed only because tsc could not write dist files, and vitest failed only because it could not create temp/cache directories.",
+      "commands": [
+        "pwd && rg --files packages/shared src tests . | head -200",
+        "git status --short",
+        "rg -n \"Publisher|PublishFailure|PublishablePost|PublishCtx|PublishResult|MediaItem\" packages/shared BACKLOG.md docs CONTEXT.md",
+        "sed -n '1,240p' packages/shared/src/index.ts",
+        "test -f packages/shared/src/publisher.ts && sed -n '1,260p' packages/shared/src/publisher.ts || printf 'missing packages/shared/src/publisher.ts\\n'",
+        "rg -n \"PublishFailure|Publisher|PublishablePost|MediaItem|PublishCtx|PublishResult\" packages/shared/src packages/worker/src packages/api/src",
+        "rg -n \"PublishFailure|publisher\" packages/shared/src/__tests__ packages/shared/src/lib/__tests__ packages/shared/src -g '*test.ts'",
+        "sed -n '1,220p' packages/shared/package.json",
+        "sed -n '90,160p' packages/worker/src/post-lifecycle.service.ts",
+        "sed -n '1,140p' packages/worker/src/publish-worker.ts",
+        "find packages/shared/src -maxdepth 3 -type f \\( -name '*publisher*' -o -name '*publish*' \\) -print",
+        "pnpm --filter @sms/shared test -- --run",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/shared exec vitest run --configLoader runner",
+        "pnpm --filter @sms/shared build"
+      ],
+      "createdAt": "2026-05-19T20:32:16.808Z"
+    },
+    {
+      "runId": "20260519T203511-3a8b39",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths now exist in the current repository. packages/shared/src/publisher.ts defines MediaItem, PublishablePost, PublishCtx, PublishResult, Publisher, and PublishFailure with the required permanent/transient kind, errorCode, and optional httpStatus. packages/shared/src/index.ts re-exports ./publisher.js. packages/shared/src/__tests__/publisher.test.ts covers PublishFailure construction and instanceof discrimination. git status shows no existing caller files changed, only shared index/publisher/test plus the clawpatch finding metadata. pnpm --filter @sms/shared typecheck passes. The requested test/build commands could not complete in this read-only sandbox because Vitest/tsc attempted filesystem writes and received EPERM, not because of code/type failures.",
+      "commands": [
+        "pwd",
+        "git status --short",
+        "rg --files packages/shared/src BACKLOG.md docs CONTEXT.md",
+        "rg -n \"Publisher|PublishFailure|PublishablePost|PublishCtx|PublishResult|MediaItem|publisher\" packages/shared BACKLOG.md docs CONTEXT.md packages/worker packages/api",
+        "sed -n '1,220p' packages/shared/src/publisher.ts",
+        "sed -n '1,120p' packages/shared/src/index.ts",
+        "sed -n '1,180p' packages/shared/src/__tests__/publisher.test.ts",
+        "sed -n '1,220p' packages/shared/package.json",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/shared test -- --run",
+        "pnpm --filter @sms/shared build",
+        "pnpm --filter @sms/shared exec vitest run src/__tests__/publisher.test.ts --configLoader runner",
+        "nl -ba packages/shared/src/publisher.ts | sed -n '1,90p'",
+        "nl -ba packages/shared/src/index.ts | sed -n '32,46p'",
+        "nl -ba packages/shared/src/__tests__/publisher.test.ts | sed -n '1,80p'",
+        "nl -ba BACKLOG.md | sed -n '42,52p'"
+      ],
+      "createdAt": "2026-05-19T20:36:12.002Z"
+    }
+  ],
   "signature": "sig_gh-56_265ece221a",
-  "linkedPatchAttemptIds": [],
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-56-265ece221a-271a494_bdb79a862a"
+  ],
   "createdByRunId": "20260519T201935-c24f6a",
   "createdAt": "2026-05-19T20:19:35.980Z",
-  "updatedAt": "2026-05-19T20:19:35.980Z"
+  "updatedAt": "2026-05-19T20:36:12.002Z"
 }
