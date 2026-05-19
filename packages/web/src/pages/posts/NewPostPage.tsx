@@ -91,6 +91,8 @@ export default function NewPostPage() {
   const [rateLimitBlockError, setRateLimitBlockError] = useState<RateLimitBlockErrorDetail | null>(null);
   const [isRateLimitDialogOpen, setIsRateLimitDialogOpen] = useState(false);
   const postTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const scheduleInputRef = useRef<HTMLInputElement>(null);
+  const [scheduledAtError, setScheduledAtError] = useState<string | null>(null);
 
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const { upload, uploadingFiles, isUploading } = useMediaUpload();
@@ -239,6 +241,7 @@ export default function NewPostPage() {
 
   function handleScheduledAtChange(utcIso: string | null, wasAdjusted: boolean) {
     updateForm('scheduledAt', utcIso);
+    setScheduledAtError(null);
     if (utcIso && wasAdjusted) {
       const adjustedLocal = DateTime.fromISO(utcIso).setZone(userTimezone).toFormat('h:mm a');
       toast.info(`Adjusted to ${adjustedLocal} due to daylight saving time change.`);
@@ -335,10 +338,14 @@ export default function NewPostPage() {
     if (action === 'schedule') {
       const scheduledAt = formState.scheduledAt;
       if (!scheduledAt) {
+        setScheduledAtError('Select a scheduled time before scheduling.');
+        scheduleInputRef.current?.focus();
         toast.error('Please select a scheduled time.');
         return;
       }
       if (DateTime.fromISO(scheduledAt) <= DateTime.utc()) {
+        setScheduledAtError('Scheduled time must be in the future.');
+        scheduleInputRef.current?.focus();
         toast.error('Scheduled time must be in the future.');
         return;
       }
@@ -545,6 +552,8 @@ export default function NewPostPage() {
             effectiveProfileId={effectiveProfileId}
             scheduledAt={formState.scheduledAt}
             onScheduledAtChange={handleScheduledAtChange}
+            scheduledAtError={scheduledAtError}
+            scheduleInputRef={scheduleInputRef}
             tagIds={formState.tagIds}
             onTagIdsChange={(ids) => updateForm('tagIds', ids)}
             onOpenTagManagement={() => setIsTagManageOpen(true)}

@@ -34,47 +34,29 @@ function filenameFromContentDisposition(contentDisposition: string | null): stri
   return filenameMatch?.[1] ?? null;
 }
 
-function isCsrfError(status: number, body: Record<string, unknown>): boolean {
-  if (status !== 403) return false;
-  const msg = ((body.error as string) ?? '').toLowerCase();
-  return msg.includes('csrf') || msg.includes('token');
-}
-
 async function mutationRequest<T>(method: string, path: string, data?: unknown): Promise<T> {
-  const token = await getCsrfToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'x-csrf-token': token,
-  };
-
-  const res = await fetch(path, {
+  return csrfMutationRequest<T>(path, (token) => ({
     method,
     credentials: 'include',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-csrf-token': token,
+    },
     body: data ? JSON.stringify(data) : undefined,
-  });
+  }));
+}
+
+async function csrfMutationRequest<T>(
+  path: string,
+  buildInit: (csrfToken: string) => RequestInit,
+): Promise<T> {
+  const token = await getCsrfToken();
+  let res = await fetch(path, buildInit(token));
 
   if (res.status === 403) {
-    const body = await parseErrorBody(res);
-    if (isCsrfError(res.status, body)) {
-      csrfToken = null;
-      const newToken = await getCsrfToken();
-      const retryRes = await fetch(path, {
-        method,
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'x-csrf-token': newToken },
-        body: data ? JSON.stringify(data) : undefined,
-      });
-      if (!retryRes.ok) {
-        const retryBody = await parseErrorBody(retryRes);
-        throw createError((retryBody.error as string) || retryRes.statusText, retryRes.status, retryBody);
-      }
-      if (retryRes.status === 204) {
-        return undefined as T;
-      }
-      return retryRes.json();
-    }
-    throw createError((body.error as string) || res.statusText, res.status, body);
+    csrfToken = null;
+    const newToken = await getCsrfToken();
+    res = await fetch(path, buildInit(newToken));
   }
 
   if (!res.ok) {
@@ -136,43 +118,12 @@ export const apiClient = {
   },
 
   async postFormData<T = unknown>(path: string, formData: FormData): Promise<T> {
-    const token = await getCsrfToken();
-    const res = await fetch(path, {
+    return csrfMutationRequest<T>(path, (token) => ({
       method: 'POST',
       credentials: 'include',
       headers: { 'x-csrf-token': token },
       body: formData,
-    });
-    if (res.status === 403) {
-      const body = await parseErrorBody(res);
-      if (isCsrfError(res.status, body)) {
-        csrfToken = null;
-        const newToken = await getCsrfToken();
-        const retryRes = await fetch(path, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'x-csrf-token': newToken },
-          body: formData,
-        });
-        if (!retryRes.ok) {
-          const retryBody = await parseErrorBody(retryRes);
-          throw createError((retryBody.error as string) || retryRes.statusText, retryRes.status, retryBody);
-        }
-        if (retryRes.status === 204) {
-          return undefined as T;
-        }
-        return retryRes.json();
-      }
-      throw createError((body.error as string) || res.statusText, res.status, body);
-    }
-    if (!res.ok) {
-      const body = await parseErrorBody(res);
-      throw createError((body.error as string) || res.statusText, res.status, body);
-    }
-    if (res.status === 204) {
-      return undefined as T;
-    }
-    return res.json();
+    }));
   },
 
   async uploadCsv<T = unknown>(path: string, formData: FormData): Promise<T> {
