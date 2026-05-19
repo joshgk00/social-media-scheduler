@@ -83,12 +83,16 @@ export function createAutoDestructWorker(
     },
   );
 
-  // Exhausted retries: emit notification (D-12)
+  // Exhausted retries OR UnrecoverableError: emit notification (D-12).
+  // Mirrors publish-worker: 401/403 are thrown as UnrecoverableError by the
+  // lifecycle service so BullMQ short-circuits the retry chain, and we still
+  // want the user-facing notification on first (and only) failure.
   worker.on('failed', async (job, err) => {
     if (!job) return;
 
     const attemptsCap = job.opts.attempts ?? AUTO_DESTRUCT_CONFIG.attempts;
-    const isFinalFailure = job.attemptsMade >= attemptsCap;
+    const isFinalFailure =
+      err.name === 'UnrecoverableError' || job.attemptsMade >= attemptsCap;
     if (!isFinalFailure) return;
 
     try {
