@@ -8,8 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 First maintenance release. Bug fixes surfaced by the v1.0.0 production
 deploy plus a round of security hardening across the API, worker,
-nginx layer, and Docker images. No schema migrations, no breaking
-changes — drop in over v1.0.0.
+nginx layer, and Docker images. Includes one schema migration/backfill
+for `post_media.user_id`; no breaking changes — drop in over v1.0.0.
 
 ### Fixed
 
