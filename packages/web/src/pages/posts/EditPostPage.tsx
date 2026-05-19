@@ -82,6 +82,8 @@ export default function EditPostPage() {
   const [isFormInitialized, setIsFormInitialized] = useState(false);
   const [isRateLimitDialogOpen, setIsRateLimitDialogOpen] = useState(false);
   const postTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const scheduleInputRef = useRef<HTMLInputElement>(null);
+  const [scheduledAtError, setScheduledAtError] = useState<string | null>(null);
 
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const { upload, uploadingFiles, isUploading } = useMediaUpload();
@@ -390,6 +392,7 @@ export default function EditPostPage() {
 
   function handleScheduledAtChange(utcIso: string | null, wasAdjusted: boolean) {
     updateForm('scheduledAt', utcIso);
+    setScheduledAtError(null);
     if (utcIso && wasAdjusted) {
       const adjustedLocal = DateTime.fromISO(utcIso).setZone(userTimezone).toFormat('h:mm a');
       toast.info(`Adjusted to ${adjustedLocal} due to daylight saving time change.`);
@@ -441,10 +444,14 @@ export default function EditPostPage() {
 
     if (action === 'schedule') {
       if (!formState.scheduledAt) {
+        setScheduledAtError('Select a scheduled time before scheduling.');
+        scheduleInputRef.current?.focus();
         toast.error('Please select a scheduled time.');
         return;
       }
       if (DateTime.fromISO(formState.scheduledAt) <= DateTime.utc()) {
+        setScheduledAtError('Scheduled time must be in the future.');
+        scheduleInputRef.current?.focus();
         toast.error('Scheduled time must be in the future.');
         return;
       }
@@ -622,6 +629,8 @@ export default function EditPostPage() {
             excludePostId={postId}
             scheduledAt={formState.scheduledAt}
             onScheduledAtChange={handleScheduledAtChange}
+            scheduledAtError={scheduledAtError}
+            scheduleInputRef={scheduleInputRef}
             tagIds={formState.tagIds}
             onTagIdsChange={(ids) => updateForm('tagIds', ids)}
             onOpenTagManagement={() => setIsTagManageOpen(true)}
