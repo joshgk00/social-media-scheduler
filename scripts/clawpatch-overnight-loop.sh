@@ -116,19 +116,24 @@ trap 'rmdir "$LOCK_DIR"' EXIT
 attempt=0
 while [[ "$RUNS" -eq 0 || "$attempt" -lt "$RUNS" ]]; do
   attempt=$((attempt + 1))
+  set +e
   {
     echo "=== $(date -u '+%Y-%m-%dT%H:%M:%SZ') attempt=$attempt ==="
     pnpm clawpatch:queue-gh -- next --plain || true
     pnpm clawpatch:fix-gh -- --max "$MAX_PER_RUN"
-    echo "=== attempt=$attempt complete ==="
-  } >>"$LOG_FILE" 2>&1 || {
-    status=$?
+  } >>"$LOG_FILE" 2>&1
+  status=$?
+  set -e
+
+  if [[ "$status" -ne 0 ]]; then
     {
       echo "=== attempt=$attempt failed exit=$status ==="
       git status --short
     } >>"$LOG_FILE" 2>&1
     exit "$status"
-  }
+  fi
+
+  echo "=== attempt=$attempt complete ===" >>"$LOG_FILE" 2>&1
 
   if [[ "$RUNS" -ne 0 && "$attempt" -ge "$RUNS" ]]; then
     break
