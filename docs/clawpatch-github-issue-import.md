@@ -59,4 +59,6 @@ The runner performs:
 5. `pnpm typecheck`, `pnpm lint`, `pnpm test`.
 6. Commit the source changes unless `--no-commit` is set.
 
+Clawpatch's own `format` validation command is disabled in `.clawpatch/config.json`. Do not point it at `pnpm format`: that command writes across the whole repository and can create huge unrelated diffs during automated fixes. Use targeted formatting during implementation and rely on the runner's non-mutating validation gates for the batch.
+
 The runner stages durable Clawpatch status updates with each successful fix. It still excludes local agent state, `skills-lock.json`, and Vite cache paths from auto-staging.

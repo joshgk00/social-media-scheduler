@@ -1,9 +1,7 @@
 {
   "schemaVersion": 1,
   "stateDir": ".clawpatch",
-  "include": [
-    "**/*"
-  ],
+  "include": ["**/*"],
   "exclude": [
     "node_modules/**",
     "dist/**",
@@ -20,7 +18,7 @@
   "commands": {
     "typecheck": "pnpm typecheck",
     "lint": "pnpm lint",
-    "format": "pnpm format",
+    "format": null,
     "test": "pnpm test"
   },
   "review": {
