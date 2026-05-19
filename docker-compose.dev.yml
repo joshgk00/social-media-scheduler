@@ -1,4 +1,36 @@
 services:
+  # Watch sidecars for the compile-to-dist workspace packages. Each runs
+  # `tsc --watch` against its package's `src/`, writing to `dist/` via the
+  # bind mount, so api/worker `tsx watch` picks up new exports without a
+  # manual host-side `pnpm --filter @sms/<pkg> build`. Closes the gh#36
+  # footgun where a freshly-added export crashed api/worker at startup
+  # against a stale baked-in `dist/index.js`.
+  #
+  # Dev startup ordering note: api/worker have no `depends_on` constraint
+  # because tsx-watch tolerates a transient resolution miss and restarts
+  # on dist changes. If you've never built shared/db on this host, run
+  # `pnpm --filter @sms/shared build && pnpm --filter @sms/db build`
+  # once before `docker compose up` to seed dist for the first attempt.
+  shared-watch:
+    build:
+      target: development
+    volumes:
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/shared/dist:/app/packages/shared/dist
+      - ./packages/shared/tsconfig.json:/app/packages/shared/tsconfig.json:ro
+      - ./packages/shared/package.json:/app/packages/shared/package.json:ro
+    command: ["pnpm", "--filter", "@sms/shared", "exec", "tsc", "--watch", "--preserveWatchOutput"]
+
+  db-watch:
+    build:
+      target: development
+    volumes:
+      - ./packages/db/src:/app/packages/db/src
+      - ./packages/db/dist:/app/packages/db/dist
+      - ./packages/db/tsconfig.json:/app/packages/db/tsconfig.json:ro
+      - ./packages/db/package.json:/app/packages/db/package.json:ro
+    command: ["pnpm", "--filter", "@sms/db", "exec", "tsc", "--watch", "--preserveWatchOutput"]
+
   api:
     build:
       target: development
@@ -8,6 +40,8 @@ services:
       - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/shared/package.json:/app/packages/shared/package.json:ro
       - ./packages/db/src:/app/packages/db/src
+      - ./packages/db/dist:/app/packages/db/dist
+      - ./packages/db/package.json:/app/packages/db/package.json:ro
       - ./data/media:/app/data/media
     environment:
       NODE_ENV: development
@@ -26,6 +60,8 @@ services:
       - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/shared/package.json:/app/packages/shared/package.json:ro
       - ./packages/db/src:/app/packages/db/src
+      - ./packages/db/dist:/app/packages/db/dist
+      - ./packages/db/package.json:/app/packages/db/package.json:ro
       - ./data/media:/app/data/media
     environment:
       NODE_ENV: development
