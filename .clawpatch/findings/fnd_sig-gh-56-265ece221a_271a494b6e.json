@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-56-265ece221a_271a494b6e",
+  "featureId": "feat_gh-56_b1d4545789",
+  "title": "gh#56: R1.1 — Add Publisher interface + PublishFailure to @sms/shared",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/shared/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/publisher.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/56.\nBacklog section: Candidate 1 — Publisher seam.\n\n## Context\n\nFirst PR in Candidate 1 (Publisher seam deepening). Adds the new interface and failure type to `@sms/shared` with no callers yet. Subsequent PRs (R1.2–R1.5) wire up implementations and switch the worker over.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 1.\n\n## Scope\n\n- Add `packages/shared/src/publisher.ts` with:\n  - `interface Publisher` — `publish(profile, post, ctx): Promise<PublishResult>`\n  - `interface PublishablePost` — uniform projection of the Post row including `text`, `platform`, `isThread`, `visibility`, `linkUrl`, `media[]`\n  - `interface MediaItem` — `{ id, kind: 'image'|'video'|'gif', bytes: Buffer, mimeType, fileName? }`\n  - `interface PublishCtx` — `{ correlationId: string }`\n  - `interface PublishResult` — `{ platformPostId: string }`\n  - `class PublishFailure extends Error` — discriminated on `kind: 'permanent' | 'transient'`, plus `errorCode`, `httpStatus?`\n- Re-export from `@sms/shared/src/index.ts`\n- Unit tests covering `PublishFailure` construction + `instanceof` discrimination\n\n## Out of scope\n\n- Implementations of any concrete Publisher (R1.2, R1.3)\n- Wiring changes to `publish-worker.ts` (R1.4)\n- Deletion of old platform services (R1.5)\n- TokenVault (deferred — see ADR-0002)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` passes\n- `pnpm --filter @sms/shared test` passes\n- No existing callers changed\n\n## References\n\n- ADRs: [0001](../blob/main/docs/adr/0001-publish-failure-is-thrown-not-returned.md), [0002](../blob/main/docs/adr/0002-publisher-receives-raw-profile-row.md)\n- CONTEXT.md: \\`Publisher\\` domain term\n- Depends on: nothing (first in Candidate 1 series)",
+  "reproduction": "First PR in Candidate 1 (Publisher seam deepening). Adds the new interface and failure type to `@sms/shared` with no callers yet. Subsequent PRs (R1.2–R1.5) wire up implementations and switch the worker over.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 1.",
+  "recommendation": "- Add `packages/shared/src/publisher.ts` with:\n  - `interface Publisher` — `publish(profile, post, ctx): Promise<PublishResult>`\n  - `interface PublishablePost` — uniform projection of the Post row including `text`, `platform`, `isThread`, `visibility`, `linkUrl`, `media[]`\n  - `interface MediaItem` — `{ id, kind: 'image'|'video'|'gif', bytes: Buffer, mimeType, fileName? }`\n  - `interface PublishCtx` — `{ correlationId: string }`\n  - `interface PublishResult` — `{ platformPostId: string }`\n  - `class PublishFailure extends Error` — discriminated on `kind: 'permanent' | 'transient'`, plus `errorCode`, `httpStatus?`\n- Re-export from `@sms/shared/src/index.ts`\n- Unit tests covering `PublishFailure` construction + `instanceof` discrimination",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/shared build` passes\n- `pnpm --filter @sms/shared test` passes\n- No existing callers changed",
+  "minimumFixScope": "packages/shared/src/index.ts, packages/shared/src/publisher.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-56_265ece221a",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

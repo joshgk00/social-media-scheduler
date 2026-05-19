@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-60-9c2fc15dae_fc012ee7ff",
+  "featureId": "feat_gh-60_d5e645560a",
+  "title": "gh#60: R1.5 — Sweep: delete old publish services and shared classifiers",
+  "category": "data-loss",
+  "severity": "high",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/worker/src/twitter-publish.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/linkedin-publish.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/facebook-publish.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/lib/error-classifier.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/lib/error-classifier",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/60.\nBacklog section: Candidate 1 — Publisher seam.\n\n## Context\n\nFinal PR in Candidate 1. Removes the now-dead code paths once R1.4 has been merged and tests stay green. Also overlaps with existing issue #14 (extract shared Twitter client factory) — close #14 as superseded by this work.\n\n## Scope\n\nDeletions:\n- `packages/worker/src/twitter-publish.service.ts`\n- `packages/worker/src/linkedin-publish.service.ts`\n- `packages/worker/src/facebook-publish.service.ts`\n- `packages/shared/src/lib/error-classifier.ts` exports for `classifyTwitterError`, `classifyLinkedInError`, `classifyFacebookError` (kept private inside each Publisher)\n- `ClassifiedError` type, if no other consumers remain — verify with \\`rg ClassifiedError\\`. If consumers exist outside the Publishers, leave the type and audit those callers in a follow-up issue.\n\nUpdates:\n- `packages/shared/src/index.ts` — drop the deleted re-exports\n- Any test files referencing the deleted services — verify removed cleanly, no orphaned imports\n- Close gh#14 (extract shared Twitter client factory) — superseded by this candidate\n\n## Out of scope\n\n- Behavior changes (R1.4 already delivered them)\n- TokenVault (deferred per ADR-0002)\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/shared build` passes\n- `rg \"twitter-publish.service|linkedin-publish.service|facebook-publish.service\"` returns no matches in src\n- gh#14 closed with reference to this PR\n\n## References\n\n- ADRs: [0001](../blob/main/docs/adr/0001-publish-failure-is-thrown-not-returned.md), [0002](../blob/main/docs/adr/0002-publisher-receives-raw-profile-row.md)\n- Closes #14\n- Depends on: #59",
+  "reproduction": "Final PR in Candidate 1. Removes the now-dead code paths once R1.4 has been merged and tests stay green. Also overlaps with existing issue #14 (extract shared Twitter client factory) — close #14 as superseded by this work.",
+  "recommendation": "Deletions:\n- `packages/worker/src/twitter-publish.service.ts`\n- `packages/worker/src/linkedin-publish.service.ts`\n- `packages/worker/src/facebook-publish.service.ts`\n- `packages/shared/src/lib/error-classifier.ts` exports for `classifyTwitterError`, `classifyLinkedInError`, `classifyFacebookError` (kept private inside each Publisher)\n- `ClassifiedError` type, if no other consumers remain — verify with \\`rg ClassifiedError\\`. If consumers exist outside the Publishers, leave the type and audit those callers in a follow-up issue.\n\nUpdates:\n- `packages/shared/src/index.ts` — drop the deleted re-exports\n- Any test files referencing the deleted services — verify removed cleanly, no orphaned imports\n- Close gh#14 (extract shared Twitter client factory) — superseded by this candidate",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/shared build` passes\n- `rg \"twitter-publish.service|linkedin-publish.service|facebook-publish.service\"` returns no matches in src\n- gh#14 closed with reference to this PR",
+  "minimumFixScope": "packages/worker/src/twitter-publish.service.ts, packages/worker/src/linkedin-publish.service.ts, packages/worker/src/facebook-publish.service.ts, packages/shared/src/lib/error-classifier.ts, packages/shared/src/index.ts, packages/shared/src/lib/error-classifier",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-60_9c2fc15dae",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

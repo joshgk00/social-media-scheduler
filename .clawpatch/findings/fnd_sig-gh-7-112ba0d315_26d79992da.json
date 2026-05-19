@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-7-112ba0d315_26d79992da",
+  "featureId": "feat_gh-7_00482921b7",
+  "title": "gh#7: Perf: Sharp triple-decode in processImageUpload",
+  "category": "performance",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "startLine": 54,
+      "endLine": 93,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/__tests__/services/media.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/7.\nBacklog section: Performance.\n\n## Problem\n\n`processImageUpload` runs 4 separate Sharp pipelines on the same image. Each decode costs 80-120ms for a 25MP JPEG. Estimated 40-50% CPU reduction by reusing pipeline clones and `resolveWithObject`.\n\n## Identified by\n\nCode quality review Run 1 — performance-optimizer (perf-002, perf-003)\n\n## Fix\n\nUse `sharp.clone()` and `toBuffer({ resolveWithObject: true })` to get dimensions from the processing pass. Reduces 4 decodes to 2. Also consider `sharp.cache({ memory: 50 })` and `sharp.concurrency(2)`.\n\n## Files\n\n- `packages/api/src/services/media.service.ts:54-93`\n- `packages/api/src/__tests__/services/media.test.ts` (tests assert on call shape — need rewrite)",
+  "reproduction": "`processImageUpload` runs 4 separate Sharp pipelines on the same image. Each decode costs 80-120ms for a 25MP JPEG. Estimated 40-50% CPU reduction by reusing pipeline clones and `resolveWithObject`.",
+  "recommendation": "Use `sharp.clone()` and `toBuffer({ resolveWithObject: true })` to get dimensions from the processing pass. Reduces 4 decodes to 2. Also consider `sharp.cache({ memory: 50 })` and `sharp.concurrency(2)`.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/services/media.service.ts, packages/api/src/__tests__/services/media.test.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-7_112ba0d315",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

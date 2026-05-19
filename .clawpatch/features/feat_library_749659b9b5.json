@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_749659b9b5",
+  "title": "Node source packages/web/src/hooks#1",
+  "summary": "Node/TypeScript source group packages/web/src/hooks#1 with 12 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/package.json",
+      "symbol": "packages/web/src/hooks#1",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/hooks/use-auth.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-bulk-ops.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-calendar-posts.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-csv-templates.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-media-upload.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-media.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-notifications.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-oauth.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-post-history.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-posts.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-profiles.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    },
+    {
+      "path": "packages/web/src/hooks/use-queue-posts.ts",
+      "reason": "source group packages/web/src/hooks#1"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/__tests__/hooks/use-queue-posts.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/hooks/__tests__/use-media-upload.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/hooks/__tests__/use-media.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/hooks/__tests__/use-notifications.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/__tests__/hooks/use-queue-posts.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/hooks/__tests__/use-media-upload.test.ts",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/hooks/__tests__/use-media.test.ts",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/hooks/__tests__/use-notifications.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@sms/web",
+    "project-root:packages/web"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_ui-flow_26de8930ee",
+  "title": "React component QueueActionsMenu",
+  "summary": "React component implemented by packages/web/src/components/queues/QueueActionsMenu.tsx.",
+  "kind": "ui-flow",
+  "source": "react-component",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/queues/QueueActionsMenu.tsx",
+      "symbol": "QueueActionsMenu",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/queues/QueueActionsMenu.tsx",
+      "reason": "component implementation"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/hooks/use-queues.ts",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/button.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/dropdown-menu.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/dialog.tsx",
+      "reason": "direct import"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "react",
+    "component",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

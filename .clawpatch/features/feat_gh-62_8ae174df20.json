@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-62_8ae174df20",
+  "title": "gh#62: R2.2 — Add planDelete; switch api/post.service.deletePost",
+  "summary": "Imported from GitHub issue gh#62 in BACKLOG.md section \"Candidate 2 — Post Lifecycle aggregate\".",
+  "kind": "service",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/shared/src/post/aggregate.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/api/src/services/post.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/shared/src/post/aggregate.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/api/src/services/post.service.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#62"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#62",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/62",
+    "backlog-order:0007",
+    "backlog-section:candidate-2-post-lifecycle-aggregate",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem",
+    "concurrency"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-62-e71f4fa49d_b16988e479"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#62",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "projectId": "prj_https-github-com-joshgk00-social_a4e45f8f34",
+  "name": "social-media-scheduler",
+  "rootPath": "/Users/slaughterassistant/social-media-scheduler",
+  "git": {
+    "remoteUrl": "https://github.com/joshgk00/social-media-scheduler.git",
+    "defaultBranch": "main",
+    "currentBranch": "develop",
+    "headSha": "ad9858c7969ab897812a77522a2e7d2513ca5b0f"
+  },
+  "detected": {
+    "languages": [
+      "javascript"
+    ],
+    "frameworks": [],
+    "packageManagers": [
+      "pnpm"
+    ],
+    "commands": {
+      "typecheck": "pnpm typecheck",
+      "lint": "pnpm lint",
+      "format": "pnpm format",
+      "test": "pnpm test"
+    }
+  },
+  "createdAt": "2026-05-18T22:59:58.792Z",
+  "updatedAt": "2026-05-18T22:59:58.792Z"
+}

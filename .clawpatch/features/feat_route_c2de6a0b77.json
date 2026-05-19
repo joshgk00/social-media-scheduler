@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_route_c2de6a0b77",
+  "title": "React route /calendar",
+  "summary": "React Router route '/calendar' rendered by CalendarPage.",
+  "kind": "route",
+  "source": "react-router-route",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/pages/calendar/CalendarPage.tsx",
+      "symbol": "CalendarPage",
+      "route": "/calendar",
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/pages/calendar/CalendarPage.tsx",
+      "reason": "route component"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/App.tsx",
+      "reason": "route declaration"
+    },
+    {
+      "path": "packages/web/src/components/ui/skeleton.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/tooltip.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/hooks/use-calendar-posts.ts",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/lib/calendar-localizer.ts",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/lib/utils.ts",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/calendar/CalendarFilterBar.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/calendar/CalendarToolbar.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "react",
+    "react-router",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

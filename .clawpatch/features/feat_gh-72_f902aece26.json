@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-72_f902aece26",
+  "title": "gh#72: R4.1 — Single OAuth error-to-HTTP mapping table at route boundary",
+  "summary": "Imported from GitHub issue gh#72 in BACKLOG.md section \"Candidate 4 — OAuth route error-mapping\".",
+  "kind": "route",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/api/src/routes/oauth.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/routes/oauth.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "docs/adr/0006-oauth-stays-procedural-no-sealed-connectattempt.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#72"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#72",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/72",
+    "backlog-order:0017",
+    "backlog-section:candidate-4-oauth-route-error-mapping",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "auth",
+    "network",
+    "secrets"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-72-548d1097ef_f4a60af2dc"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#72",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

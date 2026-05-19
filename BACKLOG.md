@@ -31,7 +31,7 @@ Top-of-queue. An automated workflow should pull from here first.
 - [x] **gh#25** — Add nginx security headers and rate limiting *(implemented in PR #83)*
 - [x] **gh#15** — Auto-destruct 401/403 should throw `UnrecoverableError` *(merged in #84, released in v1.0.1)*
 - [~] **gh#18** — Media cleanup deletes storage before DB row (ordering risk) *(in worktree `.claude/worktrees/18-fix-media-cleanup-deletes-storage-before-db-row/`)*
-- [ ] **gh#36** — Dev images bake `packages/shared/dist` at build time, breaking after shared exports change
+- [~] **gh#36** — Dev images bake `packages/shared/dist` at build time, breaking after shared exports change *(in worktree `.claude/worktrees/36-dev-infra-api-worker-dev-images-bake-packages/`)*
 
 ---
 

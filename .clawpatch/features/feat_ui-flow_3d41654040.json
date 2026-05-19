@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_ui-flow_3d41654040",
+  "title": "React component ProfileCard",
+  "summary": "React component implemented by packages/web/src/components/profiles/ProfileCard.tsx.",
+  "kind": "ui-flow",
+  "source": "react-component",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/profiles/ProfileCard.tsx",
+      "symbol": "ProfileCard",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/profiles/ProfileCard.tsx",
+      "reason": "component implementation"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/components/ui/card.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/avatar.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/badge.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/button.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/dropdown-menu.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/profiles/TokenHealthBadge.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/profiles/RateLimitChip.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/hooks/use-profiles.ts",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/DeleteProfileDialog.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/EditProfileDialog.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/PageOrgPickerDialog.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/ProfileNetworkFilter.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/TokenHealthBadge.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/components/profiles/__tests__/DeleteProfileDialog.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/EditProfileDialog.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/PageOrgPickerDialog.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/ProfileNetworkFilter.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/TokenHealthBadge.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "react",
+    "component",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

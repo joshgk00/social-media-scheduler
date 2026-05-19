@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-59-e3f36278ce_2e4178b8f3",
+  "featureId": "feat_gh-59_c9fd6fe83b",
+  "title": "gh#59: R1.4 — Switch publish-worker to publishers map; drop parallel switches",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/worker/src/publish-worker.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/post-lifecycle.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/59.\nBacklog section: Candidate 1 — Publisher seam.\n\n## Context\n\nFourth PR in Candidate 1. The wiring change that delivers the locality win: replaces the two parallel platform switches in `publish-worker.ts` with a single map lookup, and removes the `resolvedPlatform` mutable-state coordination workaround.\n\n## Scope\n\n- Modify `packages/worker/src/publish-worker.ts`:\n  - `PublishHandlerDeps` gains `publishers?: Partial<Record<Platform, Publisher>>` with defaults from the new factories\n  - Drop `callTwitterImpl`, `callLinkedInImpl`, `callFacebookImpl` separate overrides (subsumed)\n  - Drop `checkLinkedInBudgetImpl`, `checkFacebookBudgetImpl` (untouched by this PR; budget check still callback-shaped — moved unchanged)\n  - Drop the `resolvedPlatform: SupportedPlatform` mutable `let` and the six-line flow-analysis cast comment\n  - The `publish` callback in `PublishContext` (passed to the lifecycle) becomes `publishers[platform].publish(profile, publishablePost, ctx)`\n  - The catch block becomes platform-blind:\n    ```ts\n    if (err instanceof PostLifecycleAbort) { /* graceful skip */ }\n    if (err instanceof PublishFailure) {\n      if (err.kind === 'permanent') throw new UnrecoverableError(err.message);\n      throw err; // transient — BullMQ retries\n    }\n    throw err;\n    ```\n- Modify `packages/worker/src/post-lifecycle.service.ts`:\n  - `PublishContext.callTwitter` renamed to `publish` (or similar — caller-chosen)\n  - The `extras` escape hatch is removed; `PublishablePost` carries platform-specific fields directly\n  - Lifecycle loads media before constructing `PublishablePost` (text-only posts get `media: []`)\n- Update existing publish-worker tests to use `publishers` override (one injection point) instead of three `callXImpl` overrides\n\n## Out of scope\n\n- Removing the old platform services and `error-classifier` (R1.5)\n- TokenVault refactor (deferred per ADR-0002)\n- Budget-loader dedupe (Candidate #6, independent)\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` passes\n- All existing worker tests pass with no behavior change\n- `rg \"resolvedPlatform\" packages/worker/` returns nothing\n- `rg \"classifyTwitterError|classifyLinkedInError|classifyFacebookError\" packages/worker/src/publish-worker.ts` returns nothing\n\n## References\n\n- ADRs: [0001](../blob/main/docs/adr/0001-publish-failure-is-thrown-not-returned.md), [0002](../blob/main/docs/adr/0002-publisher-receives-raw-profile-row.md)\n- Depends on: #57, #58",
+  "reproduction": "Fourth PR in Candidate 1. The wiring change that delivers the locality win: replaces the two parallel platform switches in `publish-worker.ts` with a single map lookup, and removes the `resolvedPlatform` mutable-state coordination workaround.",
+  "recommendation": "- Modify `packages/worker/src/publish-worker.ts`:\n  - `PublishHandlerDeps` gains `publishers?: Partial<Record<Platform, Publisher>>` with defaults from the new factories\n  - Drop `callTwitterImpl`, `callLinkedInImpl`, `callFacebookImpl` separate overrides (subsumed)\n  - Drop `checkLinkedInBudgetImpl`, `checkFacebookBudgetImpl` (untouched by this PR; budget check still callback-shaped — moved unchanged)\n  - Drop the `resolvedPlatform: SupportedPlatform` mutable `let` and the six-line flow-analysis cast comment\n  - The `publish` callback in `PublishContext` (passed to the lifecycle) becomes `publishers[platform].publish(profile, publishablePost, ctx)`\n  - The catch block becomes platform-blind:\n    ```ts\n    if (err instanceof PostLifecycleAbort) { /* graceful skip */ }\n    if (err instanceof PublishFailure) {\n      if (err.kind === 'permanent') throw new UnrecoverableError(err.message);\n      throw err; // transient — BullMQ retries\n    }\n    throw err;\n    ```\n- Modify `packages/worker/src/post-lifecycle.service.ts`:\n  - `PublishContext.callTwitter` renamed to `publish` (or similar — caller-chosen)\n  - The `extras` escape hatch is removed; `PublishablePost` carries platform-specific fields directly\n  - Lifecycle loads media before constructing `PublishablePost` (text-only posts get `media: []`)\n- Update existing publish-worker tests to use `publishers` override (one injection point) instead of three `callXImpl` overrides",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` passes\n- All existing worker tests pass with no behavior change\n- `rg \"resolvedPlatform\" packages/worker/` returns nothing\n- `rg \"classifyTwitterError|classifyLinkedInError|classifyFacebookError\" packages/worker/src/publish-worker.ts` returns nothing",
+  "minimumFixScope": "packages/worker/src/publish-worker.ts, packages/worker/src/post-lifecycle.service.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-59_e3f36278ce",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

@@ -10,3 +10,13 @@ packages/db/drizzle/*_snapshot.json
 .DS_Store
 *.log
 coverage/
+.clawpatch/locks/
+.clawpatch/patches/
+.clawpatch/reports/
+.clawpatch/runs/
+.agent/
+.agents/
+.claude/skills/
+.claude/worktrees/
+skills-lock.json
+packages/web/.vite/

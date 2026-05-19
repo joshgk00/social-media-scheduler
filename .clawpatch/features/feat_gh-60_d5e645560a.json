@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-60_d5e645560a",
+  "title": "gh#60: R1.5 — Sweep: delete old publish services and shared classifiers",
+  "summary": "Imported from GitHub issue gh#60 in BACKLOG.md section \"Candidate 1 — Publisher seam\".",
+  "kind": "job",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/worker/src/twitter-publish.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/worker/src/linkedin-publish.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/worker/src/facebook-publish.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/worker/src/twitter-publish.service.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/linkedin-publish.service.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/facebook-publish.service.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/lib/error-classifier.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/lib/error-classifier",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "docs/adr/0001-publish-failure-is-thrown-not-returned.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "docs/adr/0002-publisher-receives-raw-profile-row.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#60"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#60",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/60",
+    "backlog-order:0005",
+    "backlog-section:candidate-1-publisher-seam",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "filesystem",
+    "secrets",
+    "concurrency",
+    "external-api"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-60-9c2fc15dae_fc012ee7ff"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#60",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

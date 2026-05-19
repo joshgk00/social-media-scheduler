@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-68_603f99f2e6",
+  "title": "gh#68: R3.3 — Switch worker/token-refresh-worker to TokenVault",
+  "summary": "Imported from GitHub issue gh#68 in BACKLOG.md section \"Candidate 3 — TokenVault\".",
+  "kind": "job",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/worker/src/token-refresh-worker.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/worker/src/index.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/worker/src/token-refresh-worker.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/index.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#68"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#68",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/68",
+    "backlog-order:0013",
+    "backlog-section:candidate-3-tokenvault",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "auth",
+    "filesystem",
+    "secrets",
+    "concurrency",
+    "external-api"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-68-ffa0623281_63d2a82987"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#68",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-58-f83beb2053_cec1125669",
+  "featureId": "feat_gh-58_8c3af815b1",
+  "title": "gh#58: R1.3 — Implement LinkedInPublisher and FacebookPublisher",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/worker/src/publishers/linkedin.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/publishers/facebook.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/58.\nBacklog section: Candidate 1 — Publisher seam.\n\n## Context\n\nThird PR in Candidate 1. Mirrors R1.2 for the other two platforms. After this PR, all three concrete Publishers exist; the worker switches over in R1.4.\n\n## Scope\n\n- Add `packages/worker/src/publishers/linkedin.ts`:\n  - `createLinkedInPublisher(): Publisher`\n  - Owns the 3-step image upload sequence (`initializeUpload` → `PUT` → `/rest/posts`), aborting before the `/rest/posts` call if any earlier step fails so no orphaned image URN is referenced\n  - Folds `classifyLinkedInError` inside as a private function\n  - Reads `visibility` and `media[0]` (LinkedIn = single image) from `PublishablePost`\n- Add `packages/worker/src/publishers/facebook.ts`:\n  - `createFacebookPublisher(): Publisher`\n  - Owns the video path (`POST /{pageId}/videos`) and multi-photo carousel path (N × `/{pageId}/photos` then `/{pageId}/feed`)\n  - Note: partial-failure orphaned photo IDs (the existing `FacebookPublishApiError.orphanedPhotoIds`) are **dropped** at the Publisher boundary — they were set-but-never-read (verified during grilling). If a future caller needs them, surface as a follow-up issue\n  - Folds `classifyFacebookError` inside as a private function\n  - Reads `linkUrl` and `media[]` (Facebook = video OR multi-photo) from `PublishablePost`\n- Token-shape redaction inside each Publisher; same discipline as R1.2\n- Unit tests for each: success, permanent failure, transient failure, redaction\n\n## Out of scope\n\n- Wiring changes to `publish-worker.ts` (R1.4)\n- Removing the old platform services (R1.5)\n- Surfacing orphaned photo IDs to a higher layer — explicit non-goal per ADR-0002 staging\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/worker test` passes\n- Test fake fixtures available for both: `createFakeLinkedInPublisher`, `createFakeFacebookPublisher`\n\n## References\n\n- ADRs: [0001](../blob/main/docs/adr/0001-publish-failure-is-thrown-not-returned.md), [0002](../blob/main/docs/adr/0002-publisher-receives-raw-profile-row.md)\n- Depends on: #56",
+  "reproduction": "Third PR in Candidate 1. Mirrors R1.2 for the other two platforms. After this PR, all three concrete Publishers exist; the worker switches over in R1.4.",
+  "recommendation": "- Add `packages/worker/src/publishers/linkedin.ts`:\n  - `createLinkedInPublisher(): Publisher`\n  - Owns the 3-step image upload sequence (`initializeUpload` → `PUT` → `/rest/posts`), aborting before the `/rest/posts` call if any earlier step fails so no orphaned image URN is referenced\n  - Folds `classifyLinkedInError` inside as a private function\n  - Reads `visibility` and `media[0]` (LinkedIn = single image) from `PublishablePost`\n- Add `packages/worker/src/publishers/facebook.ts`:\n  - `createFacebookPublisher(): Publisher`\n  - Owns the video path (`POST /{pageId}/videos`) and multi-photo carousel path (N × `/{pageId}/photos` then `/{pageId}/feed`)\n  - Note: partial-failure orphaned photo IDs (the existing `FacebookPublishApiError.orphanedPhotoIds`) are **dropped** at the Publisher boundary — they were set-but-never-read (verified during grilling). If a future caller needs them, surface as a follow-up issue\n  - Folds `classifyFacebookError` inside as a private function\n  - Reads `linkUrl` and `media[]` (Facebook = video OR multi-photo) from `PublishablePost`\n- Token-shape redaction inside each Publisher; same discipline as R1.2\n- Unit tests for each: success, permanent failure, transient failure, redaction",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/worker test` passes\n- Test fake fixtures available for both: `createFakeLinkedInPublisher`, `createFakeFacebookPublisher`",
+  "minimumFixScope": "packages/worker/src/publishers/linkedin.ts, packages/worker/src/publishers/facebook.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-58_f83beb2053",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

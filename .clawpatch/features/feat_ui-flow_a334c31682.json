@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_ui-flow_a334c31682",
+  "title": "React component ThreadEditor",
+  "summary": "React component implemented by packages/web/src/components/posts/ThreadEditor.tsx.",
+  "kind": "ui-flow",
+  "source": "react-component",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/posts/ThreadEditor.tsx",
+      "symbol": "ThreadEditor",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/posts/ThreadEditor.tsx",
+      "reason": "component implementation"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/components/ui/button.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/posts/ThreadCard.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/lib/thread.ts",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "react",
+    "component",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

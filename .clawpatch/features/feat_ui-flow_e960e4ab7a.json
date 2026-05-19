@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_ui-flow_e960e4ab7a",
+  "title": "React component VisibilitySelector",
+  "summary": "React component implemented by packages/web/src/components/posts/VisibilitySelector.tsx.",
+  "kind": "ui-flow",
+  "source": "react-component",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/posts/VisibilitySelector.tsx",
+      "symbol": "VisibilitySelector",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/posts/VisibilitySelector.tsx",
+      "reason": "component implementation"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/components/ui/radio-group.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/label.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/__tests__/VisibilitySelector.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/__tests__/VisibilitySelector.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "react",
+    "component",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

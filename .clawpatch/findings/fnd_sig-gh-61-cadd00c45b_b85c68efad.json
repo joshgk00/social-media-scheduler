@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-61-cadd00c45b_b85c68efad",
+  "featureId": "feat_gh-61_082a72c318",
+  "title": "gh#61: R2.1 — Add @sms/shared/post aggregate + PostInvariantError + planUpdate",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/shared/src/post/types.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/post/errors.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/post/aggregate.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/services/post.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/61.\nBacklog section: Candidate 2 — Post Lifecycle aggregate.\n\n## Context\n\nFirst PR in Candidate 2 (Post Lifecycle deepening). Establishes the aggregate module and migrates `updatePost` to use it. After this PR, user-driven update invariants live in one place and are unit-testable as pure functions.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 2.\n\n## Scope\n\n- Add `packages/shared/src/post/types.ts`:\n  - `PostState` — canonical camelCase projection (the fields the state machine reads)\n  - `PostPatch` — explicit subset of `posts.$inferInsert` writes, plus `bumpVersion: boolean`\n  - `TransitionDecision` — discriminated union for transition planning (introduced in R2.3, but type lives here)\n  - `PreflightState` — `{ mediaReady, tokenHealthy, budgetExhausted, rateLimitExhausted }` (introduced in R2.3)\n- Add `packages/shared/src/post/errors.ts`:\n  - `class PostInvariantError extends Error` with `kind` discriminator covering: `platform_mismatch`, `platform_immutable`, `not_editable`, `invalid_transition`, `version_mismatch`, `scheduled_at_required`, `scheduled_at_must_be_future`, `not_deletable`, `tag_not_found`, `thread_unsupported`, `media_pending`, `budget_exhausted`, `rate_limit_exhausted`, `token_unhealthy`, `already_published`, `not_scheduled`\n- Add `packages/shared/src/post/aggregate.ts`:\n  - `planUpdate(currentRow: PostState, input: UpdatePostInput, expectedVersion: number): PostPatch` — encapsulates current `updatePost` invariants (EDITABLE_STATES check, version match, platform immutability, transition validity, future-date check with the \"edit-soon\" nuance, optional `effectiveScheduledAt` derivation)\n- Re-export from `@sms/shared/src/index.ts`\n- Update `packages/api/src/services/post.service.ts` → `updatePost`:\n  - Replace inline validation with `planUpdate(...)`\n  - Tag and media coordination stays in the service (out of aggregate scope per ADR-0003)\n  - Map `PostInvariantError` to existing HTTP responses at the route boundary (a small `kindToHttpStatus` table — can live in the route or service)\n- Unit tests for `planUpdate`: every invariant path, every error `kind` produced\n\n## Out of scope\n\n- `planDelete` (R2.2)\n- `planTransitionToPublishing` / `TransitionDecision` runtime logic (R2.3)\n- `planRecordSuccess` / `planRecordFailure` (R2.4)\n- Narrowing `PostServiceError` (R2.5 sweep)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- Existing `post.service.test.ts` cases for `updatePost` pass without modification beyond updated error type checks\n- `rg \"EDITABLE_STATES\" packages/api/src/services/post.service.ts` returns no matches (logic moved to aggregate)\n\n## References\n\n- ADRs: [0003](../blob/main/docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md), [0004](../blob/main/docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md)\n- CONTEXT.md: \\`Post Lifecycle\\`, \\`PostPatch\\`\n- Depends on: nothing (first in Candidate 2 series)",
+  "reproduction": "First PR in Candidate 2 (Post Lifecycle deepening). Establishes the aggregate module and migrates `updatePost` to use it. After this PR, user-driven update invariants live in one place and are unit-testable as pure functions.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 2.",
+  "recommendation": "- Add `packages/shared/src/post/types.ts`:\n  - `PostState` — canonical camelCase projection (the fields the state machine reads)\n  - `PostPatch` — explicit subset of `posts.$inferInsert` writes, plus `bumpVersion: boolean`\n  - `TransitionDecision` — discriminated union for transition planning (introduced in R2.3, but type lives here)\n  - `PreflightState` — `{ mediaReady, tokenHealthy, budgetExhausted, rateLimitExhausted }` (introduced in R2.3)\n- Add `packages/shared/src/post/errors.ts`:\n  - `class PostInvariantError extends Error` with `kind` discriminator covering: `platform_mismatch`, `platform_immutable`, `not_editable`, `invalid_transition`, `version_mismatch`, `scheduled_at_required`, `scheduled_at_must_be_future`, `not_deletable`, `tag_not_found`, `thread_unsupported`, `media_pending`, `budget_exhausted`, `rate_limit_exhausted`, `token_unhealthy`, `already_published`, `not_scheduled`\n- Add `packages/shared/src/post/aggregate.ts`:\n  - `planUpdate(currentRow: PostState, input: UpdatePostInput, expectedVersion: number): PostPatch` — encapsulates current `updatePost` invariants (EDITABLE_STATES check, version match, platform immutability, transition validity, future-date check with the \"edit-soon\" nuance, optional `effectiveScheduledAt` derivation)\n- Re-export from `@sms/shared/src/index.ts`\n- Update `packages/api/src/services/post.service.ts` → `updatePost`:\n  - Replace inline validation with `planUpdate(...)`\n  - Tag and media coordination stays in the service (out of aggregate scope per ADR-0003)\n  - Map `PostInvariantError` to existing HTTP responses at the route boundary (a small `kindToHttpStatus` table — can live in the route or service)\n- Unit tests for `planUpdate`: every invariant path, every error `kind` produced",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- Existing `post.service.test.ts` cases for `updatePost` pass without modification beyond updated error type checks\n- `rg \"EDITABLE_STATES\" packages/api/src/services/post.service.ts` returns no matches (logic moved to aggregate)",
+  "minimumFixScope": "packages/shared/src/post/types.ts, packages/shared/src/post/errors.ts, packages/shared/src/post/aggregate.ts, packages/shared/src/index.ts, packages/api/src/services/post.service.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-61_cadd00c45b",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

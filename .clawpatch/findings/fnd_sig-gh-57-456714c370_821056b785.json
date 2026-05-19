@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-57-456714c370_821056b785",
+  "featureId": "feat_gh-57_8ac82b19aa",
+  "title": "gh#57: R1.2 — Implement TwitterPublisher; fold classifyTwitterError inside",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/worker/src/publishers/twitter.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/lib/error-classifier",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/57.\nBacklog section: Candidate 1 — Publisher seam.\n\n## Context\n\nSecond PR in Candidate 1. Implements the first concrete Publisher and moves Twitter error classification inside it as a private function. The existing `twitter-publish.service.ts` stays intact — the worker doesn't switch over until R1.4.\n\n## Scope\n\n- Add `packages/worker/src/publishers/twitter.ts` exporting `createTwitterPublisher(): Publisher`\n- Implementation reads from `PublishablePost`, decrypts OAuth 1.0a credentials inline (matches existing `twitter-publish.service.ts` discipline — no caching, no logging, function-scope plaintext)\n- Move `classifyTwitterError` logic into this file as a private function (delete the export from `@sms/shared/lib/error-classifier` in R1.5)\n- Map any caught error to a thrown `PublishFailure` with the correct `kind` + `errorCode` — including token-shape redaction before the message escapes the Publisher\n- Phase 4 thread-unsupported behavior: throw `PublishFailure({ kind: 'permanent', errorCode: 'thread_unsupported' })` for now (the lifecycle's pre-flight thread check makes this unreachable in practice, but the Publisher must be safe in isolation)\n- Unit tests: success path returns `{ platformPostId }`; permanent and transient failure paths throw `PublishFailure` with correct `kind`; redaction strips token-shaped substrings from messages\n\n## Out of scope\n\n- LinkedIn / Facebook Publishers (R1.3)\n- Wiring changes to `publish-worker.ts` (R1.4)\n- Removing the old `twitter-publish.service.ts` (R1.5)\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/worker test` passes\n- Test fake fixture: `createFakeTwitterPublisher({ result?, error? })` available for downstream tests\n\n## References\n\n- ADRs: [0001](../blob/main/docs/adr/0001-publish-failure-is-thrown-not-returned.md), [0002](../blob/main/docs/adr/0002-publisher-receives-raw-profile-row.md)\n- Depends on: #56",
+  "reproduction": "Second PR in Candidate 1. Implements the first concrete Publisher and moves Twitter error classification inside it as a private function. The existing `twitter-publish.service.ts` stays intact — the worker doesn't switch over until R1.4.",
+  "recommendation": "- Add `packages/worker/src/publishers/twitter.ts` exporting `createTwitterPublisher(): Publisher`\n- Implementation reads from `PublishablePost`, decrypts OAuth 1.0a credentials inline (matches existing `twitter-publish.service.ts` discipline — no caching, no logging, function-scope plaintext)\n- Move `classifyTwitterError` logic into this file as a private function (delete the export from `@sms/shared/lib/error-classifier` in R1.5)\n- Map any caught error to a thrown `PublishFailure` with the correct `kind` + `errorCode` — including token-shape redaction before the message escapes the Publisher\n- Phase 4 thread-unsupported behavior: throw `PublishFailure({ kind: 'permanent', errorCode: 'thread_unsupported' })` for now (the lifecycle's pre-flight thread check makes this unreachable in practice, but the Publisher must be safe in isolation)\n- Unit tests: success path returns `{ platformPostId }`; permanent and transient failure paths throw `PublishFailure` with correct `kind`; redaction strips token-shaped substrings from messages",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/worker test` passes\n- Test fake fixture: `createFakeTwitterPublisher({ result?, error? })` available for downstream tests",
+  "minimumFixScope": "packages/worker/src/publishers/twitter.ts, packages/shared/src/lib/error-classifier",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-57_456714c370",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

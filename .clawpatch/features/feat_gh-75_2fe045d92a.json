@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-75_2fe045d92a",
+  "title": "gh#75: R5.3 — Switch routes/queues.ts bulk-ops path to BulkOperationFactory; sweep",
+  "summary": "Imported from GitHub issue gh#75 in BACKLOG.md section \"Candidate 5 — BulkOperationFactory\".",
+  "kind": "route",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/api/src/routes/queues.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/routes/queues.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#75"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#75",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/75",
+    "backlog-order:0020",
+    "backlog-section:candidate-5-bulkoperationfactory",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "auth",
+    "network",
+    "filesystem",
+    "concurrency"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-75-d37f32bc2b_d3133aef9d"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#75",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}
