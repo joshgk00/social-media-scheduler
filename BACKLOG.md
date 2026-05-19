@@ -29,7 +29,7 @@ Top-of-queue. An automated workflow should pull from here first.
 - [x] **gh#6** — Add `user_id` column to `post_media` to prevent IDOR *(merged in #81 / 293fc46)*
 - [x] **gh#26** — Web-production Docker stage runs as root *(merged in #82 / 8e32ee8)*
 - [x] **gh#25** — Add nginx security headers and rate limiting *(implemented in PR #83)*
-- [~] **gh#15** — Auto-destruct 401/403 should throw `UnrecoverableError` *(in worktree `.claude/worktrees/15-fix-auto-destruct-401-403-should-throw/`)*
+- [x] **gh#15** — Auto-destruct 401/403 should throw `UnrecoverableError` *(merged in #84, released in v1.0.1)*
 - [ ] **gh#18** — Media cleanup deletes storage before DB row (ordering risk)
 - [ ] **gh#36** — Dev images bake `packages/shared/dist` at build time, breaking after shared exports change
 
@@ -106,6 +106,7 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 
 ### Bugs
 
+- [ ] **gh#87** — nginx: add real_ip module support so rate limits + audit logs key on real client IP behind layered proxies *(surfaced in #86 review — limitation of #25's rate-limit zones + #50's XFF overwrite)*
 - [ ] **gh#85** — Auto-destruct failure notification payload doesn't match `autoDestructFailedNotificationSchema` *(surfaced in #84 review — pre-existing, predates #15)*
 - [ ] **gh#52** — Date picker icon barely visible on new-post page in dark mode
 - [ ] **gh#50** — Secure cookies + CSRF fail behind reverse proxy (trust proxy + nginx X-Forwarded-Proto) — *partial fix already merged in `0824e22`*
