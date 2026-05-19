@@ -19,6 +19,7 @@ services:
       - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/shared/tsconfig.json:/app/packages/shared/tsconfig.json:ro
       - ./packages/shared/package.json:/app/packages/shared/package.json:ro
+      - ./tsconfig.base.json:/app/tsconfig.base.json:ro
     command: ["pnpm", "--filter", "@sms/shared", "exec", "tsc", "--watch", "--preserveWatchOutput"]
 
   db-watch:
@@ -29,6 +30,7 @@ services:
       - ./packages/db/dist:/app/packages/db/dist
       - ./packages/db/tsconfig.json:/app/packages/db/tsconfig.json:ro
       - ./packages/db/package.json:/app/packages/db/package.json:ro
+      - ./tsconfig.base.json:/app/tsconfig.base.json:ro
     command: ["pnpm", "--filter", "@sms/db", "exec", "tsc", "--watch", "--preserveWatchOutput"]
 
   api:
@@ -49,7 +51,13 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
       - "127.0.0.1:9229:9229"
-    command: ["npx", "tsx", "watch", "packages/api/src/index.ts"]
+    # --include forces tsx to watch the shared/db dist outputs the sidecars
+    # write to. Without these, tsx-watch's default ignore list can skip dist
+    # updates and miss the rebuild-driven restart.
+    command: ["npx", "tsx", "watch",
+              "--include", "packages/shared/dist/**",
+              "--include", "packages/db/dist/**",
+              "packages/api/src/index.ts"]
 
   worker:
     build:
@@ -68,7 +76,11 @@ services:
       LOG_LEVEL: debug
     ports:
       - "127.0.0.1:9230:9229"
-    command: ["npx", "tsx", "watch", "packages/worker/src/index.ts"]
+    # See api service for --include rationale.
+    command: ["npx", "tsx", "watch",
+              "--include", "packages/shared/dist/**",
+              "--include", "packages/db/dist/**",
+              "packages/worker/src/index.ts"]
 
   web:
     image: node:22-alpine
