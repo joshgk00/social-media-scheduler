@@ -15,7 +15,11 @@ coverage/
 .clawpatch/reports/
 .clawpatch/runs/
 .agent/
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/clawpatch-overnight/
+!.agents/skills/clawpatch-overnight/SKILL.md
 .claude/skills/
 .claude/worktrees/
 skills-lock.json

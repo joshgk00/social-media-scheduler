@@ -50,6 +50,20 @@ For manual review without commits:
 pnpm clawpatch:fix-gh -- --max 3 --no-commit
 ```
 
+For overnight interval execution:
+
+```bash
+scripts/clawpatch-overnight-loop.sh --runs 12 --background
+```
+
+Equivalent:
+
+```bash
+pnpm clawpatch:overnight -- --runs 12 --background
+```
+
+This starts one finding every 30 minutes for about six hours and logs to `logs/clawpatch-overnight.log`.
+
 The runner performs:
 
 1. Select next imported GitHub finding in backlog order.
