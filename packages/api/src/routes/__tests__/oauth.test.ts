@@ -55,6 +55,7 @@ vi.mock('../../services/profile.service.js', async () => {
 
 import { createOAuthRouter } from '../oauth.js';
 import { MismatchedAccountError } from '../../services/oauth.service.js';
+import type { TokenVault } from '../../services/token-vault.service.js';
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -62,7 +63,7 @@ const mockTokenVault = {
   sealTwitterCredentials: vi.fn(),
   sealOAuth2AccessToken: vi.fn(),
   sealOAuth2RefreshToken: vi.fn(),
-};
+} satisfies TokenVault;
 
 function createTestApp(options: { redis: any; authenticated?: boolean; db?: any }) {
   const app = express();
@@ -78,7 +79,7 @@ function createTestApp(options: { redis: any; authenticated?: boolean; db?: any 
   app.use(createOAuthRouter({
     db: options.db ?? {},
     redis: options.redis,
-    getTokenVault: () => mockTokenVault as any,
+    getTokenVault: () => mockTokenVault,
   }));
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });
