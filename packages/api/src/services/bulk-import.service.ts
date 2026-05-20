@@ -17,6 +17,15 @@ export interface ParsedCsvRows<T> {
   errors: CsvRowError[];
 }
 
+export class CsvParseError extends Error {
+  code = 'csv_parse_failed';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'CsvParseError';
+  }
+}
+
 export async function parseCsvBuffer<TSchema extends ZodType<Record<string, unknown>>>(
   buffer: Buffer,
   schema: TSchema,
@@ -32,22 +41,30 @@ export async function parseCsvBuffer<TSchema extends ZodType<Record<string, unkn
   });
 
   let rowNumber = 1;
-  for await (const rawRow of parser as AsyncIterable<Record<string, unknown>>) {
-    rowNumber += 1;
-    if (rows.length + errors.length >= maxRows) {
-      throw new Error(`CSV row limit exceeded: maximum ${maxRows} rows`);
-    }
-    const parsed = schema.safeParse(rawRow);
-    if (parsed.success) {
-      rows.push({ ...parsed.data, rowNumber });
-      continue;
-    }
+  try {
+    for await (const rawRow of parser as AsyncIterable<Record<string, unknown>>) {
+      rowNumber += 1;
+      if (rows.length + errors.length >= maxRows) {
+        throw new Error(`CSV row limit exceeded: maximum ${maxRows} rows`);
+      }
+      const parsed = schema.safeParse(rawRow);
+      if (parsed.success) {
+        rows.push({ ...parsed.data, rowNumber });
+        continue;
+      }
 
-    errors.push({
-      rowNumber,
-      reason: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
-      row: rawRow,
-    });
+      errors.push({
+        rowNumber,
+        reason: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
+        row: rawRow,
+      });
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('CSV row limit exceeded')) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : 'Unable to read CSV file';
+    throw new CsvParseError(`CSV parse failed: ${reason}`);
   }
 
   return { rows, errors };

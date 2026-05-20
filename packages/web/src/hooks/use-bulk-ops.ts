@@ -88,5 +88,5 @@ export function useQueueDedupe(queueId: string) {
 
 export function useBulkImport() {
   const invalidate = useInvalidateBulk();
-  return useMutation({ mutationFn: (formData: FormData) => apiClient.uploadCsv('/api/bulk-import', formData), onSuccess: () => { invalidate(); announceBulkOperationQueued(); }, onError: showBulkOperationError });
+  return useMutation({ mutationFn: (formData: FormData) => apiClient.uploadCsv('/api/bulk-import', formData), onSuccess: () => { invalidate(); announceBulkOperationQueued(); } });
 }

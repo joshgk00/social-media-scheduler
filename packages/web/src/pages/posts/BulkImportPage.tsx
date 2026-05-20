@@ -15,6 +15,49 @@ import { useBulkImport } from '../../hooks/use-bulk-ops';
 import { getQueueTemplateUrl, getScheduledTemplateUrl } from '../../hooks/use-csv-templates';
 import { cn } from '../../lib/utils';
 
+interface ImportErrorMessage {
+  title: string;
+  description: string;
+  details: string[];
+}
+
+function formatImportError(error: unknown): ImportErrorMessage {
+  const fallback = error instanceof Error ? error.message : "Couldn't start the import. Try again.";
+  const body = (error as { body?: Record<string, unknown> }).body;
+  const rawDetails = Array.isArray(body?.details) ? body.details : [];
+  const details = rawDetails
+    .map((detail) => {
+      if (!detail || typeof detail !== 'object') return null;
+      const rowNumber = 'rowNumber' in detail ? Number(detail.rowNumber) : null;
+      const reason = 'reason' in detail ? String(detail.reason) : '';
+      if (!reason) return null;
+      return rowNumber && Number.isFinite(rowNumber) ? `Row ${rowNumber}: ${reason}` : reason;
+    })
+    .filter((detail): detail is string => Boolean(detail));
+
+  if (body?.code === 'csv_validation_failed' || body?.code === 'csv_parse_failed') {
+    return {
+      title: 'CSV import needs changes',
+      description: String(body.error ?? fallback),
+      details,
+    };
+  }
+
+  if (body?.error === 'queue_name_mismatch') {
+    return {
+      title: 'Queue name does not match',
+      description: `Rows must use queue_name "${String(body.expected ?? '')}" for this queue.`,
+      details: [`${Number(body.mismatchedRows) || 0} row(s) target a different queue.`],
+    };
+  }
+
+  return {
+    title: "Couldn't start the import",
+    description: fallback,
+    details,
+  };
+}
+
 export default function BulkImportPage() {
   const navigate = useNavigate();
   const { data: profiles } = useProfiles();
@@ -25,11 +68,14 @@ export default function BulkImportPage() {
   const [queueId, setQueueId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [budgetError, setBudgetError] = useState<{ budget: number; currentCount: number; attemptedAdditional: number } | null>(null);
+  const [importError, setImportError] = useState<ImportErrorMessage | null>(null);
   const filteredQueues = queues?.filter((queue) => !profileId || queue.profileId === profileId) ?? [];
   const isReady = !!target && !!profileId && !!file && (target === 'scheduled' || !!queueId);
 
   async function handleSubmit() {
     if (!file) return;
+    setBudgetError(null);
+    setImportError(null);
     const formData = new FormData();
     formData.append('target', target);
     formData.append('profileId', profileId);
@@ -49,7 +95,7 @@ export default function BulkImportPage() {
         });
         return;
       }
-      toast.error(error instanceof Error ? error.message : "Couldn't start the import. Try again.");
+      setImportError(formatImportError(error));
     }
   }
 
@@ -109,7 +155,30 @@ export default function BulkImportPage() {
             <p className="text-xs text-muted-foreground">Only queues for the selected profile are shown.</p>
           </div>
         )}
-        <FileDropZone file={file} onFileChange={setFile} />
+        <FileDropZone
+          file={file}
+          onFileChange={(nextFile) => {
+            setFile(nextFile);
+            setBudgetError(null);
+            setImportError(null);
+          }}
+        />
+        {importError && (
+          <Alert variant="destructive" role="alert">
+            <AlertTitle>{importError.title}</AlertTitle>
+            <AlertDescription>
+              <p>{importError.description}</p>
+              {importError.details.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {importError.details.map((detail, index) => <li key={`${index}-${detail}`}>{detail}</li>)}
+                </ul>
+              )}
+            </AlertDescription>
+            <Button type="button" variant="link" className="mt-2 h-auto p-0 text-destructive" onClick={() => setImportError(null)}>
+              Edit CSV and try again
+            </Button>
+          </Alert>
+        )}
       </section>
 
       <Card>
