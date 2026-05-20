@@ -11,7 +11,13 @@ import { Queue, Worker, UnrecoverableError } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { users, socialProfiles, posts, postAttempts } from '@sms/db';
-import { QUEUE_NAMES, JOB_NAMES, buildPublishJobId, publishFailedNotificationSchema } from '@sms/shared';
+import {
+  PublishFailure,
+  QUEUE_NAMES,
+  JOB_NAMES,
+  buildPublishJobId,
+  publishFailedNotificationSchema,
+} from '@sms/shared';
 import { startTestEnv, type TestEnv } from '../helpers/testcontainer.js';
 import {
   createPublishHandler,
@@ -19,7 +25,6 @@ import {
   type PublishJobResult,
 } from '../../publish-worker.js';
 import { handlePublishFailedNotification } from '../../notifications/handlers/publish-failed.handler.js';
-import { buildApiResponseError } from '../helpers/mock-twitter.js';
 
 let env: TestEnv;
 let publishQueue: Queue<PublishJobPayload>;
@@ -105,13 +110,19 @@ describe('failed-listener integration', () => {
     // Override the publish-post handler's twitter call by using a custom worker
     // that delegates to a handler with the mocked twitter impl injected.
     const twitterMock = vi.fn().mockRejectedValue(
-      buildApiResponseError({ httpStatus: 401, message: 'Token revoked' }),
+      new PublishFailure({
+        kind: 'permanent',
+        errorCode: 'auth_revoked',
+        message:
+          'Twitter credentials are no longer valid - please reconnect the profile',
+        httpStatus: 401,
+      }),
     );
 
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
-      callTwitterImpl: twitterMock,
+      publishers: { twitter: { publish: twitterMock } },
     });
 
     const workerRedis = env.redis.duplicate();

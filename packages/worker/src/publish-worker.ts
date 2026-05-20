@@ -25,18 +25,16 @@ import { posts, socialProfiles } from '@sms/db';
 import {
   QUEUE_NAMES,
   JOB_NAMES,
+  PublishFailure,
+  type Publisher,
+  type SupportedPlatform,
 } from '@sms/shared';
-import {
-  classifyTwitterError,
-  classifyLinkedInError,
-  classifyFacebookError,
-} from '@sms/shared/lib/error-classifier';
 import { createLogger } from '@sms/shared/logger';
 import type { WorkerDb } from './db.js';
 import { publishPost, PostLifecycleAbort } from './post-lifecycle.service.js';
-import { callTwitter } from './twitter-publish.service.js';
-import { callLinkedIn } from './linkedin-publish.service.js';
-import { callFacebook } from './facebook-publish.service.js';
+import { createTwitterPublisher } from './publishers/twitter.js';
+import { createLinkedInPublisher } from './publishers/linkedin.js';
+import { createFacebookPublisher } from './publishers/facebook.js';
 import {
   checkBudgetForWorker,
   checkLinkedInBudgetForWorker,
@@ -66,14 +64,8 @@ export interface PublishHandlerDeps {
   db: WorkerDb;
   notificationQueue: Queue;
   publishPostImpl?: typeof publishPost;
-  callTwitterImpl?: typeof callTwitter;
-  // Phase 8 — platform dispatcher accepts per-platform publish impls so tests
-  // can substitute mocks without spinning up real LinkedIn / Facebook calls.
-  callLinkedInImpl?: typeof callLinkedIn;
-  callFacebookImpl?: typeof callFacebook;
+  publishers?: Partial<Record<PublishPlatform, Publisher<typeof socialProfiles.$inferSelect>>>;
   checkBudgetImpl?: typeof checkBudgetForWorker;
-  checkLinkedInBudgetImpl?: typeof checkLinkedInBudgetForWorker;
-  checkFacebookBudgetImpl?: typeof checkFacebookBudgetForWorker;
 }
 
 const PUBLISH_WORKER_CONFIG = {
@@ -84,7 +76,7 @@ const PUBLISH_WORKER_CONFIG = {
 } as const;
 
 const DEFAULT_MAX_ATTEMPTS = 4;
-type PublishPlatform = 'twitter' | 'linkedin' | 'facebook';
+type PublishPlatform = SupportedPlatform;
 
 function isPublishPlatform(platform: string): platform is PublishPlatform {
   return platform === 'twitter' || platform === 'linkedin' || platform === 'facebook';
@@ -98,17 +90,20 @@ function redactSafeMessage(input: string): string {
     .replace(/([A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,})/g, '[redacted-token]');
 }
 
-function safePublishFailureMessage(
-  err: unknown,
-  platform: PublishPlatform,
-): string {
-  const classification =
-    platform === 'linkedin'
-      ? classifyLinkedInError(err)
-      : platform === 'facebook'
-        ? classifyFacebookError(err)
-        : classifyTwitterError(err);
-  return redactSafeMessage(classification.message || 'Unknown publish failure');
+function safePublishFailureMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : 'Unknown publish failure';
+  return redactSafeMessage(message);
+}
+
+function createDefaultPublishers(): Record<
+  PublishPlatform,
+  Publisher<typeof socialProfiles.$inferSelect>
+> {
+  return {
+    twitter: createTwitterPublisher(),
+    linkedin: createLinkedInPublisher(),
+    facebook: createFacebookPublisher(),
+  };
 }
 
 /**
@@ -119,14 +114,11 @@ function safePublishFailureMessage(
 export function createPublishHandler(deps: PublishHandlerDeps) {
   const baseLogger = createLogger('publish-worker');
   const runPublish = deps.publishPostImpl ?? publishPost;
-  const runCallTwitter = deps.callTwitterImpl ?? callTwitter;
-  const runCallLinkedIn = deps.callLinkedInImpl ?? callLinkedIn;
-  const runCallFacebook = deps.callFacebookImpl ?? callFacebook;
+  const publishers = {
+    ...createDefaultPublishers(),
+    ...deps.publishers,
+  };
   const runCheckBudget = deps.checkBudgetImpl ?? checkBudgetForWorker;
-  const runCheckLinkedInBudget =
-    deps.checkLinkedInBudgetImpl ?? checkLinkedInBudgetForWorker;
-  const runCheckFacebookBudget =
-    deps.checkFacebookBudgetImpl ?? checkFacebookBudgetForWorker;
 
   return async function handle(
     job: Job<PublishJobPayload>,
@@ -138,72 +130,33 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
       attempt: job.attemptsMade + 1,
     });
 
-    // Track the resolved platform for this run so the catch-block classifier
-    // dispatch knows which API's error semantics to apply. Captured by the
-    // budget callback (which sees the platform first via the joined profile).
-    type SupportedPlatform = 'twitter' | 'linkedin' | 'facebook';
-    let resolvedPlatform: SupportedPlatform = 'twitter';
-
     try {
       const result = await runPublish(deps.db, {
         postId: job.data.postId,
         expectedVersion: job.data.postVersion,
         correlationId: job.data.correlationId,
         currentAttemptNum: job.attemptsMade + 1,
-        callTwitter: async (profile, postText, isThread, extras) => {
-          // Plan 02 added typed posts.platform / posts.visibility / posts.linkUrl
-          // columns. The lifecycle passes them through `extras` so we dispatch
-          // here without a second SELECT. Direct field access — no
-          // `as Record<string, unknown>` casts (B-01 cascade complete).
-          const platform = (extras?.platform ?? profile.platform) as
-            | 'twitter'
-            | 'linkedin'
-            | 'facebook';
-          if (platform === 'linkedin') {
-            const visibility = (extras?.visibility as
-              | 'PUBLIC'
-              | 'CONNECTIONS'
-              | null
-              | undefined) ?? 'PUBLIC';
-            return runCallLinkedIn({
-              profile,
-              postText,
-              visibility,
-              correlationId: job.data.correlationId,
-            });
-          }
-          if (platform === 'facebook') {
-            return runCallFacebook({
-              profile,
-              postText,
-              linkUrl: extras?.linkUrl ?? null,
-              correlationId: job.data.correlationId,
-            });
-          }
-          // Default Twitter path — preserves existing wiring exactly.
-          return runCallTwitter({
+        publish: async (profile, publishablePost, publishCtx) => {
+          return publishers[publishablePost.platform].publish(
             profile,
-            postText,
-            isThread,
-            correlationId: job.data.correlationId,
-          });
+            publishablePost,
+            publishCtx,
+          );
         },
         checkBudget: async (profileId: string) => {
-          // Resolve the platform from the joined profile so the lifecycle
-          // can branch on rate_limit_exhausted vs budget_exhausted, and so
-          // the catch-block classifier knows which error semantics apply.
+          // Resolve the platform from the joined profile so the lifecycle can
+          // branch on rate_limit_exhausted vs budget_exhausted.
           const [profileRow] = await deps.db
             .select({ platform: socialProfiles.platform })
             .from(socialProfiles)
             .where(eq(socialProfiles.id, profileId));
-          const platform = (profileRow?.platform ?? 'twitter') as
-            | 'twitter'
-            | 'linkedin'
-            | 'facebook';
-          resolvedPlatform = platform;
+          const rawPlatform = profileRow?.platform ?? '';
+          const platform: PublishPlatform = isPublishPlatform(rawPlatform)
+            ? rawPlatform
+            : 'twitter';
 
           if (platform === 'linkedin') {
-            const state = await runCheckLinkedInBudget(deps.db, {
+            const state = await checkLinkedInBudgetForWorker(deps.db, {
               profileId,
               additionalCount: 1,
             });
@@ -219,7 +172,7 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
             // mediaIds.length here; the API pre-flight + the worker's runtime
             // re-check are layered defenses. This single-call estimate is
             // conservative and matches Phase 7's existing behavior.
-            const state = await runCheckFacebookBudget(deps.db, {
+            const state = await checkFacebookBudgetForWorker(deps.db, {
               profileId,
               additionalCount: 1,
             });
@@ -275,34 +228,22 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
         }
       }
 
-      // Phase 8: classifier dispatch by platform — LinkedIn/Facebook errors
-      // (LinkedInPublishApiError / FacebookPublishApiError) carry the same
-      // ClassifiedError shape as Twitter via @sms/shared classifyXError.
-      // The let-binding of `resolvedPlatform` is mutated inside an async
-      // closure (the checkBudget callback above). TypeScript's control-flow
-      // analysis can't see that mutation from this catch block, so it
-      // narrows the variable back to its initial literal type. Re-widen via
-      // a string cast — runtime value reflects the closure assignment.
-      const platformAtFailure = resolvedPlatform as string;
-      const classifier =
-        platformAtFailure === 'linkedin'
-          ? classifyLinkedInError
-          : platformAtFailure === 'facebook'
-            ? classifyFacebookError
-            : classifyTwitterError;
-      const classification = classifier(err);
-      if (classification.kind === 'permanent') {
+      if (err instanceof PublishFailure) {
+        if (err.kind === 'permanent') {
+          logger.warn(
+            { errorCode: err.errorCode, httpStatus: err.httpStatus },
+            'Permanent failure — skipping retries',
+          );
+          throw new UnrecoverableError(err.message);
+        }
+
         logger.warn(
-          { errorCode: classification.errorCode, httpStatus: classification.httpStatus },
-          'Permanent failure — skipping retries',
+          { errorCode: err.errorCode, httpStatus: err.httpStatus },
+          'Transient failure — will retry',
         );
-        throw new UnrecoverableError(classification.message);
+        throw err;
       }
 
-      logger.warn(
-        { errorCode: classification.errorCode, httpStatus: classification.httpStatus },
-        'Transient failure — will retry',
-      );
       throw err;
     }
   };
@@ -377,7 +318,7 @@ export function createPublishWorker({
         eventType: 'publish_failed',
         postId: job.data.postId,
         profileId: postRow.profileId,
-        errorMessage: safePublishFailureMessage(err, postRow.platform),
+        errorMessage: safePublishFailureMessage(err),
         correlationId: job.data.correlationId,
         occurredAt: new Date().toISOString(),
       });
