@@ -162,13 +162,6 @@ interface LockedPostRow extends Record<string, unknown> {
   link_url: string | null;
 }
 
-const READY_PREFLIGHT: PreflightState = {
-  mediaReady: true,
-  tokenHealthy: true,
-  budgetExhausted: false,
-  rateLimitExhausted: false,
-};
-
 interface PublishableMediaRow {
   id: string;
   filePath: string;
@@ -200,12 +193,11 @@ function mapLockedPostRowToState(post: LockedPostRow): PostState {
   };
 }
 
-function mapLockedPostRowToTransitionProfile(
-  post: LockedPostRow,
-): PostTransitionProfile {
-  return {
-    platform: isSupportedPlatform(post.platform) ? post.platform : 'twitter',
-  };
+function detectRecoveryPlatformPostId(currentState: PostState): string | null {
+  if (currentState.status === 'publishing' && currentState.platformPostId) {
+    return currentState.platformPostId;
+  }
+  return null;
 }
 
 function mapSocialProfileToTransitionProfile(
@@ -271,6 +263,27 @@ function classifyPublishError(err: unknown): ClassifiedError {
   return { kind: 'transient', httpStatus: null, errorCode: 'unknown', message };
 }
 
+function logPostInvariantAbort(
+  lifecycleLogger: { info: (...args: unknown[]) => void },
+  err: PostInvariantError,
+  currentState: PostState,
+): void {
+  if (err.kind === 'already_published') {
+    lifecycleLogger.info(
+      {
+        platformPostId: currentState.platformPostId ?? null,
+        status: currentState.status,
+      },
+      'Idempotent skip — post already has platform_post_id',
+    );
+  } else if (err.kind === 'not_scheduled') {
+    lifecycleLogger.info(
+      { actualStatus: currentState.status },
+      'Skipping publish — post is no longer scheduled',
+    );
+  }
+}
+
 export async function publishPost(
   db: WorkerDb,
   ctx: PublishContext,
@@ -319,20 +332,34 @@ export async function publishPost(
       }
 
       const currentState = mapLockedPostRowToState(post);
-      const earlyDecision = planTransitionToPublishing(
-        currentState,
-        mapLockedPostRowToTransitionProfile(post),
-        READY_PREFLIGHT,
-      );
-
-      let transitionDecision: TransitionDecision = earlyDecision;
-      const isRecovery = earlyDecision.kind === 'recover';
+      let transitionDecision: TransitionDecision | null = null;
+      const recoveryPostId = detectRecoveryPlatformPostId(currentState);
+      const isRecovery = recoveryPostId !== null;
       if (isRecovery) {
         lifecycleLogger.info(
-          { platformPostId: earlyDecision.recoveryPlatformPostId },
+          { platformPostId: recoveryPostId },
           'Recovery from prior issue-#17 pre-write — Phase 3 will resume',
         );
       } else {
+        if (currentState.platformPostId) {
+          lifecycleLogger.info(
+            {
+              platformPostId: currentState.platformPostId,
+              status: currentState.status,
+            },
+            'Idempotent skip — post already has platform_post_id',
+          );
+          throw new PostLifecycleAbort('already_published');
+        }
+
+        if (currentState.status !== 'scheduled') {
+          lifecycleLogger.info(
+            { actualStatus: currentState.status },
+            'Skipping publish — post is no longer scheduled',
+          );
+          throw new PostLifecycleAbort('not_scheduled');
+        }
+
         if (post.post_version !== ctx.expectedVersion) {
           lifecycleLogger.info(
             { expectedVersion: ctx.expectedVersion, actualVersion: post.post_version },
@@ -418,6 +445,7 @@ export async function publishPost(
           );
         } catch (err) {
           if (err instanceof PostInvariantError) {
+            logPostInvariantAbort(lifecycleLogger, err, currentState);
             if (err.kind === 'media_pending') {
               lifecycleLogger.info(
                 { postId: ctx.postId, pendingMediaCount },
@@ -460,7 +488,7 @@ export async function publishPost(
 
         // Transition scheduled → publishing, guarded by the optimistic
         // version check so a concurrent edit still loses the race cleanly.
-        if (transitionDecision.kind !== 'proceed') {
+        if (transitionDecision?.kind !== 'proceed') {
           throw new PostLifecycleAbort('not_scheduled');
         }
         const [updatedRow] = await tx

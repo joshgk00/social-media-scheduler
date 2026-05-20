@@ -172,7 +172,10 @@ describe('publishPost lifecycle', () => {
       platformPostId: 'tw_already_789',
       status: 'published',
     });
+    const profile = seedSocialProfile();
     db.__pushExecute(() => [lockedPost]);
+    db.__pushSelect(() => [{ count: '0' }]);
+    db.__pushSelect(() => [profile]);
     const ctx = buildCtx();
 
     await expect(
@@ -227,12 +230,39 @@ describe('publishPost lifecycle', () => {
 
   it('aborts with thread_unsupported when the post is flagged as a thread', async () => {
     const lockedPost = seedLockedPost({ isThread: true });
+    const profile = seedSocialProfile();
     db.__pushExecute(() => [lockedPost]);
+    db.__pushSelect(() => [{ count: '0' }]);
+    db.__pushSelect(() => [profile]);
     const ctx = buildCtx();
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'thread_unsupported' });
+  });
+
+  it('uses the profile platform for thread support when the locked post platform is missing', async () => {
+    const lockedPost = { ...seedLockedPost({ isThread: true }), platform: null };
+    const profile = seedSocialProfile({ platform: 'linkedin' });
+    db.__pushExecute(() => [lockedPost]);
+    db.__pushSelect(() => [{ count: '0' }]);
+    db.__pushSelect(() => [profile]);
+    const ctx = buildCtx();
+
+    const result = await publishPost(
+      db as unknown as Parameters<typeof publishPost>[0],
+      ctx,
+    );
+
+    expect(result.platformPostId).toBe('tw_test_777');
+    expect(ctx.publish).toHaveBeenCalledWith(
+      profile,
+      expect.objectContaining({
+        isThread: true,
+        platform: 'linkedin',
+      }),
+      { correlationId: 'corr_test_001' },
+    );
   });
 
   it('records transient_fail attempt and rethrows on a 500 twitter error', async () => {
