@@ -30,6 +30,7 @@ import {
   type SupportedPlatform,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
+import { createStorageBackend, type StorageBackend } from '@sms/shared/storage';
 import type { WorkerDb } from './db.js';
 import { publishPost, PostLifecycleAbort } from './post-lifecycle.service.js';
 import { createTwitterPublisher } from './publishers/twitter.js';
@@ -66,6 +67,7 @@ export interface PublishHandlerDeps {
   publishPostImpl?: typeof publishPost;
   publishers?: Partial<Record<PublishPlatform, Publisher<typeof socialProfiles.$inferSelect>>>;
   checkBudgetImpl?: typeof checkBudgetForWorker;
+  storage?: StorageBackend;
 }
 
 const PUBLISH_WORKER_CONFIG = {
@@ -191,6 +193,7 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
         // TOKEN-04: enables the 401 → `token_revoked` notification emit
         // inside post-lifecycle.service.ts recordFailureAttempt.
         notificationQueue: deps.notificationQueue,
+        storage: deps.storage,
       });
 
       logger.info(
@@ -255,7 +258,8 @@ export function createPublishWorker({
   notificationQueue,
 }: PublishWorkerDeps): Worker<PublishJobPayload, PublishJobResult> {
   const baseLogger = createLogger('publish-worker');
-  const handler = createPublishHandler({ db, notificationQueue });
+  const storage = createStorageBackend();
+  const handler = createPublishHandler({ db, notificationQueue, storage });
 
   const worker = new Worker<PublishJobPayload, PublishJobResult>(
     QUEUE_NAMES.publish,

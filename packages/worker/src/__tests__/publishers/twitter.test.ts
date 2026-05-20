@@ -141,6 +141,20 @@ describe('createTwitterPublisher', () => {
     expect(failure.errorCode).toBe('ECONNRESET');
   });
 
+  it('throws a permanent credential_error when Twitter credentials cannot be read', async () => {
+    delete process.env.ENCRYPTION_KEY;
+    const publisher = createTwitterPublisher();
+
+    const failure = await capturePublishFailure(
+      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-cred' }),
+    );
+
+    expect(failure.kind).toBe('permanent');
+    expect(failure.errorCode).toBe('credential_error');
+    expect(twitterMocks.TwitterApi).not.toHaveBeenCalled();
+    expect(twitterMocks.tweet).not.toHaveBeenCalled();
+  });
+
   it('redacts token-shaped substrings before messages escape the publisher', async () => {
     const token = 'abcdefghijklmnopqrstuvwxyz1234567890ABCDEF';
     twitterMocks.tweet.mockRejectedValueOnce(

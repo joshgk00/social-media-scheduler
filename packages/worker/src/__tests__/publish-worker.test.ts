@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Job, Queue } from 'bullmq';
 import { UnrecoverableError } from 'bullmq';
 import { PublishFailure } from '@sms/shared';
+import type { StorageBackend } from '@sms/shared/storage';
 import { createPublishHandler, type PublishJobPayload } from '../publish-worker.js';
 import { PostLifecycleAbort } from '../post-lifecycle.service.js';
 
@@ -27,9 +28,13 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
     add: vi.fn().mockResolvedValue(undefined),
   } as unknown as Queue;
   const db = {} as unknown as Parameters<typeof createPublishHandler>[0]['db'];
+  const storage = {
+    get: vi.fn(),
+  } as unknown as StorageBackend;
   return {
     db,
     notificationQueue,
+    storage,
     publishPostImpl: vi.fn().mockResolvedValue({ platformPostId: 'tw_success_1' }),
     publishers: {
       twitter: {
@@ -58,6 +63,7 @@ describe('createPublishHandler', () => {
     expect(ctxArg.expectedVersion).toBe(1);
     expect(ctxArg.correlationId).toBe('corr_abc');
     expect(ctxArg.currentAttemptNum).toBe(1);
+    expect(ctxArg.storage).toBe(deps.storage);
     expect(result).toEqual({ platformPostId: 'tw_success_1' });
   });
 

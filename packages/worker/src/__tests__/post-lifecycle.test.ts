@@ -5,6 +5,7 @@ import {
   type PublishContext,
 } from '../post-lifecycle.service.js';
 import { PublishFailure } from '@sms/shared';
+import type { StorageBackend } from '@sms/shared/storage';
 import { createMockWorkerDb, type MockWorkerDb } from './helpers/mock-db.js';
 import { seedLockedPost, seedSocialProfile } from './helpers/seed-post.js';
 
@@ -76,6 +77,91 @@ describe('publishPost lifecycle', () => {
     expect((publishedUpdate?.set as { platformPostId?: string }).platformPostId).toBe(
       'tw_test_777',
     );
+  });
+
+  it('loads media bytes and passes them into publish', async () => {
+    const { profile } = seedHappyPath(db);
+    db.__pushSelect(() => [
+      {
+        id: 'media_1',
+        filePath: 'posts/post_1/image.png',
+        fileName: 'image.png',
+        mimeType: 'image/png',
+      },
+      {
+        id: 'media_2',
+        filePath: 'posts/post_1/video.mp4',
+        fileName: 'video.mp4',
+        mimeType: 'video/mp4',
+      },
+    ]);
+    const storage = {
+      get: vi
+        .fn()
+        .mockResolvedValueOnce(Buffer.from('image-bytes'))
+        .mockResolvedValueOnce(Buffer.from('video-bytes')),
+    } as unknown as StorageBackend;
+    const ctx = buildCtx({ storage });
+
+    await publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx);
+
+    expect(storage.get).toHaveBeenCalledWith('posts/post_1/image.png');
+    expect(storage.get).toHaveBeenCalledWith('posts/post_1/video.mp4');
+    expect(ctx.publish).toHaveBeenCalledWith(
+      profile,
+      expect.objectContaining({
+        media: [
+          {
+            id: 'media_1',
+            kind: 'image',
+            bytes: Buffer.from('image-bytes'),
+            mimeType: 'image/png',
+            fileName: 'image.png',
+          },
+          {
+            id: 'media_2',
+            kind: 'video',
+            bytes: Buffer.from('video-bytes'),
+            mimeType: 'video/mp4',
+            fileName: 'video.mp4',
+          },
+        ],
+      }),
+      { correlationId: 'corr_test_001' },
+    );
+  });
+
+  it('records a transient failure and reverts to scheduled when media storage fails', async () => {
+    seedHappyPath(db);
+    db.__pushSelect(() => [
+      {
+        id: 'media_1',
+        filePath: 'posts/post_1/missing.png',
+        fileName: 'missing.png',
+        mimeType: 'image/png',
+      },
+    ]);
+    const storageErr = new Error('storage object missing');
+    const storage = {
+      get: vi.fn().mockRejectedValue(storageErr),
+    } as unknown as StorageBackend;
+    const ctx = buildCtx({ storage });
+
+    await expect(
+      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
+    ).rejects.toBe(storageErr);
+
+    expect(ctx.publish).not.toHaveBeenCalled();
+    const transientAttempt = db.__insertedRows.find(
+      (row) => (row as { outcome?: string }).outcome === 'transient_fail',
+    ) as { errorCode?: string; errorMessage?: string } | undefined;
+    expect(transientAttempt).toBeDefined();
+    expect(transientAttempt?.errorCode).toBe('unknown');
+    expect(transientAttempt?.errorMessage).toBe('storage object missing');
+    const revertUpdate = db.__updates.find(
+      (u) => (u.set as { status?: string }).status === 'scheduled',
+    );
+    expect(revertUpdate).toBeDefined();
   });
 
   it('aborts with already_published when platform_post_id is set AND status is already published', async () => {

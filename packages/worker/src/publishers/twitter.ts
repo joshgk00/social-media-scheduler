@@ -22,6 +22,13 @@ const DUPLICATE_STATUS_CODE = 187;
 
 const logger = createLogger('twitter-publisher');
 
+class TwitterCredentialError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TwitterCredentialError';
+  }
+}
+
 function readTwitterErrorCode(entry: unknown): number | null {
   if (entry !== null && typeof entry === 'object' && 'code' in entry) {
     const raw = (entry as { code?: unknown }).code;
@@ -40,6 +47,15 @@ function readTwitterErrorMessage(entry: unknown): string | null {
 }
 
 function classifyTwitterError(err: unknown): ClassifiedError {
+  if (err instanceof TwitterCredentialError) {
+    return {
+      kind: 'permanent',
+      httpStatus: null,
+      errorCode: 'credential_error',
+      message: err.message,
+    };
+  }
+
   const nodeErr = err as NodeJS.ErrnoException | undefined;
   if (err instanceof ApiRequestError || nodeErr?.code === 'ECONNRESET') {
     return {
@@ -131,9 +147,16 @@ function asHexString(value: string | Buffer | null): string | null {
 function readTwitterCredentials(profile: typeof socialProfiles.$inferSelect) {
   const rawKey = process.env.ENCRYPTION_KEY;
   if (!rawKey) {
-    throw new Error('ENCRYPTION_KEY env var is not set - cannot decrypt Twitter credentials');
+    throw new TwitterCredentialError(
+      'ENCRYPTION_KEY env var is not set - cannot decrypt Twitter credentials',
+    );
   }
-  const encryptionKey = validateEncryptionKey(rawKey);
+  let encryptionKey: Buffer;
+  try {
+    encryptionKey = validateEncryptionKey(rawKey);
+  } catch {
+    throw new TwitterCredentialError('ENCRYPTION_KEY env var is invalid');
+  }
 
   const consumerKeyCiphertext = asHexString(profile.consumerKeyCiphertext);
   const consumerKeyIv = asHexString(profile.consumerKeyIv);
@@ -162,27 +185,33 @@ function readTwitterCredentials(profile: typeof socialProfiles.$inferSelect) {
     !accessTokenSecretIv ||
     !accessTokenSecretAuthTag
   ) {
-    throw new Error(
+    throw new TwitterCredentialError(
       `Profile ${profile.id} is missing one or more encrypted Twitter credential fields`,
     );
   }
 
-  return {
-    consumerKey: decrypt(consumerKeyCiphertext, consumerKeyIv, consumerKeyAuthTag, encryptionKey),
-    consumerSecret: decrypt(
-      consumerSecretCiphertext,
-      consumerSecretIv,
-      consumerSecretAuthTag,
-      encryptionKey,
-    ),
-    accessToken: decrypt(accessTokenCiphertext, accessTokenIv, accessTokenAuthTag, encryptionKey),
-    accessSecret: decrypt(
-      accessTokenSecretCiphertext,
-      accessTokenSecretIv,
-      accessTokenSecretAuthTag,
-      encryptionKey,
-    ),
-  };
+  try {
+    return {
+      consumerKey: decrypt(consumerKeyCiphertext, consumerKeyIv, consumerKeyAuthTag, encryptionKey),
+      consumerSecret: decrypt(
+        consumerSecretCiphertext,
+        consumerSecretIv,
+        consumerSecretAuthTag,
+        encryptionKey,
+      ),
+      accessToken: decrypt(accessTokenCiphertext, accessTokenIv, accessTokenAuthTag, encryptionKey),
+      accessSecret: decrypt(
+        accessTokenSecretCiphertext,
+        accessTokenSecretIv,
+        accessTokenSecretAuthTag,
+        encryptionKey,
+      ),
+    };
+  } catch {
+    throw new TwitterCredentialError(
+      `Profile ${profile.id} has Twitter credentials that could not be decrypted`,
+    );
+  }
 }
 
 export function createTwitterPublisher(): Publisher<typeof socialProfiles.$inferSelect> {

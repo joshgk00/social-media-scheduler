@@ -482,19 +482,18 @@ export async function publishPost(
       'Resuming from issue-#17 recovery — Twitter call and pre-write skipped, advancing to Phase 3',
     );
   } else {
-    const media = await loadPublishableMedia(db, ctx.postId, ctx.storage);
-    const publishablePost: PublishablePost = {
-      text: lockedPost.text,
-      platform: resolvePublishPlatform(lockedPost, lockedProfile),
-      isThread: lockedPost.is_thread,
-      visibility: resolveVisibility(lockedPost.visibility),
-      linkUrl: lockedPost.link_url ?? null,
-      media,
-    };
-
-    // PHASE 2 — platform publish OUTSIDE the transaction. Long-held locks across
-    // a network round trip would serialize the entire worker pool.
+    // PHASE 2 — media load + platform publish OUTSIDE the transaction. Long-held
+    // locks across storage or network round trips would serialize the worker pool.
     try {
+      const media = await loadPublishableMedia(db, ctx.postId, ctx.storage);
+      const publishablePost: PublishablePost = {
+        text: lockedPost.text,
+        platform: resolvePublishPlatform(lockedPost, lockedProfile),
+        isThread: lockedPost.is_thread,
+        visibility: resolveVisibility(lockedPost.visibility),
+        linkUrl: lockedPost.link_url ?? null,
+        media,
+      };
       const callResult = await ctx.publish(
         lockedProfile,
         publishablePost,
