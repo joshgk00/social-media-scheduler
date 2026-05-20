@@ -4,9 +4,10 @@ import {
   PostLifecycleAbort,
   type PublishContext,
 } from '../post-lifecycle.service.js';
+import { PublishFailure } from '@sms/shared';
+import type { StorageBackend } from '@sms/shared/storage';
 import { createMockWorkerDb, type MockWorkerDb } from './helpers/mock-db.js';
 import { seedLockedPost, seedSocialProfile } from './helpers/seed-post.js';
-import { buildApiResponseError } from './helpers/mock-twitter.js';
 
 function buildCtx(overrides: Partial<PublishContext> = {}): PublishContext {
   return {
@@ -14,7 +15,7 @@ function buildCtx(overrides: Partial<PublishContext> = {}): PublishContext {
     expectedVersion: 1,
     correlationId: 'corr_test_001',
     currentAttemptNum: 1,
-    callTwitter: vi.fn().mockResolvedValue({ platformPostId: 'tw_test_777' }),
+    publish: vi.fn().mockResolvedValue({ platformPostId: 'tw_test_777' }),
     checkBudget: vi.fn().mockResolvedValue({ wouldExceed: false }),
     ...overrides,
   };
@@ -40,14 +41,26 @@ describe('publishPost lifecycle', () => {
   });
 
   it('transitions a scheduled post to published and writes platform_post_id', async () => {
-    seedHappyPath(db);
+    const { lockedPost, profile } = seedHappyPath(db);
     const ctx = buildCtx();
     const result = await publishPost(
       db as unknown as Parameters<typeof publishPost>[0],
       ctx,
     );
     expect(result.platformPostId).toBe('tw_test_777');
-    expect(ctx.callTwitter).toHaveBeenCalledTimes(1);
+    expect(ctx.publish).toHaveBeenCalledTimes(1);
+    expect(ctx.publish).toHaveBeenCalledWith(
+      profile,
+      {
+        text: lockedPost.text,
+        platform: 'twitter',
+        isThread: false,
+        visibility: null,
+        linkUrl: null,
+        media: [],
+      },
+      { correlationId: 'corr_test_001' },
+    );
 
     // Success path inserts an attempt row with outcome=success
     const successAttempt = db.__insertedRows.find(
@@ -66,6 +79,91 @@ describe('publishPost lifecycle', () => {
     );
   });
 
+  it('loads media bytes and passes them into publish', async () => {
+    const { profile } = seedHappyPath(db);
+    db.__pushSelect(() => [
+      {
+        id: 'media_1',
+        filePath: 'posts/post_1/image.png',
+        fileName: 'image.png',
+        mimeType: 'image/png',
+      },
+      {
+        id: 'media_2',
+        filePath: 'posts/post_1/video.mp4',
+        fileName: 'video.mp4',
+        mimeType: 'video/mp4',
+      },
+    ]);
+    const storage = {
+      get: vi
+        .fn()
+        .mockResolvedValueOnce(Buffer.from('image-bytes'))
+        .mockResolvedValueOnce(Buffer.from('video-bytes')),
+    } as unknown as StorageBackend;
+    const ctx = buildCtx({ storage });
+
+    await publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx);
+
+    expect(storage.get).toHaveBeenCalledWith('posts/post_1/image.png');
+    expect(storage.get).toHaveBeenCalledWith('posts/post_1/video.mp4');
+    expect(ctx.publish).toHaveBeenCalledWith(
+      profile,
+      expect.objectContaining({
+        media: [
+          {
+            id: 'media_1',
+            kind: 'image',
+            bytes: Buffer.from('image-bytes'),
+            mimeType: 'image/png',
+            fileName: 'image.png',
+          },
+          {
+            id: 'media_2',
+            kind: 'video',
+            bytes: Buffer.from('video-bytes'),
+            mimeType: 'video/mp4',
+            fileName: 'video.mp4',
+          },
+        ],
+      }),
+      { correlationId: 'corr_test_001' },
+    );
+  });
+
+  it('records a transient failure and reverts to scheduled when media storage fails', async () => {
+    seedHappyPath(db);
+    db.__pushSelect(() => [
+      {
+        id: 'media_1',
+        filePath: 'posts/post_1/missing.png',
+        fileName: 'missing.png',
+        mimeType: 'image/png',
+      },
+    ]);
+    const storageErr = new Error('storage object missing');
+    const storage = {
+      get: vi.fn().mockRejectedValue(storageErr),
+    } as unknown as StorageBackend;
+    const ctx = buildCtx({ storage });
+
+    await expect(
+      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
+    ).rejects.toBe(storageErr);
+
+    expect(ctx.publish).not.toHaveBeenCalled();
+    const transientAttempt = db.__insertedRows.find(
+      (row) => (row as { outcome?: string }).outcome === 'transient_fail',
+    ) as { errorCode?: string; errorMessage?: string } | undefined;
+    expect(transientAttempt).toBeDefined();
+    expect(transientAttempt?.errorCode).toBe('unknown');
+    expect(transientAttempt?.errorMessage).toBe('storage object missing');
+    const revertUpdate = db.__updates.find(
+      (u) => (u.set as { status?: string }).status === 'scheduled',
+    );
+    expect(revertUpdate).toBeDefined();
+  });
+
   it('aborts with already_published when platform_post_id is set AND status is already published', async () => {
     // True idempotent retry of a fully-committed publish: Phase 3 already
     // ran on a prior attempt. We must not re-tweet and we must not run
@@ -81,7 +179,7 @@ describe('publishPost lifecycle', () => {
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'already_published' });
 
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
   });
 
   it('aborts with version_mismatch when post_version has moved', async () => {
@@ -92,7 +190,7 @@ describe('publishPost lifecycle', () => {
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'version_mismatch' });
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
   });
 
   it('aborts with not_scheduled when status is no longer scheduled', async () => {
@@ -103,7 +201,7 @@ describe('publishPost lifecycle', () => {
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'not_scheduled' });
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
   });
 
   it('aborts with not_scheduled when the post row does not exist', async () => {
@@ -112,7 +210,7 @@ describe('publishPost lifecycle', () => {
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'not_scheduled' });
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
   });
 
   it('aborts with budget_exhausted and leaves post scheduled when checkBudget reports wouldExceed', async () => {
@@ -124,7 +222,7 @@ describe('publishPost lifecycle', () => {
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'budget_exhausted' });
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
   });
 
   it('aborts with thread_unsupported when the post is flagged as a thread', async () => {
@@ -139,9 +237,14 @@ describe('publishPost lifecycle', () => {
 
   it('records transient_fail attempt and rethrows on a 500 twitter error', async () => {
     seedHappyPath(db);
-    const transientErr = buildApiResponseError({ httpStatus: 500, detail: 'upstream' });
+    const transientErr = new PublishFailure({
+      kind: 'transient',
+      errorCode: 'http_500',
+      message: 'upstream',
+      httpStatus: 500,
+    });
     const ctx = buildCtx({
-      callTwitter: vi.fn().mockRejectedValue(transientErr),
+      publish: vi.fn().mockRejectedValue(transientErr),
     });
 
     await expect(
@@ -161,9 +264,14 @@ describe('publishPost lifecycle', () => {
 
   it('records permanent_fail attempt and transitions to failed on 401 auth revoked', async () => {
     seedHappyPath(db);
-    const permanentErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
+    const permanentErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'auth_revoked',
+      message: 'Twitter credentials are no longer valid - please reconnect the profile',
+      httpStatus: 401,
+    });
     const ctx = buildCtx({
-      callTwitter: vi.fn().mockRejectedValue(permanentErr),
+      publish: vi.fn().mockRejectedValue(permanentErr),
     });
 
     await expect(
@@ -187,13 +295,14 @@ describe('publishPost lifecycle', () => {
 
   it('duplicate content (twitter code 187) is classified permanent and transitions to failed', async () => {
     seedHappyPath(db);
-    const duplicateErr = buildApiResponseError({
+    const duplicateErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'duplicate_content',
+      message: 'Duplicate content - Twitter rejected this tweet',
       httpStatus: 403,
-      code: 187,
-      detail: 'Status is a duplicate',
     });
     const ctx = buildCtx({
-      callTwitter: vi.fn().mockRejectedValue(duplicateErr),
+      publish: vi.fn().mockRejectedValue(duplicateErr),
     });
 
     await expect(
@@ -231,7 +340,7 @@ describe('publishPost media-readiness gate (MEDIA-05)', () => {
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'media_pending' });
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
   });
 
   it('aborts with media_pending when post has media with transcode_status=processing', async () => {
@@ -241,7 +350,7 @@ describe('publishPost media-readiness gate (MEDIA-05)', () => {
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'media_pending' });
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
   });
 
   it('proceeds normally when all media have transcode_status=completed or not_applicable', async () => {
@@ -253,7 +362,7 @@ describe('publishPost media-readiness gate (MEDIA-05)', () => {
       ctx,
     );
     expect(result.platformPostId).toBe('tw_test_777');
-    expect(ctx.callTwitter).toHaveBeenCalledTimes(1);
+    expect(ctx.publish).toHaveBeenCalledTimes(1);
   });
 
   it('proceeds normally when post has no media rows', async () => {
@@ -365,7 +474,7 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
     ).rejects.toBe(phase3Err);
 
     // Twitter was called exactly once (the tweet is already live).
-    expect(ctx.callTwitter).toHaveBeenCalledTimes(1);
+    expect(ctx.publish).toHaveBeenCalledTimes(1);
 
     // Pre-write must still be in the updates log — that's the crash-safe marker
     // a BullMQ retry will see via the FOR UPDATE load in Phase 1, hitting the
@@ -417,7 +526,7 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
 
     // Returns the recovered id without re-calling Twitter.
     expect(result.platformPostId).toBe('tw_recovery_123');
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
 
     // No duplicate pre-write — the marker was already on the row.
     const prewrite = findPlatformPostIdPrewrite(db);
@@ -470,7 +579,7 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
     ).rejects.toBe(prewriteErr);
 
     // The tweet was sent (we can't recall it) — exactly once.
-    expect(ctx.callTwitter).toHaveBeenCalledTimes(1);
+    expect(ctx.publish).toHaveBeenCalledTimes(1);
 
     // Phase 3 never ran: no success postAttempts row, no status='published'.
     const successInsert = db.__insertedRows.find(

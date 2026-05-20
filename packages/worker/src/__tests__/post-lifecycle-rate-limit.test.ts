@@ -30,7 +30,7 @@ function buildCtx(
     expectedVersion: 1,
     correlationId: 'corr_rate_limit',
     currentAttemptNum: 1,
-    callTwitter: vi.fn(),
+    publish: vi.fn(),
     checkBudget: vi.fn().mockResolvedValue({ wouldExceed: false }),
     notificationQueue: buildNotificationQueue(),
     ...overrides,
@@ -123,7 +123,7 @@ describe('publishPost rate-limit gate (LIMIT-06, LIMIT-07)', () => {
 
     const ctx = buildCtx({
       checkBudget: vi.fn().mockResolvedValue({ wouldExceed: false }),
-      callTwitter: vi.fn().mockResolvedValue({
+      publish: vi.fn().mockResolvedValue({
         platformPostId: '123_777',
       }),
     });
@@ -150,7 +150,7 @@ describe('publishPost rate-limit gate (LIMIT-06, LIMIT-07)', () => {
 
     const ctx = buildCtx({
       checkBudget: vi.fn().mockResolvedValue({ wouldExceed: false }),
-      callTwitter: vi
+      publish: vi
         .fn()
         .mockResolvedValue({ platformPostId: 'urn:li:share:1' }),
     });

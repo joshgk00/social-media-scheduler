@@ -2,7 +2,7 @@
 // tokens) plus the platform post ID, constructs a TwitterApi client and
 // deletes the tweet via the v2 endpoint.
 //
-// CREDENTIAL DISCIPLINE (T-05-03-01): mirrors twitter-publish.service.ts
+// CREDENTIAL DISCIPLINE (T-05-03-01): mirrors Twitter publisher handling
 // exactly -- plaintext tokens are const-scoped, never logged, never cached.
 //
 // D-13: Platform 404 (post already deleted externally) is treated as

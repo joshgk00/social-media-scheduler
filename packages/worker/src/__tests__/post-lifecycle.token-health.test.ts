@@ -21,7 +21,7 @@ function buildCtx(overrides: Partial<PublishContext> = {}): PublishContext {
     expectedVersion: 1,
     correlationId: 'corr_test_001',
     currentAttemptNum: 1,
-    callTwitter: vi.fn().mockResolvedValue({ platformPostId: 'tw_test_777' }),
+    publish: vi.fn().mockResolvedValue({ platformPostId: 'tw_test_777' }),
     checkBudget: vi.fn().mockResolvedValue({ wouldExceed: false }),
     ...overrides,
   };
@@ -53,7 +53,7 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
     );
 
     expect(result.platformPostId).toBe('tw_test_777');
-    expect(ctx.callTwitter).toHaveBeenCalledTimes(1);
+    expect(ctx.publish).toHaveBeenCalledTimes(1);
   });
 
   it.each(['expiring', 'needs_reauth', 'expired'])(
@@ -66,7 +66,7 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
         publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
       ).rejects.toMatchObject({ reason: 'token_unhealthy' });
 
-      expect(ctx.callTwitter).not.toHaveBeenCalled();
+      expect(ctx.publish).not.toHaveBeenCalled();
     },
   );
 
@@ -118,7 +118,7 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ reason: 'token_unhealthy' });
 
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
     // Only a single insert (the cancelled attempt). No additional writes
     // that would indicate a notification emit.
     expect(db.__insertedRows.length).toBe(1);
@@ -138,6 +138,6 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
     // reach the state-transition UPDATE. Budget check may or may not have
     // run before profile load — what matters is the publish does not call
     // Twitter and no publishing transition occurs.
-    expect(ctx.callTwitter).not.toHaveBeenCalled();
+    expect(ctx.publish).not.toHaveBeenCalled();
   });
 });
