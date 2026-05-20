@@ -9,6 +9,8 @@ description: Starts and monitors the repo's overnight Clawpatch GitHub issue bat
 
 Run imported GitHub-backed Clawpatch findings in small timed batches. Default policy: one finding every 30 minutes, with one commit per fixed finding.
 
+The overnight runner is resilient by default: each finding gets one initial fix attempt plus three repair retries. If all attempts fail, the runner saves local failure artifacts, marks the finding `uncertain`, commits that Clawpatch status update, restores a clean worktree, and continues with the next open finding.
+
 ## Before Starting
 
 1. Confirm the repo root:
@@ -63,7 +65,7 @@ git status --short
 git log --oneline -8
 ```
 
-The loop stops on failed validation, failed revalidation, or a dirty worktree. That is expected safety behavior.
+The loop parks findings that exhaust their repair attempts and continues. It still stops on cleanup failures, stale locks, missing tools, or any condition that leaves the worktree dirty after parking.
 
 ## Stop
 
