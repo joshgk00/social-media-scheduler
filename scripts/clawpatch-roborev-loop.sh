@@ -277,21 +277,35 @@ include_stage_path() {
   esac
 }
 
-stage_changed_files() {
-  local paths=()
+changed_source_paths() {
   local path
 
   while IFS= read -r -d '' path; do
     if include_stage_path "$path"; then
-      paths+=("$path")
+      printf '%s\0' "$path"
     fi
   done < <(git diff --name-only -z)
 
   while IFS= read -r -d '' path; do
     if include_stage_path "$path"; then
-      paths+=("$path")
+      printf '%s\0' "$path"
+    fi
+  done < <(git diff --cached --name-only -z)
+
+  while IFS= read -r -d '' path; do
+    if include_stage_path "$path"; then
+      printf '%s\0' "$path"
     fi
   done < <(git ls-files --others --exclude-standard -z)
+}
+
+stage_changed_files() {
+  local paths=()
+  local path
+
+  while IFS= read -r -d '' path; do
+    paths+=("$path")
+  done < <(changed_source_paths)
 
   if [[ "${#paths[@]}" -eq 0 ]]; then
     return 0
@@ -316,18 +330,22 @@ commit_current_changes() {
 
 stash_failed_work() {
   local finding_id="$1"
+  local paths=()
+  local path
 
   if [[ -z "$(source_status)" ]]; then
     return 0
   fi
 
-  git stash push -u -m "clawpatch-roborev failed ${finding_id}" -- \
-    . \
-    ':!/.agent' \
-    ':!/.agents' \
-    ':!/.claude' \
-    ':!/skills-lock.json' \
-    ':!packages/web/.vite'
+  while IFS= read -r -d '' path; do
+    paths+=("$path")
+  done < <(changed_source_paths)
+
+  if [[ "${#paths[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  git stash push -u -m "clawpatch-roborev failed ${finding_id}" -- "${paths[@]}"
 }
 
 handle_finding_failure() {
