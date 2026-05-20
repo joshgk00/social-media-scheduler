@@ -1,5 +1,5 @@
 import { eq, and, sql, inArray, gte, lte, ne, count as drizzleCount, isNull, type SQL } from 'drizzle-orm';
-import { AppError, DELETABLE_STATES, PostInvariantError, planUpdate } from '@sms/shared';
+import { AppError, PostInvariantError, planDelete, planUpdate } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostPlatform, PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
@@ -324,6 +324,37 @@ export async function deletePost(
   postId: string,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
+    const existingRows = await tx
+      .select({
+        id: posts.id,
+        status: posts.status,
+        postVersion: posts.postVersion,
+        scheduledAt: posts.scheduledAt,
+        platform: posts.platform,
+      })
+      .from(posts)
+      .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
+
+    if (existingRows.length === 0) {
+      throw new PostServiceError('Post not found', 404);
+    }
+
+    const existingPost = existingRows[0];
+
+    try {
+      planDelete({
+        status: existingPost.status as PostStatus,
+        postVersion: existingPost.postVersion,
+        scheduledAt: existingPost.scheduledAt,
+        platform: existingPost.platform as PostPlatform | null,
+      });
+    } catch (err) {
+      if (err instanceof PostInvariantError) {
+        throw toPostServiceError(err);
+      }
+      throw err;
+    }
+
     // D-13: Soft-delete associated media before deleting the post row.
     // The SET NULL FK on post_media.postId nulls post_id when the post is deleted,
     // but deletedAt persists so the weekly cleanup worker finds and removes storage files.
@@ -338,7 +369,7 @@ export async function deletePost(
         and(
           eq(posts.id, postId),
           eq(posts.userId, userId),
-          inArray(posts.status, [...DELETABLE_STATES]),
+          eq(posts.status, existingPost.status),
         ),
       )
       .returning({ id: posts.id });

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { PostInvariantError, planUpdate, type PostState } from '../index.js';
+import {
+  DELETABLE_STATES,
+  POST_STATUSES,
+  PostInvariantError,
+  planDelete,
+  planUpdate,
+  type PostState,
+} from '../index.js';
 
 const now = new Date('2030-01-01T00:00:00.000Z');
 
@@ -20,6 +27,26 @@ function expectPostInvariant(fn: () => unknown, kind: PostInvariantError['kind']
     expect((err as PostInvariantError).kind).toBe(kind);
   }
 }
+
+describe('planDelete', () => {
+  it.each(DELETABLE_STATES.map((status) => [status]))(
+    'allows deleting %s posts',
+    (status) => {
+      expect(planDelete({ ...baseState, status })).toBeUndefined();
+    },
+  );
+
+  it.each(
+    POST_STATUSES
+      .filter((status) => !DELETABLE_STATES.includes(status))
+      .map((status) => [status]),
+  )(
+    'rejects deleting %s posts',
+    (status) => {
+      expectInvariant(() => planDelete({ ...baseState, status }), 'not_deletable');
+    },
+  );
+});
 
 describe('planUpdate', () => {
   it('returns a minimal patch for supplied mutable fields', () => {

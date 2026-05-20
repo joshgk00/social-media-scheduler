@@ -1,4 +1,5 @@
 import {
+  DELETABLE_STATES,
   EDITABLE_STATES,
   transitionPost,
   type PostStatus,
@@ -30,6 +31,15 @@ function parseScheduledAt(value: string): Date {
   }
 
   return scheduledAt;
+}
+
+export function planDelete(currentRow: PostState): void {
+  if (!DELETABLE_STATES.includes(currentRow.status)) {
+    throw new PostInvariantError(
+      'not_deletable',
+      'This post cannot be deleted in its current state.',
+    );
+  }
 }
 
 export function planUpdate(

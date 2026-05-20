@@ -226,10 +226,24 @@ function createPostCreateMockDb(options: {
 
 function createDeleteMockDb(options: {
   deleteResult?: unknown[];
-  existingPost?: { id: string; status: string } | null;
+  existingPost?: {
+    id: string;
+    status: string;
+    postVersion?: number;
+    scheduledAt?: Date | string | null;
+    platform?: string | null;
+  } | null;
 }) {
   const deleteResult = options.deleteResult ?? [];
-  const existingPost = options.existingPost;
+  const existingPost = options.existingPost === undefined
+    ? {
+        id: 'post-1',
+        status: 'draft',
+        postVersion: 1,
+        scheduledAt: null,
+        platform: 'twitter',
+      }
+    : options.existingPost;
 
   const deleteChain: Record<string, any> = {};
   deleteChain.where = vi.fn().mockReturnValue(deleteChain);
@@ -715,7 +729,6 @@ describe('post.service', () => {
     it('deletes posts in deletable states', async () => {
       const db = createDeleteMockDb({
         deleteResult: [{ id: 'post-1' }],
-        existingPost: null,
       });
 
       const result = await deletePost(db, 'user-1', 'post-1');
