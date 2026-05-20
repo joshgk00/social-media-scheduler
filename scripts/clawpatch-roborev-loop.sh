@@ -373,15 +373,18 @@ handle_finding_failure() {
     exit 6
   fi
 
-  failed_findings+=("$finding_id")
+  failed_findings[$failed_findings_count]="$finding_id"
+  failed_findings_count=$((failed_findings_count + 1))
   return 0
 }
 
 next_finding() {
   local args=(next --plain --status "$STATUS")
+  local index
   local finding_id
 
-  for finding_id in "${failed_findings[@]}"; do
+  for ((index = 0; index < failed_findings_count; index += 1)); do
+    finding_id="${failed_findings[$index]}"
     args+=(--exclude "$finding_id")
   done
 
@@ -463,6 +466,7 @@ require_clean_source_tree
 
 completed=0
 failed_findings=()
+failed_findings_count=0
 
 while [[ "$completed" -lt "$MAX" ]]; do
   require_clean_source_tree
