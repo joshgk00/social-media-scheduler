@@ -93,6 +93,34 @@
         "rg -n \"process\\.env\\.ENCRYPTION_KEY|encrypt\\(\" packages/api/src/services/profile.service.ts packages/api/src/index.ts packages/api/src/app.ts packages/api/src/routes/profiles.ts packages/api/src/routes/oauth.ts packages/api/src/__tests__/services/profile.test.ts packages/api/src/services/__tests__/profile.service.test.ts"
       ],
       "createdAt": "2026-05-20T19:36:33.147Z"
+    },
+    {
+      "runId": "20260520T194419-c21547",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current packages/api/src/services/profile.service.ts imports TokenVault and accepts a vault parameter for createProfile, createProfileFromOAuth, and reconnectProfile; Twitter credentials are sealed with vault.sealTwitterCredentials at line 171, OAuth access tokens with vault.sealOAuth2AccessToken at lines 410 and 529, and refresh tokens with vault.sealOAuth2RefreshToken at lines 412 and 547. The acceptance searches for encrypt( and process.env.ENCRYPTION_KEY in profile.service.ts returned no matches. packages/api/src/index.ts constructs createTokenVault(ENCRYPTION_KEY) at line 39 and passes tokenVault into createApp at line 68; app/routes pass getTokenVault() into the profile service. The original test path now injects a mock vault and asserts TokenVault use, and the OAuth service tests also use a TokenVault mock. pnpm --filter @sms/api typecheck passed. Focused Vitest and build commands could not complete because the read-only sandbox blocked Vite/tsc writes with EPERM, which is environmental rather than evidence the finding remains open.",
+      "commands": [
+        "rg -n \"encrypt\\(|process\\.env\\.ENCRYPTION_KEY|TokenVault|createTokenVault|sealTwitterCredentials|sealOAuth2\" packages/api/src/services/profile.service.ts packages/api/src/index.ts packages/api/src/__tests__/services/profile.test.ts packages/api/src/app.ts packages/api/src/routes/profiles.ts packages/api/src/routes/oauth.ts packages/api/src/services/__tests__/profile.service.test.ts",
+        "rg -n \"class TokenVault|interface TokenVault|type TokenVault|createTokenVault|sealTwitterCredentials|sealOAuth2AccessToken|sealOAuth2RefreshToken\" packages -S",
+        "git status --short",
+        "nl -ba packages/api/src/services/profile.service.ts | sed -n '1,190p'",
+        "nl -ba packages/api/src/services/profile.service.ts | sed -n '390,570p'",
+        "nl -ba packages/api/src/index.ts | sed -n '1,85p'",
+        "nl -ba packages/api/src/app.ts | sed -n '45,125p'",
+        "rg -n \"encrypt\\(\" packages/api/src/services/profile.service.ts",
+        "rg -n \"process\\.env\\.ENCRYPTION_KEY\" packages/api/src/services/profile.service.ts",
+        "nl -ba packages/api/src/services/token-vault.service.ts | sed -n '1,80p'",
+        "nl -ba packages/api/src/__tests__/services/profile.test.ts | sed -n '170,255p'",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/services/profile.test.ts packages/api/src/services/__tests__/profile.service.test.ts packages/api/src/routes/__tests__/oauth.test.ts",
+        "pnpm --filter @sms/api build",
+        "rg -n \"createProfile\\(|createProfileFromOAuth\\(|reconnectProfile\\(\" packages/api/src -S",
+        "nl -ba packages/api/src/services/__tests__/profile.service.test.ts | sed -n '1,190p'",
+        "nl -ba packages/api/src/routes/profiles.ts | sed -n '1,70p'",
+        "nl -ba packages/api/src/routes/oauth.ts | sed -n '430,480p'"
+      ],
+      "createdAt": "2026-05-20T19:45:20.476Z"
     }
   ],
   "signature": "sig_gh-67_af375cc2c7",
@@ -101,5 +129,5 @@
   ],
   "createdByRunId": "20260519T201935-c24f6a",
   "createdAt": "2026-05-19T20:19:35.980Z",
-  "updatedAt": "2026-05-20T19:36:33.147Z"
+  "updatedAt": "2026-05-20T19:45:20.476Z"
 }
