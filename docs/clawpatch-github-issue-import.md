@@ -64,6 +64,8 @@ pnpm clawpatch:overnight -- --runs 12 --background
 
 This starts one finding every 30 minutes for about six hours and logs to `logs/clawpatch-overnight.log`.
 
+By default the overnight loop gives each finding one initial fix attempt plus three repair retries. If all attempts fail, the runner saves local artifacts under `.clawpatch/reports/overnight-failures/`, marks the finding `uncertain`, commits that Clawpatch status update, restores a clean worktree, and continues with the next open finding. It still stops if it cannot restore a clean worktree.
+
 The runner performs:
 
 1. Select next imported GitHub finding in backlog order.
@@ -71,7 +73,9 @@ The runner performs:
 3. `clawpatch fix --finding`.
 4. `clawpatch revalidate --finding`.
 5. `pnpm typecheck`, `pnpm lint`, `pnpm test`.
-6. Commit the source changes unless `--no-commit` is set.
+6. Retry repair up to `--repair-attempts` times when fixing or validation fails.
+7. Commit the source changes unless `--no-commit` is set.
+8. Park exhausted findings as `uncertain` so the queue can continue overnight.
 
 Clawpatch's own `format` validation command is disabled in `.clawpatch/config.json`. Do not point it at `pnpm format`: that command writes across the whole repository and can create huge unrelated diffs during automated fixes. Use targeted formatting during implementation and rely on the runner's non-mutating validation gates for the batch.
 
