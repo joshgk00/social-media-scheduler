@@ -70,7 +70,7 @@ export default function LoginPage() {
           setStep('credentials');
           setTotpError(null);
           toast.error('Session expired. Please sign in again.');
-          return 0;
+          return TOTP_TIMEOUT_SECONDS;
         }
         return prev - 1;
       });
@@ -96,6 +96,7 @@ export default function LoginPage() {
     try {
       const result = await loginMutation.mutateAsync(data);
       if (result.requiresTwoFactor) {
+        setCountdown(TOTP_TIMEOUT_SECONDS);
         setStep('totp');
       } else {
         redirectToTarget();
@@ -120,6 +121,7 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const error = err as { status?: number; body?: { error?: string } };
       if (error.status === 401 && error.body?.error?.toLowerCase().includes('session expired')) {
+        setCountdown(TOTP_TIMEOUT_SECONDS);
         setStep('credentials');
         setTotpError(null);
         totpForm.reset();
@@ -133,6 +135,7 @@ export default function LoginPage() {
   }
 
   function handleBackToLogin() {
+    setCountdown(TOTP_TIMEOUT_SECONDS);
     setStep('credentials');
     setTotpError(null);
     totpForm.reset();
