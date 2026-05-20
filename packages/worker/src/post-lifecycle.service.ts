@@ -29,13 +29,26 @@ import type { Queue } from 'bullmq';
 import { posts, postAttempts, socialProfiles, postMedia } from '@sms/db';
 import {
   JOB_NAMES,
+  PublishFailure,
+  type MediaItem,
+  type PublishablePost,
+  type PublishCtx,
   type TokenNotificationEvent,
+  type SupportedPlatform,
+  type PublishFailureKind,
 } from '@sms/shared';
-import { classifyTwitterError, type ClassifiedError } from '@sms/shared/lib/error-classifier';
 import { createLogger } from '@sms/shared/logger';
+import { createStorageBackend, type StorageBackend } from '@sms/shared/storage';
 import type { WorkerDb } from './db.js';
 
 const logger = createLogger('post-lifecycle');
+
+type ClassifiedError = {
+  kind: PublishFailureKind;
+  httpStatus: number | null;
+  errorCode: string;
+  message: string;
+};
 
 // UTC midnight of "today" — the LinkedIn daily window resets here per
 // LIMIT-07. Mirrors the same helper used in @sms/api rate-limit.service.ts.
@@ -80,18 +93,10 @@ export interface PublishContext {
   expectedVersion: number;
   correlationId: string;
   currentAttemptNum: number;
-  callTwitter: (
+  publish: (
     profile: typeof socialProfiles.$inferSelect,
-    postText: string,
-    isThread: boolean,
-    // Phase 8: typed columns flowed through so the publish-worker's platform
-    // dispatcher can branch to LinkedIn / Facebook without a second SELECT.
-    // Backward-compatible — Twitter callbacks ignore these.
-    extras?: {
-      platform: string | null;
-      visibility: string | null;
-      linkUrl: string | null;
-    },
+    post: PublishablePost,
+    ctx: PublishCtx,
   ) => Promise<{ platformPostId: string }>;
   // Phase 8 (D-05, D-07): callers may now annotate the result with the
   // platform whose window was checked. When `platform` is `linkedin` or
@@ -109,6 +114,7 @@ export interface PublishContext {
   // notifications AFTER the permanent_fail transaction commits so an orphan
   // notification can never escape a rolled-back state change.
   notificationQueue?: Queue;
+  storage?: StorageBackend;
 }
 
 export interface PublishResult {
@@ -133,6 +139,81 @@ interface LockedPostRow extends Record<string, unknown> {
   platform: string | null;
   visibility: string | null;
   link_url: string | null;
+}
+
+interface PublishableMediaRow {
+  id: string;
+  filePath: string;
+  fileName: string;
+  mimeType: string;
+}
+
+function isSupportedPlatform(platform: string | null | undefined): platform is SupportedPlatform {
+  return platform === 'twitter' || platform === 'linkedin' || platform === 'facebook';
+}
+
+function resolvePublishPlatform(
+  post: LockedPostRow,
+  profile: typeof socialProfiles.$inferSelect,
+): SupportedPlatform {
+  if (isSupportedPlatform(post.platform)) return post.platform;
+  if (isSupportedPlatform(profile.platform)) return profile.platform;
+  return 'twitter';
+}
+
+function resolveVisibility(
+  visibility: string | null | undefined,
+): PublishablePost['visibility'] {
+  return visibility === 'PUBLIC' || visibility === 'CONNECTIONS' ? visibility : null;
+}
+
+function mediaKindFromMimeType(mimeType: string): MediaItem['kind'] {
+  if (mimeType === 'image/gif') return 'gif';
+  if (mimeType.startsWith('video/')) return 'video';
+  return 'image';
+}
+
+async function loadPublishableMedia(
+  db: WorkerDb,
+  postId: string,
+  storage?: StorageBackend,
+): Promise<MediaItem[]> {
+  const rows = await db
+    .select({
+      id: postMedia.id,
+      filePath: postMedia.filePath,
+      fileName: postMedia.fileName,
+      mimeType: postMedia.mimeType,
+    })
+    .from(postMedia)
+    .where(and(eq(postMedia.postId, postId), isNull(postMedia.deletedAt)))
+    .orderBy(postMedia.sortOrder);
+
+  if (rows.length === 0) return [];
+
+  const storageBackend = storage ?? createStorageBackend();
+  return Promise.all(
+    rows.map(async (row: PublishableMediaRow) => ({
+      id: row.id,
+      kind: mediaKindFromMimeType(row.mimeType),
+      bytes: await storageBackend.get(row.filePath),
+      mimeType: row.mimeType,
+      fileName: row.fileName,
+    })),
+  );
+}
+
+function classifyPublishError(err: unknown): ClassifiedError {
+  if (err instanceof PublishFailure) {
+    return {
+      kind: err.kind,
+      httpStatus: err.httpStatus ?? null,
+      errorCode: err.errorCode,
+      message: err.message,
+    };
+  }
+  const message = err instanceof Error ? err.message : 'Unknown error';
+  return { kind: 'transient', httpStatus: null, errorCode: 'unknown', message };
 }
 
 export async function publishPost(
@@ -401,22 +482,26 @@ export async function publishPost(
       'Resuming from issue-#17 recovery — Twitter call and pre-write skipped, advancing to Phase 3',
     );
   } else {
-    // PHASE 2 — Twitter call OUTSIDE the transaction. Long-held locks across
-    // a network round trip would serialize the entire worker pool.
+    // PHASE 2 — media load + platform publish OUTSIDE the transaction. Long-held
+    // locks across storage or network round trips would serialize the worker pool.
     try {
-      const callResult = await ctx.callTwitter(
+      const media = await loadPublishableMedia(db, ctx.postId, ctx.storage);
+      const publishablePost: PublishablePost = {
+        text: lockedPost.text,
+        platform: resolvePublishPlatform(lockedPost, lockedProfile),
+        isThread: lockedPost.is_thread,
+        visibility: resolveVisibility(lockedPost.visibility),
+        linkUrl: lockedPost.link_url ?? null,
+        media,
+      };
+      const callResult = await ctx.publish(
         lockedProfile,
-        lockedPost.text,
-        lockedPost.is_thread,
-        {
-          platform: lockedPost.platform,
-          visibility: lockedPost.visibility,
-          linkUrl: lockedPost.link_url,
-        },
+        publishablePost,
+        { correlationId: ctx.correlationId },
       );
       platformPostId = callResult.platformPostId;
-    } catch (twitterErr) {
-      const classification = classifyTwitterError(twitterErr);
+    } catch (publishErr) {
+      const classification = classifyPublishError(publishErr);
       await recordFailureAttempt(db, {
         postId: ctx.postId,
         profileId: lockedProfile.id,
@@ -434,7 +519,7 @@ export async function publishPost(
           'Failed to persist post_attempts row for transient/permanent failure',
         );
       });
-      throw twitterErr;
+      throw publishErr;
     }
 
     // CRASH-SAFE IDEMPOTENCY MARKER (issue #17). See the recovery branch in
@@ -455,7 +540,7 @@ export async function publishPost(
     // by reading log lines.
     lifecycleLogger.info(
       { platformPostId },
-      'Tweet posted — persisting idempotency marker before Phase 3 commit',
+      'Platform post published — persisting idempotency marker before Phase 3 commit',
     );
     try {
       await db
@@ -466,7 +551,7 @@ export async function publishPost(
       // Intentionally surface (don't swallow): BullMQ must retry.
       lifecycleLogger.error(
         { err: prewriteErr, platformPostId },
-        'CRITICAL: tweet posted but pre-write of platform_post_id failed — retry may duplicate, rely on Twitter duplicate-content rejection',
+        'CRITICAL: platform post published but pre-write of platform_post_id failed — retry may duplicate',
       );
       throw prewriteErr;
     }
