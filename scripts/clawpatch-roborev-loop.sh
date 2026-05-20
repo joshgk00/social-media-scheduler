@@ -229,7 +229,7 @@ run_with_timeout() {
   fi
 
   local marker
-  marker="$(mktemp)"
+  marker="$(mktemp -t clawpatch-roborev.XXXXXX)"
 
   "$@" &
   local command_pid=$!
@@ -261,9 +261,9 @@ run_with_timeout() {
 }
 
 validate_repo() {
-  pnpm typecheck
-  pnpm lint
-  run_with_retries "$TEST_RETRIES" pnpm test
+  pnpm typecheck || return 1
+  pnpm lint || return 1
+  run_with_retries "$TEST_RETRIES" pnpm test || return 1
 }
 
 include_stage_path() {
@@ -325,7 +325,7 @@ stage_changed_files() {
     return 0
   fi
 
-  git add -- "${paths[@]}"
+  git add -A -- "${paths[@]}"
 }
 
 commit_current_changes() {
@@ -387,12 +387,23 @@ next_finding() {
   local index
   local finding_id
 
+  for ((index = 0; index < processed_findings_count; index += 1)); do
+    finding_id="${processed_findings[$index]}"
+    args+=(--exclude "$finding_id")
+  done
+
   for ((index = 0; index < failed_findings_count; index += 1)); do
     finding_id="${failed_findings[$index]}"
     args+=(--exclude "$finding_id")
   done
 
   node scripts/clawpatch-imported-queue.mjs "${args[@]}"
+}
+
+mark_finding_processed() {
+  local finding_id="$1"
+  processed_findings[$processed_findings_count]="$finding_id"
+  processed_findings_count=$((processed_findings_count + 1))
 }
 
 wait_for_review_or_repair() {
@@ -439,7 +450,10 @@ wait_for_review_or_repair() {
     echo "attempting RoboRev repair $repair_attempt/$ROBOREV_REPAIR_ATTEMPTS with $ROBOREV_FIX_AGENT for job $job_id"
     roborev fix --agent "$ROBOREV_FIX_AGENT" "$job_id"
 
-    validate_repo
+    if ! validate_repo; then
+      echo "validation failed after RoboRev repair for $review_sha" >&2
+      return 8
+    fi
 
     if [[ -n "$(source_status)" ]]; then
       commit_current_changes \
@@ -456,7 +470,15 @@ wait_for_review_or_repair() {
     fi
     review_sha="$new_sha"
 
-    clawpatch revalidate --finding "$finding_id" --json >/dev/null
+    local repair_result
+    local repair_outcome
+    repair_result="$(clawpatch revalidate --finding "$finding_id" --json)"
+    repair_outcome="$(printf '%s\n' "$repair_result" | json_field "parsed.outcome ?? 'unknown'")"
+    echo "post-RoboRev repair revalidate: $repair_outcome"
+    if [[ "$repair_outcome" != "fixed" ]]; then
+      echo "RoboRev repair left Clawpatch finding $finding_id in '$repair_outcome'" >&2
+      return 8
+    fi
   done
 }
 
@@ -469,6 +491,8 @@ require_command roborev
 require_clean_source_tree
 
 completed=0
+processed_findings=()
+processed_findings_count=0
 failed_findings=()
 failed_findings_count=0
 
@@ -495,6 +519,7 @@ while [[ "$completed" -lt "$MAX" ]]; do
   echo "pre-fix revalidate: $pre_outcome"
 
   if [[ "$pre_outcome" == "fixed" || "$pre_outcome" == "false-positive" || "$pre_outcome" == "wont-fix" ]]; then
+    mark_finding_processed "$finding_id"
     completed=$((completed + 1))
     continue
   fi
@@ -532,6 +557,7 @@ while [[ "$completed" -lt "$MAX" ]]; do
   if ! commit_current_changes \
     "Fix ${issue}: ${subject_title}" \
     "Clawpatch finding: ${finding_id}"; then
+    mark_finding_processed "$finding_id"
     completed=$((completed + 1))
     continue
   fi
@@ -542,6 +568,7 @@ while [[ "$completed" -lt "$MAX" ]]; do
     exit 8
   fi
 
+  mark_finding_processed "$finding_id"
   completed=$((completed + 1))
   echo "completed $finding_id"
 
