@@ -57,11 +57,63 @@
   "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
   "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/shared build` passes\n- `rg \"twitter-publish.service|linkedin-publish.service|facebook-publish.service\"` returns no matches in src\n- gh#14 closed with reference to this PR",
   "minimumFixScope": "packages/worker/src/twitter-publish.service.ts, packages/worker/src/linkedin-publish.service.ts, packages/worker/src/facebook-publish.service.ts, packages/shared/src/lib/error-classifier.ts, packages/shared/src/index.ts, packages/shared/src/lib/error-classifier",
-  "status": "open",
-  "history": [],
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T011133-7beac2",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "Original evidence is still current. The three old worker publish service files still exist, `packages/shared/src/lib/error-classifier.ts` still exists and exports `ClassifiedError`, `classifyTwitterError`, `classifyLinkedInError`, and `classifyFacebookError`, and `packages/shared/package.json` still exposes `./lib/error-classifier`. `packages/worker/src/post-lifecycle.service.ts` still imports `classifyTwitterError` and `ClassifiedError` from `@sms/shared/lib/error-classifier`, while worker tests still import the old Facebook and LinkedIn publish services. The top-level `packages/shared/src/index.ts` no longer re-exports the classifier, but `packages/shared/src/lib/index.ts` still does. The acceptance grep for old publish services still returns matches in src. `pnpm --filter @sms/worker typecheck` and `pnpm --filter @sms/shared typecheck` both pass, which shows the current code is internally consistent but does not satisfy the requested sweep. Targeted Vitest runs could not start because the read-only sandbox prevented Vite from writing `.vite-temp` config files, so the test failure is environmental, not evidence of a code failure.",
+      "commands": [
+        "rg --files packages/worker/src packages/shared/src | sort",
+        "rg -n \"twitter-publish\\.service|linkedin-publish\\.service|facebook-publish\\.service|@sms/shared/lib/error-classifier|classifyTwitterError|classifyLinkedInError|classifyFacebookError|ClassifiedError\" .",
+        "sed -n '1,120p' packages/shared/src/index.ts",
+        "sed -n '1,260p' packages/shared/src/lib/error-classifier.ts",
+        "sed -n '1,260p' packages/worker/src/post-lifecycle.service.ts",
+        "find packages/worker/src -maxdepth 1 -name '*-publish.service.ts' -print",
+        "find packages/shared/src/lib -maxdepth 1 -name 'error-classifier*' -print",
+        "pnpm --filter @sms/worker typecheck",
+        "pnpm --filter @sms/shared typecheck",
+        "rg -n \"twitter-publish\\.service|linkedin-publish\\.service|facebook-publish\\.service\" packages/worker/src packages/shared/src",
+        "pnpm --filter @sms/worker test -- src/__tests__/facebook-publish.test.ts src/__tests__/linkedin-publish.test.ts --run",
+        "pnpm --filter @sms/shared test -- src/__tests__/publisher.test.ts --run"
+      ],
+      "createdAt": "2026-05-20T01:12:51.153Z"
+    },
+    {
+      "runId": "20260520T011831-8c3b75",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "Original evidence paths no longer exist in the current repo: the three old worker publish service files and packages/shared/src/lib/error-classifier.ts are absent, and packages/shared/src/index.ts plus packages/shared/src/lib/index.ts do not re-export an error classifier. The acceptance grep for twitter-publish.service/linkedin-publish.service/facebook-publish.service in packages/worker/src and packages/shared/src returns no matches. Current code keeps platform classifiers as private functions inside packages/worker/src/publishers/twitter.ts, linkedin.ts, and facebook.ts; remaining ClassifiedError references are local types in those publisher files and post-lifecycle.service.ts, not imports from the deleted shared classifier. @sms/shared package exports also no longer expose ./lib/error-classifier. Typecheck passes for both @sms/worker and @sms/shared. Targeted Vitest runs could not start because the read-only sandbox prevented Vite from writing .vite-temp config files, so that test failure is environmental and does not indicate the finding remains open.",
+      "commands": [
+        "rg --files packages/worker/src packages/shared/src | sort",
+        "find packages/worker/src -maxdepth 1 \\( -name 'twitter-publish.service.ts' -o -name 'linkedin-publish.service.ts' -o -name 'facebook-publish.service.ts' \\) -print",
+        "find packages/shared/src/lib -maxdepth 1 \\( -name 'error-classifier.ts' -o -name 'error-classifier' \\) -print",
+        "rg -n \"twitter-publish\\.service|linkedin-publish\\.service|facebook-publish\\.service|error-classifier|@sms/shared/lib/error-classifier|classifyTwitterError|classifyLinkedInError|classifyFacebookError|ClassifiedError\" .",
+        "sed -n '1,160p' packages/shared/src/index.ts",
+        "sed -n '1,160p' packages/shared/src/lib/index.ts",
+        "sed -n '1,220p' packages/shared/package.json",
+        "rg -n \"twitter-publish\\.service|linkedin-publish\\.service|facebook-publish\\.service\" packages/worker/src packages/shared/src",
+        "pnpm --filter @sms/worker typecheck",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/worker test -- src/__tests__/publishers/twitter.test.ts src/__tests__/publishers/facebook.test.ts src/__tests__/publishers/linkedin.test.ts --run",
+        "pnpm --filter @sms/shared test -- src/__tests__/publisher.test.ts --run",
+        "test ! -e packages/worker/src/twitter-publish.service.ts && test ! -e packages/worker/src/linkedin-publish.service.ts && test ! -e packages/worker/src/facebook-publish.service.ts && test ! -e packages/shared/src/lib/error-classifier.ts",
+        "sed -n '1,110p' packages/worker/src/publishers/twitter.ts",
+        "sed -n '1,120p' packages/worker/src/publishers/linkedin.ts",
+        "sed -n '1,130p' packages/worker/src/publishers/facebook.ts",
+        "rg -n \"from ['\\\"].*(twitter|linkedin|facebook)-publish\\.service|import\\(.*(twitter|linkedin|facebook)-publish\\.service|@sms/shared/lib/error-classifier\" packages"
+      ],
+      "createdAt": "2026-05-20T01:19:46.976Z"
+    }
+  ],
   "signature": "sig_gh-60_9c2fc15dae",
-  "linkedPatchAttemptIds": [],
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-60-9c2fc15dae-fc012ee_7d2a8b66b8"
+  ],
   "createdByRunId": "20260519T201935-c24f6a",
   "createdAt": "2026-05-19T20:19:35.980Z",
-  "updatedAt": "2026-05-19T20:19:35.980Z"
+  "updatedAt": "2026-05-20T01:19:46.976Z"
 }

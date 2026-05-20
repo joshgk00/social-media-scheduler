@@ -35,13 +35,20 @@ import {
   type PublishCtx,
   type TokenNotificationEvent,
   type SupportedPlatform,
+  type PublishFailureKind,
 } from '@sms/shared';
-import { classifyTwitterError, type ClassifiedError } from '@sms/shared/lib/error-classifier';
 import { createLogger } from '@sms/shared/logger';
 import { createStorageBackend, type StorageBackend } from '@sms/shared/storage';
 import type { WorkerDb } from './db.js';
 
 const logger = createLogger('post-lifecycle');
+
+type ClassifiedError = {
+  kind: PublishFailureKind;
+  httpStatus: number | null;
+  errorCode: string;
+  message: string;
+};
 
 // UTC midnight of "today" — the LinkedIn daily window resets here per
 // LIMIT-07. Mirrors the same helper used in @sms/api rate-limit.service.ts.
@@ -205,7 +212,8 @@ function classifyPublishError(err: unknown): ClassifiedError {
       message: err.message,
     };
   }
-  return classifyTwitterError(err);
+  const message = err instanceof Error ? err.message : 'Unknown error';
+  return { kind: 'transient', httpStatus: null, errorCode: 'unknown', message };
 }
 
 export async function publishPost(

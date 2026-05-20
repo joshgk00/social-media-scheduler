@@ -4,9 +4,9 @@ import {
   PostLifecycleAbort,
   type PublishContext,
 } from '../post-lifecycle.service.js';
+import { PublishFailure } from '@sms/shared';
 import { createMockWorkerDb, type MockWorkerDb } from './helpers/mock-db.js';
 import { seedLockedPost, seedSocialProfile } from './helpers/seed-post.js';
-import { buildApiResponseError } from './helpers/mock-twitter.js';
 
 function buildCtx(overrides: Partial<PublishContext> = {}): PublishContext {
   return {
@@ -151,7 +151,12 @@ describe('publishPost lifecycle', () => {
 
   it('records transient_fail attempt and rethrows on a 500 twitter error', async () => {
     seedHappyPath(db);
-    const transientErr = buildApiResponseError({ httpStatus: 500, detail: 'upstream' });
+    const transientErr = new PublishFailure({
+      kind: 'transient',
+      errorCode: 'http_500',
+      message: 'upstream',
+      httpStatus: 500,
+    });
     const ctx = buildCtx({
       publish: vi.fn().mockRejectedValue(transientErr),
     });
@@ -173,7 +178,12 @@ describe('publishPost lifecycle', () => {
 
   it('records permanent_fail attempt and transitions to failed on 401 auth revoked', async () => {
     seedHappyPath(db);
-    const permanentErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
+    const permanentErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'auth_revoked',
+      message: 'Twitter credentials are no longer valid - please reconnect the profile',
+      httpStatus: 401,
+    });
     const ctx = buildCtx({
       publish: vi.fn().mockRejectedValue(permanentErr),
     });
@@ -199,10 +209,11 @@ describe('publishPost lifecycle', () => {
 
   it('duplicate content (twitter code 187) is classified permanent and transitions to failed', async () => {
     seedHappyPath(db);
-    const duplicateErr = buildApiResponseError({
+    const duplicateErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'duplicate_content',
+      message: 'Duplicate content - Twitter rejected this tweet',
       httpStatus: 403,
-      code: 187,
-      detail: 'Status is a duplicate',
     });
     const ctx = buildCtx({
       publish: vi.fn().mockRejectedValue(duplicateErr),

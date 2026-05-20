@@ -15,11 +15,11 @@ import {
 } from '../post-lifecycle.service.js';
 import {
   JOB_NAMES,
+  PublishFailure,
   tokenNotificationEventSchema,
 } from '@sms/shared';
 import { createMockWorkerDb, type MockWorkerDb } from './helpers/mock-db.js';
 import { seedLockedPost, seedSocialProfile } from './helpers/seed-post.js';
-import { buildApiResponseError } from './helpers/mock-twitter.js';
 
 function buildNotificationQueue(): Queue & { add: ReturnType<typeof vi.fn> } {
   return {
@@ -87,7 +87,12 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
     db.__pushReturning(() => [{ id: TEST_POST_ID }]);
     db.__pushReturning(() => [{ id: TEST_PROFILE_ID }]);
 
-    const authErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
+    const authErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'auth_revoked',
+      message: 'Twitter credentials are no longer valid - please reconnect the profile',
+      httpStatus: 401,
+    });
     const ctx = buildCtx(notificationQueue, {
       publish: vi.fn().mockRejectedValue(authErr),
     });
@@ -129,7 +134,12 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
     // Conditional profile UPDATE returns zero — dedupe path.
     db.__pushReturning(() => []);
 
-    const authErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
+    const authErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'auth_revoked',
+      message: 'Twitter credentials are no longer valid - please reconnect the profile',
+      httpStatus: 401,
+    });
     const ctx = buildCtx(notificationQueue, {
       publish: vi.fn().mockRejectedValue(authErr),
     });
@@ -143,7 +153,12 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
 
   it('non-auth errors (500 transient) do not flip tokenStatus and do not emit token_revoked', async () => {
     seedHappyPath(db, { tokenStatus: 'active' });
-    const transientErr = buildApiResponseError({ httpStatus: 500, detail: 'upstream' });
+    const transientErr = new PublishFailure({
+      kind: 'transient',
+      errorCode: 'http_500',
+      message: 'upstream',
+      httpStatus: 500,
+    });
     const ctx = buildCtx(notificationQueue, {
       publish: vi.fn().mockRejectedValue(transientErr),
     });
@@ -161,10 +176,11 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
 
   it('duplicate content (403 code 187, permanent non-auth) does not flip tokenStatus', async () => {
     seedHappyPath(db, { tokenStatus: 'active' });
-    const duplicateErr = buildApiResponseError({
+    const duplicateErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'duplicate_content',
+      message: 'Duplicate content - Twitter rejected this tweet',
       httpStatus: 403,
-      code: 187,
-      detail: 'Status is a duplicate',
     });
     const ctx = buildCtx(notificationQueue, {
       publish: vi.fn().mockRejectedValue(duplicateErr),
@@ -204,7 +220,12 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
       order.push('notification_add');
     });
 
-    const authErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
+    const authErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'auth_revoked',
+      message: 'Twitter credentials are no longer valid - please reconnect the profile',
+      httpStatus: 401,
+    });
     const ctx = buildCtx(notificationQueue, {
       publish: vi.fn().mockRejectedValue(authErr),
     });
