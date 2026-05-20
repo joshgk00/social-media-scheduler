@@ -11,6 +11,8 @@
 
 import { Worker, type Job, type Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { eq } from 'drizzle-orm';
+import { posts } from '@sms/db';
 import { QUEUE_NAMES, JOB_NAMES } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { TokenVault } from '@sms/shared/tokens';
@@ -99,13 +101,35 @@ export function createAutoDestructWorker(
     if (!isFinalFailure) return;
 
     try {
+      let postRow: { profileId: string | null } | undefined;
+      try {
+        [postRow] = await deps.db
+          .select({ profileId: posts.profileId })
+          .from(posts)
+          .where(eq(posts.id, job.data.postId))
+          .limit(1);
+      } catch (lookupErr) {
+        logger.error(
+          { err: lookupErr, postId: job.data.postId },
+          'auto-destruct-failed listener: failed to resolve profileId',
+        );
+        return;
+      }
+
+      if (!postRow?.profileId) {
+        logger.error(
+          { postId: job.data.postId },
+          'auto-destruct-failed listener: post not found, skipping notification enqueue',
+        );
+        return;
+      }
+
       await deps.notificationQueue.add(JOB_NAMES.autoDestructFailedNotification, {
-        kind: 'auto_destruct_failed',
         postId: job.data.postId,
-        platformPostId: job.data.platformPostId,
+        profileId: postRow.profileId,
+        errorMessage: err.message,
         correlationId: job.data.correlationId,
-        reason: err.message,
-        at: new Date().toISOString(),
+        occurredAt: new Date().toISOString(),
       });
     } catch (enqueueErr) {
       logger.error(
