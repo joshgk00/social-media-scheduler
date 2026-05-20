@@ -1,1 +1,78 @@
-{"schemaVersion":1,"featureId":"feat_gh-21_03053befbe","title":"gh#21: Bug: MediaStatusPoller never updates parent state after transcode completes","summary":"Imported from GitHub issue gh#21 in BACKLOG.md section \"Bugs\".","kind":"ui-flow","source":"github-issue-import","confidence":"high","entrypoints":[{"path":"packages/web/src/components/posts/MediaThumbnailGrid.tsx","symbol":null,"route":null,"command":null},{"path":"packages/web/src/pages/posts/NewPostPage.tsx","symbol":null,"route":null,"command":null},{"path":"packages/web/src/pages/posts/EditPostPage.tsx","symbol":null,"route":null,"command":null}],"ownedFiles":[{"path":"packages/web/src/components/posts/MediaThumbnailGrid.tsx","reason":"mentioned by issue at packages/web/src/components/posts/MediaThumbnailGrid.tsx:86"},{"path":"packages/web/src/pages/posts/NewPostPage.tsx","reason":"mentioned by issue body"},{"path":"packages/web/src/pages/posts/EditPostPage.tsx","reason":"mentioned by issue body"}],"contextFiles":[{"path":"BACKLOG.md","reason":"backlog queue item for gh#21"}],"tests":[],"tags":["github-issue","gh#21","github-url:https://github.com/joshgk00/social-media-scheduler/issues/21","backlog-order:0028","backlog-section:bugs"],"trustBoundaries":["filesystem"],"status":"needs-fix","lock":null,"findingIds":["fnd_sig-gh-21-fc4009ae73_5487ff0602"],"patchAttemptIds":[],"analysisHistory":[{"runId":"20260519T201935-c24f6a","kind":"github-issue-import","summary":"Imported GitHub issue gh#21","provider":"gh","model":null,"createdAt":"2026-05-19T20:19:35.980Z"}],"createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-21_03053befbe",
+  "title": "gh#21: Bug: MediaStatusPoller never updates parent state after transcode completes",
+  "summary": "Imported from GitHub issue gh#21 in BACKLOG.md section \"Bugs\".",
+  "kind": "ui-flow",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/posts/MediaThumbnailGrid.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/web/src/pages/posts/NewPostPage.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/web/src/pages/posts/EditPostPage.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/posts/MediaThumbnailGrid.tsx",
+      "reason": "mentioned by issue at packages/web/src/components/posts/MediaThumbnailGrid.tsx:86"
+    },
+    {
+      "path": "packages/web/src/pages/posts/NewPostPage.tsx",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/web/src/pages/posts/EditPostPage.tsx",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#21"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#21",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/21",
+    "backlog-order:0028",
+    "backlog-section:bugs"
+  ],
+  "trustBoundaries": [
+    "filesystem"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-21-fc4009ae73_5487ff0602"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#21",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T22:26:26.938Z"
+}

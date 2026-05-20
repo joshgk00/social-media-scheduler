@@ -225,6 +225,25 @@ export default function NewPostPage() {
     });
   }
 
+  const handleMediaStatusUpdate = useCallback(
+    (
+      mediaId: string,
+      status: MediaItem['transcodeStatus'],
+      error: string | null,
+    ) => {
+      setMediaItems((prev) =>
+        prev.map((m) => {
+          if (m.id !== mediaId) return m;
+          if (m.transcodeStatus === status && m.transcodeError === error) {
+            return m;
+          }
+          return { ...m, transcodeStatus: status, transcodeError: error };
+        }),
+      );
+    },
+    [],
+  );
+
   function handleThreadToggle(checked: boolean) {
     if (checked) {
       const currentText = formState.text;
@@ -474,6 +493,7 @@ export default function NewPostPage() {
               onRemoveMedia={handleRemoveMedia}
               onReorderMedia={handleReorderMedia}
               onRetryTranscode={handleRetryTranscode}
+              onMediaStatusUpdate={handleMediaStatusUpdate}
               disabled={isSubmitting}
             />
           )}
@@ -504,6 +524,7 @@ export default function NewPostPage() {
                 onRemoveMedia={handleRemoveMedia}
                 onReorderMedia={handleReorderMedia}
                 onRetryTranscode={handleRetryTranscode}
+                onMediaStatusUpdate={handleMediaStatusUpdate}
                 disabled={isSubmitting}
               />
             </>
@@ -540,6 +561,7 @@ export default function NewPostPage() {
                 onRemoveMedia={handleRemoveMedia}
                 onReorderMedia={handleReorderMedia}
                 onRetryTranscode={handleRetryTranscode}
+                onMediaStatusUpdate={handleMediaStatusUpdate}
                 disabled={isSubmitting}
               />
             </>

@@ -26,6 +26,11 @@ interface MediaThumbnailGridProps {
   onRemove: (id: string) => void;
   onReorder: (ids: string[]) => void;
   onRetryTranscode: (id: string) => void;
+  onStatusUpdate?: (
+    id: string,
+    status: MediaItem['transcodeStatus'],
+    error: string | null,
+  ) => void;
   readOnly: boolean;
 }
 
@@ -88,7 +93,11 @@ function MediaStatusPoller({
   onStatusUpdate,
 }: {
   mediaId: string;
-  onStatusUpdate: (mediaId: string, status: string, error: string | null) => void;
+  onStatusUpdate: (
+    mediaId: string,
+    status: MediaItem['transcodeStatus'],
+    error: string | null,
+  ) => void;
 }) {
   const shouldPoll = true;
   const { data } = useMediaStatus(mediaId, shouldPoll);
@@ -108,6 +117,7 @@ export function MediaThumbnailGrid({
   onRemove,
   onReorder,
   onRetryTranscode,
+  onStatusUpdate,
   readOnly,
 }: MediaThumbnailGridProps) {
   const sensors = useSensors(
@@ -118,12 +128,14 @@ export function MediaThumbnailGrid({
   );
 
   const handleStatusUpdate = useCallback(
-    (_mediaId: string, _status: string, _error: string | null) => {
-      // Status updates are received via TanStack Query cache.
-      // The parent component handles state updates when media status changes
-      // through the polling mechanism.
+    (
+      mediaId: string,
+      status: MediaItem['transcodeStatus'],
+      error: string | null,
+    ) => {
+      onStatusUpdate?.(mediaId, status, error);
     },
-    [],
+    [onStatusUpdate],
   );
 
   function handleDragEnd(event: DragEndEvent) {
