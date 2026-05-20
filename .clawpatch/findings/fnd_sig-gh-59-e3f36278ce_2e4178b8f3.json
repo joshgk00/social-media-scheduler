@@ -29,11 +29,70 @@
   "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
   "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` passes\n- All existing worker tests pass with no behavior change\n- `rg \"resolvedPlatform\" packages/worker/` returns nothing\n- `rg \"classifyTwitterError|classifyLinkedInError|classifyFacebookError\" packages/worker/src/publish-worker.ts` returns nothing",
   "minimumFixScope": "packages/worker/src/publish-worker.ts, packages/worker/src/post-lifecycle.service.ts",
-  "status": "open",
-  "history": [],
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T005843-fb066e",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence files still exist, and the requested refactor is not present. packages/worker/src/publish-worker.ts still has separate callTwitterImpl/callLinkedInImpl/callFacebookImpl deps, separate budget-check overrides, a mutable resolvedPlatform, a platform switch inside the lifecycle callback, and classifier dispatch in the catch block. The acceptance probes fail: resolvedPlatform and classifyTwitterError|classifyLinkedInError|classifyFacebookError are still present in publish-worker.ts. packages/worker/src/post-lifecycle.service.ts still exposes PublishContext.callTwitter with an extras argument and invokes ctx.callTwitter rather than a generic publish callback with a PublishablePost. Publisher classes and PublishablePost exist elsewhere, and pnpm --filter @sms/worker exec tsc --noEmit passes, but the worker/lifecycle wiring has not been switched to the publishers map. Full build/test commands could not complete in this read-only sandbox because they attempted to write dist/.vite-temp files and failed with EPERM, which is environmental and does not change the code evidence.",
+      "commands": [
+        "rg -n \"resolvedPlatform|classifyTwitterError|classifyLinkedInError|classifyFacebookError|callTwitter|callLinkedIn|callFacebook|publishers|PublishHandlerDeps|PublishContext|extras|PublishablePost\" packages/worker/src/publish-worker.ts packages/worker/src/post-lifecycle.service.ts",
+        "sed -n '1,260p' packages/worker/src/publish-worker.ts",
+        "sed -n '260,380p' packages/worker/src/publish-worker.ts",
+        "sed -n '1,280p' packages/worker/src/post-lifecycle.service.ts",
+        "sed -n '280,520p' packages/worker/src/post-lifecycle.service.ts",
+        "rg \"resolvedPlatform\" packages/worker/",
+        "rg \"classifyTwitterError|classifyLinkedInError|classifyFacebookError\" packages/worker/src/publish-worker.ts",
+        "rg -n \"callTwitterImpl|callLinkedInImpl|callFacebookImpl|publishers|resolvedPlatform|extras|PublishContext|callTwitter\" packages/worker/src packages/worker/test packages/worker/tests packages/worker/src/__tests__",
+        "rg -n \"export interface Publisher|type Publisher|create.*Publisher|PublishablePost|PublishFailure\" packages/worker/src packages/shared/src packages/shared/lib",
+        "pnpm --filter @sms/worker build",
+        "pnpm --filter @sms/worker test",
+        "pnpm --filter @sms/worker exec tsc --noEmit",
+        "nl -ba packages/worker/src/publish-worker.ts | sed -n '24,210p'",
+        "nl -ba packages/worker/src/publish-worker.ts | sed -n '276,306p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '78,104p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '396,426p'"
+      ],
+      "createdAt": "2026-05-20T00:59:55.920Z"
+    },
+    {
+      "runId": "20260520T010846-2f2f28",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence files still exist, but the issue no longer reproduces in the current code. packages/worker/src/publish-worker.ts now has PublishHandlerDeps.publishers, creates default Twitter/LinkedIn/Facebook publishers, and calls publishers[publishablePost.platform].publish(...) from the lifecycle publish callback. The old callTwitterImpl/callLinkedInImpl/callFacebookImpl overrides, resolvedPlatform mutable state, and publish-worker error classifier dispatch are absent. The catch block is platform-blind for PostLifecycleAbort and PublishFailure. packages/worker/src/post-lifecycle.service.ts now exposes PublishContext.publish, constructs a shared PublishablePost after loadPublishableMedia(...), includes platform-specific fields directly, and calls ctx.publish(...). packages/shared/src/publisher.ts defines PublishablePost with media, visibility, and linkUrl. Acceptance rg probes for resolvedPlatform and publish-worker classifiers returned no matches. Typecheck via pnpm --filter @sms/worker exec tsc --noEmit passed. Full build and vitest could not complete in this read-only sandbox because they attempted to write dist/.vite-temp or temp SSR files and failed with EPERM, which is environmental rather than code evidence.",
+      "commands": [
+        "pwd && rg -n \"resolvedPlatform|classifyTwitterError|classifyLinkedInError|classifyFacebookError|callTwitterImpl|callLinkedInImpl|callFacebookImpl|checkLinkedInBudgetImpl|checkFacebookBudgetImpl|publishers|PublishHandlerDeps|PublishContext|extras|PublishablePost|ctx\\.callTwitter|ctx\\.publish\" packages/worker/src/publish-worker.ts packages/worker/src/post-lifecycle.service.ts",
+        "sed -n '1,240p' packages/worker/src/publish-worker.ts",
+        "sed -n '1,260p' packages/worker/src/post-lifecycle.service.ts",
+        "rg -n \"callTwitterImpl|callLinkedInImpl|callFacebookImpl|publishers|resolvedPlatform|classifyTwitterError|classifyLinkedInError|classifyFacebookError|PublishContext|extras|ctx\\.callTwitter|ctx\\.publish\" packages/worker/src packages/worker/test packages/worker/tests packages/worker/src/__tests__",
+        "sed -n '200,260p' packages/worker/src/publish-worker.ts",
+        "sed -n '440,520p' packages/worker/src/post-lifecycle.service.ts",
+        "rg \"resolvedPlatform\" packages/worker/",
+        "rg \"classifyTwitterError|classifyLinkedInError|classifyFacebookError\" packages/worker/src/publish-worker.ts",
+        "sed -n '1,120p' packages/worker/src/__tests__/publish-worker.test.ts",
+        "pnpm --filter @sms/worker exec tsc --noEmit",
+        "pnpm --filter @sms/worker test -- --run packages/worker/src/__tests__/publish-worker.test.ts packages/worker/src/__tests__/post-lifecycle.test.ts",
+        "nl -ba packages/worker/src/publish-worker.ts | sed -n '60,155p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '80,100p;470,498p'",
+        "cat packages/worker/package.json",
+        "pnpm --filter @sms/worker exec vitest run src/__tests__/publish-worker.test.ts src/__tests__/post-lifecycle.test.ts --configLoader runner",
+        "rg -n \"\\bextras\\b|callTwitter|callLinkedIn|callFacebook|callTwitterImpl|callLinkedInImpl|callFacebookImpl|checkLinkedInBudgetImpl|checkFacebookBudgetImpl|resolvedPlatform\" packages/worker/src/publish-worker.ts packages/worker/src/post-lifecycle.service.ts packages/worker/src/__tests__",
+        "rg -n \"type PublishablePost|interface PublishablePost|export .*PublishablePost|class PublishFailure|interface Publisher|type Publisher\" packages/shared/src packages/shared/lib packages/worker/src",
+        "nl -ba packages/worker/src/publish-worker.ts | sed -n '200,240p'",
+        "nl -ba packages/shared/src/publisher.ts | sed -n '1,45p'",
+        "pnpm --filter @sms/worker build"
+      ],
+      "createdAt": "2026-05-20T01:10:12.322Z"
+    }
+  ],
   "signature": "sig_gh-59_e3f36278ce",
-  "linkedPatchAttemptIds": [],
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-59-e3f36278ce-2e4178b_ea40fb20c5"
+  ],
   "createdByRunId": "20260519T201935-c24f6a",
   "createdAt": "2026-05-19T20:19:35.980Z",
-  "updatedAt": "2026-05-19T20:19:35.980Z"
+  "updatedAt": "2026-05-20T01:10:12.322Z"
 }

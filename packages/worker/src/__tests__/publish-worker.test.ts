@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Job, Queue } from 'bullmq';
 import { UnrecoverableError } from 'bullmq';
+import { PublishFailure } from '@sms/shared';
 import { createPublishHandler, type PublishJobPayload } from '../publish-worker.js';
 import { PostLifecycleAbort } from '../post-lifecycle.service.js';
-import { buildApiResponseError } from './helpers/mock-twitter.js';
 
 function buildJob(
   overrides: Partial<Job<PublishJobPayload>> = {},
@@ -31,7 +31,11 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
     db,
     notificationQueue,
     publishPostImpl: vi.fn().mockResolvedValue({ platformPostId: 'tw_success_1' }),
-    callTwitterImpl: vi.fn().mockResolvedValue({ platformPostId: 'tw_success_1' }),
+    publishers: {
+      twitter: {
+        publish: vi.fn().mockResolvedValue({ platformPostId: 'tw_success_1' }),
+      },
+    },
     checkBudgetImpl: vi.fn().mockResolvedValue({ wouldExceed: false }),
     ...overrides,
   };
@@ -65,7 +69,12 @@ describe('createPublishHandler', () => {
   });
 
   it('rethrows transient errors so BullMQ retries', async () => {
-    const transientErr = buildApiResponseError({ httpStatus: 500 });
+    const transientErr = new PublishFailure({
+      kind: 'transient',
+      errorCode: 'http_500',
+      message: 'Service Unavailable',
+      httpStatus: 500,
+    });
     deps.publishPostImpl = vi.fn().mockRejectedValue(transientErr);
     const handler = createPublishHandler(deps);
 
@@ -73,7 +82,12 @@ describe('createPublishHandler', () => {
   });
 
   it('throws UnrecoverableError on permanent failures (401 auth revoked)', async () => {
-    const permanentErr = buildApiResponseError({ httpStatus: 401 });
+    const permanentErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'auth_revoked',
+      message: 'Twitter credentials are no longer valid - please reconnect the profile',
+      httpStatus: 401,
+    });
     deps.publishPostImpl = vi.fn().mockRejectedValue(permanentErr);
     const handler = createPublishHandler(deps);
 
@@ -81,10 +95,11 @@ describe('createPublishHandler', () => {
   });
 
   it('throws UnrecoverableError on duplicate content (twitter code 187)', async () => {
-    const duplicateErr = buildApiResponseError({
+    const duplicateErr = new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'duplicate_content',
+      message: 'Duplicate content - Twitter rejected this tweet',
       httpStatus: 403,
-      code: 187,
-      detail: 'Status is a duplicate',
     });
     deps.publishPostImpl = vi.fn().mockRejectedValue(duplicateErr);
     const handler = createPublishHandler(deps);

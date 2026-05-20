@@ -36,7 +36,7 @@ function buildCtx(
     expectedVersion: 1,
     correlationId: 'corr_test_401',
     currentAttemptNum: 1,
-    callTwitter: vi.fn(),
+    publish: vi.fn(),
     checkBudget: vi.fn().mockResolvedValue({ wouldExceed: false }),
     notificationQueue,
     ...overrides,
@@ -89,7 +89,7 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
 
     const authErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
     const ctx = buildCtx(notificationQueue, {
-      callTwitter: vi.fn().mockRejectedValue(authErr),
+      publish: vi.fn().mockRejectedValue(authErr),
     });
 
     await expect(
@@ -131,7 +131,7 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
 
     const authErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
     const ctx = buildCtx(notificationQueue, {
-      callTwitter: vi.fn().mockRejectedValue(authErr),
+      publish: vi.fn().mockRejectedValue(authErr),
     });
 
     await expect(
@@ -145,7 +145,7 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
     seedHappyPath(db, { tokenStatus: 'active' });
     const transientErr = buildApiResponseError({ httpStatus: 500, detail: 'upstream' });
     const ctx = buildCtx(notificationQueue, {
-      callTwitter: vi.fn().mockRejectedValue(transientErr),
+      publish: vi.fn().mockRejectedValue(transientErr),
     });
 
     await expect(
@@ -167,7 +167,7 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
       detail: 'Status is a duplicate',
     });
     const ctx = buildCtx(notificationQueue, {
-      callTwitter: vi.fn().mockRejectedValue(duplicateErr),
+      publish: vi.fn().mockRejectedValue(duplicateErr),
     });
 
     await expect(
@@ -206,7 +206,7 @@ describe('publishPost 401 → needs_reauth side effect (TOKEN-04)', () => {
 
     const authErr = buildApiResponseError({ httpStatus: 401, detail: 'auth revoked' });
     const ctx = buildCtx(notificationQueue, {
-      callTwitter: vi.fn().mockRejectedValue(authErr),
+      publish: vi.fn().mockRejectedValue(authErr),
     });
 
     await expect(

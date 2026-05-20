@@ -59,7 +59,7 @@
     "concurrency",
     "external-api"
   ],
-  "status": "needs-fix",
+  "status": "fixed",
   "lock": null,
   "findingIds": [
     "fnd_sig-gh-59-e3f36278ce_2e4178b8f3"
@@ -76,5 +76,5 @@
     }
   ],
   "createdAt": "2026-05-19T20:19:35.980Z",
-  "updatedAt": "2026-05-19T20:19:35.980Z"
+  "updatedAt": "2026-05-20T01:10:12.374Z"
 }
