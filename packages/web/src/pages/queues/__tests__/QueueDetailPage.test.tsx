@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type React from 'react';
+import React from 'react';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -38,6 +38,30 @@ vi.mock('../../../hooks/use-queues', () => ({
   useUpdateQueue: () => ({ mutate: updateQueueMutate, isPending: false }),
 }));
 
+function getSelectLabel(children: React.ReactNode): string {
+  let label: string | undefined;
+
+  React.Children.forEach(children, (child) => {
+    if (label || !React.isValidElement(child)) return;
+
+    const props = child.props as {
+      placeholder?: unknown;
+      children?: React.ReactNode;
+    };
+
+    if (typeof props.placeholder === 'string') {
+      label = props.placeholder;
+      return;
+    }
+
+    if (props.children) {
+      label = getSelectLabel(props.children);
+    }
+  });
+
+  return label ?? 'Select option';
+}
+
 vi.mock('../../../components/ui/select', () => ({
   Select: ({
     value,
@@ -49,7 +73,7 @@ vi.mock('../../../components/ui/select', () => ({
     children: React.ReactNode;
   }) => (
     <select
-      aria-label="Social profile"
+      aria-label={getSelectLabel(children)}
       value={value ?? ''}
       onChange={(event) => onValueChange?.(event.target.value)}
     >
@@ -102,7 +126,7 @@ describe('QueueDetailPage', () => {
 
     await user.type(screen.getByLabelText('Queue name'), 'CMW Promotions');
     await user.selectOptions(
-      screen.getAllByRole('combobox')[0],
+      screen.getByRole('combobox', { name: 'Select a profile' }),
       '00000000-0000-4000-8000-000000000001',
     );
     await user.type(screen.getByLabelText(/Start date/i), '2026-05-21');
