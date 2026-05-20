@@ -8,10 +8,14 @@ const templatesByUrl: Record<string, string> = {
   '/templates/scheduled-posts.csv': scheduledTemplate,
 };
 
+function csvRows(csv: string): string[] {
+  return csv.trim().split(/\r?\n/);
+}
+
 describe('CSV template downloads', () => {
   it('serves a scheduled-post template with import headers and a sample row', () => {
     const csv = templatesByUrl[getScheduledTemplateUrl()];
-    const rows = csv.trim().split('\n');
+    const rows = csvRows(csv);
 
     expect(rows[0]).toBe('text,scheduled_at,tags,spinnable,auto_destruct_after,recycle,notes');
     expect(rows).toHaveLength(2);
@@ -20,9 +24,9 @@ describe('CSV template downloads', () => {
 
   it('serves a queue template with import headers and a sample row', () => {
     const csv = templatesByUrl[getQueueTemplateUrl()];
-    const rows = csv.trim().split('\n');
+    const rows = csvRows(csv);
 
-    expect(rows[0]).toBe('text,queue_name,position,tags,spinnable,auto_destruct_after,notes');
+    expect(rows[0]).toBe('text,queue_name,tags,spinnable,auto_destruct_after,notes');
     expect(rows).toHaveLength(2);
     expect(rows[1]).toContain('Example Queue');
   });

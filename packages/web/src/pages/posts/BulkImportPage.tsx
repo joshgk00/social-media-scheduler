@@ -170,7 +170,7 @@ export default function BulkImportPage() {
               <p>{importError.description}</p>
               {importError.details.length > 0 && (
                 <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {importError.details.map((detail) => <li key={detail}>{detail}</li>)}
+                  {importError.details.map((detail, index) => <li key={`${index}-${detail}`}>{detail}</li>)}
                 </ul>
               )}
             </AlertDescription>
