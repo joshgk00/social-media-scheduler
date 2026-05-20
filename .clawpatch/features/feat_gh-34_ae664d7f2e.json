@@ -1,1 +1,71 @@
-{"schemaVersion":1,"featureId":"feat_gh-34_ae664d7f2e","title":"gh#34: Bug: Auto-destruct help copy hardcoded to \"Twitter/X\" on LinkedIn and Facebook composer forms","summary":"Imported from GitHub issue gh#34 in BACKLOG.md section \"Bugs\".","kind":"infra","source":"github-issue-import","confidence":"high","entrypoints":[{"path":"packages/web/src/components/posts/SharedPostFields.tsx","symbol":null,"route":null,"command":null},{"path":"packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx","symbol":null,"route":null,"command":null}],"ownedFiles":[{"path":"packages/web/src/components/posts/SharedPostFields.tsx","reason":"mentioned by issue body"},{"path":"packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx","reason":"mentioned by issue body"}],"contextFiles":[{"path":"BACKLOG.md","reason":"backlog queue item for gh#34"}],"tests":[],"tags":["github-issue","gh#34","github-url:https://github.com/joshgk00/social-media-scheduler/issues/34","backlog-order:0026","backlog-section:bugs","label:bug"],"trustBoundaries":["filesystem","concurrency","external-api"],"status":"needs-fix","lock":null,"findingIds":["fnd_sig-gh-34-f319aead5b_f2344b158d"],"patchAttemptIds":[],"analysisHistory":[{"runId":"20260519T201935-c24f6a","kind":"github-issue-import","summary":"Imported GitHub issue gh#34","provider":"gh","model":null,"createdAt":"2026-05-19T20:19:35.980Z"}],"createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-34_ae664d7f2e",
+  "title": "gh#34: Bug: Auto-destruct help copy hardcoded to \"Twitter/X\" on LinkedIn and Facebook composer forms",
+  "summary": "Imported from GitHub issue gh#34 in BACKLOG.md section \"Bugs\".",
+  "kind": "infra",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/posts/SharedPostFields.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/posts/SharedPostFields.tsx",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#34"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#34",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/34",
+    "backlog-order:0026",
+    "backlog-section:bugs",
+    "label:bug"
+  ],
+  "trustBoundaries": [
+    "filesystem",
+    "concurrency",
+    "external-api"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-34-f319aead5b_f2344b158d"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#34",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T22:37:03.646Z"
+}

@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import type { Platform } from '../../hooks/use-profiles';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
@@ -18,6 +19,7 @@ interface SharedPostFieldsProps {
    * - 'queue' — schedule fields hidden (queue posts inherit cadence)
    */
   mode: 'new' | 'edit' | 'queue';
+  platform: Platform;
   userTimezone: string;
   effectiveProfileId: string;
   excludePostId?: string;
@@ -49,16 +51,15 @@ interface SharedPostFieldsProps {
  * component (B-03 closure).
  *
  * Mounted ABOVE the platform-specific branch in BOTH NewPostPage and
- * EditPostPage so every POST-CMN requirement always has a control on the
- * page regardless of platform. Schedule-related fields (POST-CMN-01,
- * POST-CMN-02, POST-CMN-07) hide in queue mode where the queue cadence
- * supplies the schedule.
+ * EditPostPage so common controls have one source of truth. Schedule-related
+ * fields (POST-CMN-01, POST-CMN-02, POST-CMN-07) hide in queue mode where the
+ * queue cadence supplies the schedule.
  *
  * POST-CMN coverage:
  *   - POST-CMN-01: schedule datetime input
  *   - POST-CMN-02: timezone-aware datetime conversion + helper text
  *   - POST-CMN-03: spinnable toggle
- *   - POST-CMN-04: auto-destruct picker
+ *   - POST-CMN-04: auto-destruct picker (Twitter/X only)
  *   - POST-CMN-05: tag selector + notes textarea
  *   - POST-CMN-06: Save as Draft is delivered by the parent's `<SplitButton>`
  *                  rendered below this component
@@ -66,6 +67,7 @@ interface SharedPostFieldsProps {
  */
 export function SharedPostFields({
   mode,
+  platform,
   userTimezone,
   effectiveProfileId,
   excludePostId,
@@ -175,10 +177,12 @@ export function SharedPostFields({
       </div>
 
       {/* POST-CMN-04: auto-destruct picker */}
-      <AutoDestructPicker
-        value={autoDestructAfter}
-        onChange={onAutoDestructAfterChange}
-      />
+      {platform === 'twitter' && (
+        <AutoDestructPicker
+          value={autoDestructAfter}
+          onChange={onAutoDestructAfterChange}
+        />
+      )}
     </div>
   );
 }
