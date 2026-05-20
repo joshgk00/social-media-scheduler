@@ -57,6 +57,9 @@ export interface OAuth2ProfileTokenFields {
   oauth2AccessTokenCiphertext?: NullableCipherFieldValue;
   oauth2AccessTokenIv?: NullableCipherFieldValue;
   oauth2AccessTokenAuthTag?: NullableCipherFieldValue;
+  oauth2RefreshTokenCiphertext?: NullableCipherFieldValue;
+  oauth2RefreshTokenIv?: NullableCipherFieldValue;
+  oauth2RefreshTokenAuthTag?: NullableCipherFieldValue;
 }
 
 export type ProfileWithEncryptedTokens = SafeProfile &
@@ -67,7 +70,10 @@ export interface TokenVault {
   sealTwitter(credentials: TwitterCredentials): EncryptedTwitterFields;
   unsealTwitter(fields: NullableEncryptedTwitterFields): TwitterCredentials;
   sealOAuth2(credentials: OAuth2Credentials): EncryptedOAuth2Field;
+  sealOAuth2AccessToken(token: string): EncryptedOAuth2Field;
+  sealOAuth2RefreshToken(token: string): EncryptedOAuth2Field;
   unsealOAuth2(field: NullableEncryptedOAuth2Field): OAuth2Credentials;
+  unsealOAuth2RefreshToken(profile: ProfileWithEncryptedTokens): string;
   unsealForProfile(profile: ProfileWithEncryptedTokens): Credentials;
   toSafeProfile(profile: SafeProfile): SafeProfile;
 }
