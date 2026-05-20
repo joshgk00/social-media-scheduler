@@ -1,1 +1,93 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-21-fc4009ae73_5487ff0602","featureId":"feat_gh-21_03053befbe","title":"gh#21: Bug: MediaStatusPoller never updates parent state after transcode completes","category":"bug","severity":"medium","confidence":"high","triage":"confirmed-bug","evidence":[{"path":"packages/web/src/components/posts/MediaThumbnailGrid.tsx","startLine":86,"endLine":127,"symbol":null,"quote":null},{"path":"packages/web/src/pages/posts/NewPostPage.tsx","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/web/src/pages/posts/EditPostPage.tsx","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/21.\nBacklog section: Bugs.\n\n## Problem\n\nMediaStatusPoller in MediaThumbnailGrid.tsx fires useMediaStatus queries that populate the TanStack Query cache, but handleStatusUpdate is an empty no-op. The parent's mediaItems state holds transcodeStatus as a snapshot from upload time — it never updates when transcoding completes or fails. The submit button stays permanently disabled with \"Video is still transcoding.\"\n\n## Identified by\n\nCode quality review Run 3 — web comprehensive review (H-1)\n\n## Fix\n\nEither propagate handleStatusUpdate to call setMediaItems in the parent, or have MediaThumbnailGrid read transcode status directly from the TanStack Query cache and merge with props-based mediaItems.\n\n## Files\n\n- `packages/web/src/components/posts/MediaThumbnailGrid.tsx:86-127`\n- `packages/web/src/pages/posts/NewPostPage.tsx`\n- `packages/web/src/pages/posts/EditPostPage.tsx`","reproduction":"MediaStatusPoller in MediaThumbnailGrid.tsx fires useMediaStatus queries that populate the TanStack Query cache, but handleStatusUpdate is an empty no-op. The parent's mediaItems state holds transcodeStatus as a snapshot from upload time — it never updates when transcoding completes or fails. The submit button stays permanently disabled with \"Video is still transcoding.\"","recommendation":"Either propagate handleStatusUpdate to call setMediaItems in the parent, or have MediaThumbnailGrid read transcode status directly from the TanStack Query cache and merge with props-based mediaItems.","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":null,"minimumFixScope":"packages/web/src/components/posts/MediaThumbnailGrid.tsx, packages/web/src/pages/posts/NewPostPage.tsx, packages/web/src/pages/posts/EditPostPage.tsx","status":"open","history":[],"signature":"sig_gh-21_fc4009ae73","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-21-fc4009ae73_5487ff0602",
+  "featureId": "feat_gh-21_03053befbe",
+  "title": "gh#21: Bug: MediaStatusPoller never updates parent state after transcode completes",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/web/src/components/posts/MediaThumbnailGrid.tsx",
+      "startLine": 86,
+      "endLine": 127,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/pages/posts/NewPostPage.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/pages/posts/EditPostPage.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/21.\nBacklog section: Bugs.\n\n## Problem\n\nMediaStatusPoller in MediaThumbnailGrid.tsx fires useMediaStatus queries that populate the TanStack Query cache, but handleStatusUpdate is an empty no-op. The parent's mediaItems state holds transcodeStatus as a snapshot from upload time — it never updates when transcoding completes or fails. The submit button stays permanently disabled with \"Video is still transcoding.\"\n\n## Identified by\n\nCode quality review Run 3 — web comprehensive review (H-1)\n\n## Fix\n\nEither propagate handleStatusUpdate to call setMediaItems in the parent, or have MediaThumbnailGrid read transcode status directly from the TanStack Query cache and merge with props-based mediaItems.\n\n## Files\n\n- `packages/web/src/components/posts/MediaThumbnailGrid.tsx:86-127`\n- `packages/web/src/pages/posts/NewPostPage.tsx`\n- `packages/web/src/pages/posts/EditPostPage.tsx`",
+  "reproduction": "MediaStatusPoller in MediaThumbnailGrid.tsx fires useMediaStatus queries that populate the TanStack Query cache, but handleStatusUpdate is an empty no-op. The parent's mediaItems state holds transcodeStatus as a snapshot from upload time — it never updates when transcoding completes or fails. The submit button stays permanently disabled with \"Video is still transcoding.\"",
+  "recommendation": "Either propagate handleStatusUpdate to call setMediaItems in the parent, or have MediaThumbnailGrid read transcode status directly from the TanStack Query cache and merge with props-based mediaItems.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/components/posts/MediaThumbnailGrid.tsx, packages/web/src/pages/posts/NewPostPage.tsx, packages/web/src/pages/posts/EditPostPage.tsx",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T221712-13a2b3",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists and the issue remains present. In packages/web/src/components/posts/MediaThumbnailGrid.tsx, MediaStatusPoller still calls onStatusUpdate when useMediaStatus returns data, but handleStatusUpdate at lines 120-127 is still a no-op. The grid continues polling only for mediaItems whose prop snapshot is pending/processing, while NewPostPage and EditPostPage still keep mediaItems in local state and derive hasTranscodingMedia/isMediaBlocking from that state. The platform field components pass mediaItems into MediaThumbnailGrid but expose no status-update callback back to setMediaItems. Therefore a completed/failed transcode in the query cache still does not update the parent state that controls the submit disabled reason. I attempted the relevant web test command, but it could not start under the read-only sandbox because Vitest/Vite tried to write packages/web/node_modules/.vite-temp.",
+      "commands": [
+        "sed -n '1,220p' packages/web/src/components/posts/MediaThumbnailGrid.tsx",
+        "sed -n '1,260p' packages/web/src/pages/posts/NewPostPage.tsx",
+        "sed -n '1,320p' packages/web/src/pages/posts/EditPostPage.tsx",
+        "rg -n \"MediaStatusPoller|handleStatusUpdate|useMediaStatus|transcodeStatus|Video is still transcoding|setMediaItems|mediaItems\" packages/web/src",
+        "sed -n '250,560p' packages/web/src/pages/posts/NewPostPage.tsx",
+        "sed -n '390,640p' packages/web/src/pages/posts/EditPostPage.tsx",
+        "sed -n '1,180p' packages/web/src/hooks/use-media.ts",
+        "rg -n \"MediaThumbnailGrid|onStatusUpdate|handleStatusUpdate|transcodeStatus\" packages/web/src --glob '*test*' --glob '*spec*'",
+        "pnpm --filter @sms/web test -- --run use-media",
+        "nl -ba packages/web/src/components/posts/MediaThumbnailGrid.tsx | sed -n '80,160p'",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '90,140p;250,275p;460,545p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '82,170p;224,235p;540,620p'"
+      ],
+      "createdAt": "2026-05-20T22:18:03.919Z"
+    },
+    {
+      "runId": "20260520T222534-58437d",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists, but the current code no longer has the reported no-op. MediaThumbnailGrid.tsx now accepts onStatusUpdate, MediaStatusPoller invokes it when useMediaStatus returns data, and handleStatusUpdate forwards the status/error instead of doing nothing. NewPostPage.tsx and EditPostPage.tsx now define handleMediaStatusUpdate callbacks that call setMediaItems to update the matching media item's transcodeStatus/transcodeError, and Twitter/Facebook/LinkedIn field components pass that callback through to MediaThumbnailGrid. The submit-disabled logic still derives from mediaItems, so the parent state now changes when polling reports completed/failed status. A focused regression test exists in NewPostPage.test.tsx asserting scheduling is reenabled after a completed transcode callback. I attempted to run the relevant Vitest tests, but both test commands failed at startup because the read-only sandbox prevented Vite from writing packages/web/node_modules/.vite-temp config cache files.",
+      "commands": [
+        "pwd && git status --short",
+        "nl -ba packages/web/src/components/posts/MediaThumbnailGrid.tsx | sed -n '1,220p'",
+        "rg -n \"MediaStatusPoller|handleStatusUpdate|onStatusUpdate|useMediaStatus|transcodeStatus|Video is still transcoding|MediaThumbnailGrid|setMediaItems|hasTranscodingMedia|isMediaBlocking\" packages/web/src",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '80,260p;270,390p;520,620p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '80,270p;460,505p;570,660p'",
+        "nl -ba packages/web/src/components/posts/TwitterPostFields.tsx | sed -n '1,150p' && nl -ba packages/web/src/components/posts/FacebookPostFields.tsx | sed -n '1,130p' && nl -ba packages/web/src/components/posts/LinkedInPostFields.tsx | sed -n '1,110p'",
+        "nl -ba packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx | sed -n '160,260p'",
+        "nl -ba packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx | sed -n '1,170p'",
+        "nl -ba packages/web/src/hooks/use-media.ts | sed -n '1,140p'",
+        "rg -n \"onMediaStatusUpdate|onStatusUpdate=|handleMediaStatusUpdate|reenables scheduling|completed transcode|MediaThumbnailGrid\" packages/web/src/pages/posts/__tests__ packages/web/src/components/posts --glob '*test*' --glob '*spec*'",
+        "pnpm --filter @sms/web test -- --run NewPostPage",
+        "pnpm --filter @sms/web test -- --run use-media"
+      ],
+      "createdAt": "2026-05-20T22:26:26.890Z"
+    }
+  ],
+  "signature": "sig_gh-21_fc4009ae73",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-21-fc4009ae73-5487ff0_b7501caf17"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T22:26:26.890Z"
+}
