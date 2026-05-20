@@ -4,7 +4,7 @@
 // `rate_limit_exhausted` post_attempt row and leave the post in `scheduled`.
 //
 // Plan 04 wires `publishPost` to call `checkBudget` for every platform and
-// emit `PostLifecycleAbort('rate_limit_exhausted')`.
+// emit `PostLifecycleAbort(PostInvariantError('rate_limit_exhausted'))`.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Queue } from 'bullmq';
@@ -76,7 +76,7 @@ describe('publishPost rate-limit gate (LIMIT-06, LIMIT-07)', () => {
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({
       name: 'PostLifecycleAbort',
-      reason: 'rate_limit_exhausted',
+      invariant: { kind: 'rate_limit_exhausted' },
     });
 
     // post_attempts row inserted with errorCode='rate_limit_exhausted'
@@ -104,7 +104,7 @@ describe('publishPost rate-limit gate (LIMIT-06, LIMIT-07)', () => {
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({
       name: 'PostLifecycleAbort',
-      reason: 'rate_limit_exhausted',
+      invariant: { kind: 'rate_limit_exhausted' },
     });
 
     // The post must NOT be flipped to `failed`. Look for any UPDATE that

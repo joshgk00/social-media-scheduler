@@ -161,7 +161,7 @@ describe('post.service — T-DATA-01 invariants (Plan 03 Task 2)', () => {
         tagIds: [],
       } as any),
     ).rejects.toMatchObject({
-      name: 'PostServiceError',
+      name: 'AppError',
       code: 'PLATFORM_MISMATCH',
     });
   });
@@ -225,7 +225,7 @@ describe('post.service — T-DATA-01 invariants (Plan 03 Task 2)', () => {
         postVersion: 1,
       } as any),
     ).rejects.toMatchObject({
-      name: 'PostServiceError',
+      name: 'AppError',
       code: 'PLATFORM_IMMUTABLE',
     });
   });

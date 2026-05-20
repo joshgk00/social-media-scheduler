@@ -1,1 +1,127 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-64-3d46e5c731_b5dabfdd87","featureId":"feat_gh-64_f6d8f1e3e0","title":"gh#64: R2.4 — Add planRecordSuccess + planRecordFailure","category":"maintainability","severity":"medium","confidence":"high","triage":"risk","evidence":[{"path":"packages/shared/src/post/aggregate.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/worker/src/post-lifecycle.service.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/64.\nBacklog section: Candidate 2 — Post Lifecycle aggregate.\n\n## Context\n\nFourth PR in Candidate 2. Migrates the success and failure paths of `publishPost` to the aggregate. After this PR, the worker's `publishPost` is a thin orchestrator over pure decisions.\n\n## Scope\n\n- Add to `packages/shared/src/post/aggregate.ts`:\n  - `planRecordSuccess(currentRow: PostState, platformPostId: string): PostPatch`\n    - Returns `{ status: 'published', platformPostId, publishedAt: <wall clock from caller>, bumpVersion: true }`\n    - Throws `PostInvariantError({ kind: 'already_published' })` if the row already has a different `platformPostId`\n  - `planRecordFailure(currentRow: PostState, failure: PublishFailure, isFinalAttempt: boolean): PostPatch`\n    - If `failure.kind === 'permanent'` or `isFinalAttempt`: `{ status: 'failed', failureReason: <classified message>, bumpVersion: true }`\n    - Otherwise (transient with retries remaining): `{ failureReason: <classified message>, lastAttemptAt, bumpVersion: false }` — status stays `publishing` so BullMQ's retry can resume\n- Update `packages/worker/src/post-lifecycle.service.ts`:\n  - Replace inline success-recording with `planRecordSuccess(...)`\n  - Replace inline `recordFailureAttempt(...)` decision logic with `planRecordFailure(...)` — the worker still owns the `post_attempts` insert (audit row) and the notification-emit-after-commit ordering for `token_revoked`\n- Unit tests for both: branch coverage on every decision path\n\n## Out of scope\n\n- Sweep / deletions (R2.5)\n- Auto-destruct lifecycle (separate concern, separate aggregate if it ever exists)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- Existing `recordFailureAttempt` tests pass without modification\n- The \"persist classification BEFORE the UnrecoverableError replaces the error object\" pitfall (RESEARCH.md Pitfall 8 — top of `post-lifecycle.service.ts`) is preserved\n\n## References\n\n- ADRs: [0003](../blob/main/docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md), [0004](../blob/main/docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md)\n- Depends on: #63","reproduction":"Fourth PR in Candidate 2. Migrates the success and failure paths of `publishPost` to the aggregate. After this PR, the worker's `publishPost` is a thin orchestrator over pure decisions.","recommendation":"- Add to `packages/shared/src/post/aggregate.ts`:\n  - `planRecordSuccess(currentRow: PostState, platformPostId: string): PostPatch`\n    - Returns `{ status: 'published', platformPostId, publishedAt: <wall clock from caller>, bumpVersion: true }`\n    - Throws `PostInvariantError({ kind: 'already_published' })` if the row already has a different `platformPostId`\n  - `planRecordFailure(currentRow: PostState, failure: PublishFailure, isFinalAttempt: boolean): PostPatch`\n    - If `failure.kind === 'permanent'` or `isFinalAttempt`: `{ status: 'failed', failureReason: <classified message>, bumpVersion: true }`\n    - Otherwise (transient with retries remaining): `{ failureReason: <classified message>, lastAttemptAt, bumpVersion: false }` — status stays `publishing` so BullMQ's retry can resume\n- Update `packages/worker/src/post-lifecycle.service.ts`:\n  - Replace inline success-recording with `planRecordSuccess(...)`\n  - Replace inline `recordFailureAttempt(...)` decision logic with `planRecordFailure(...)` — the worker still owns the `post_attempts` insert (audit row) and the notification-emit-after-commit ordering for `token_revoked`\n- Unit tests for both: branch coverage on every decision path","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- Existing `recordFailureAttempt` tests pass without modification\n- The \"persist classification BEFORE the UnrecoverableError replaces the error object\" pitfall (RESEARCH.md Pitfall 8 — top of `post-lifecycle.service.ts`) is preserved","minimumFixScope":"packages/shared/src/post/aggregate.ts, packages/worker/src/post-lifecycle.service.ts","status":"open","history":[],"signature":"sig_gh-64_3d46e5c731","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-64-3d46e5c731_b5dabfdd87",
+  "featureId": "feat_gh-64_f6d8f1e3e0",
+  "title": "gh#64: R2.4 — Add planRecordSuccess + planRecordFailure",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/shared/src/post/aggregate.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/post-lifecycle.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/64.\nBacklog section: Candidate 2 — Post Lifecycle aggregate.\n\n## Context\n\nFourth PR in Candidate 2. Migrates the success and failure paths of `publishPost` to the aggregate. After this PR, the worker's `publishPost` is a thin orchestrator over pure decisions.\n\n## Scope\n\n- Add to `packages/shared/src/post/aggregate.ts`:\n  - `planRecordSuccess(currentRow: PostState, platformPostId: string): PostPatch`\n    - Returns `{ status: 'published', platformPostId, publishedAt: <wall clock from caller>, bumpVersion: true }`\n    - Throws `PostInvariantError({ kind: 'already_published' })` if the row already has a different `platformPostId`\n  - `planRecordFailure(currentRow: PostState, failure: PublishFailure, isFinalAttempt: boolean): PostPatch`\n    - If `failure.kind === 'permanent'` or `isFinalAttempt`: `{ status: 'failed', failureReason: <classified message>, bumpVersion: true }`\n    - Otherwise (transient with retries remaining): `{ failureReason: <classified message>, lastAttemptAt, bumpVersion: false }` — status stays `publishing` so BullMQ's retry can resume\n- Update `packages/worker/src/post-lifecycle.service.ts`:\n  - Replace inline success-recording with `planRecordSuccess(...)`\n  - Replace inline `recordFailureAttempt(...)` decision logic with `planRecordFailure(...)` — the worker still owns the `post_attempts` insert (audit row) and the notification-emit-after-commit ordering for `token_revoked`\n- Unit tests for both: branch coverage on every decision path\n\n## Out of scope\n\n- Sweep / deletions (R2.5)\n- Auto-destruct lifecycle (separate concern, separate aggregate if it ever exists)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- Existing `recordFailureAttempt` tests pass without modification\n- The \"persist classification BEFORE the UnrecoverableError replaces the error object\" pitfall (RESEARCH.md Pitfall 8 — top of `post-lifecycle.service.ts`) is preserved\n\n## References\n\n- ADRs: [0003](../blob/main/docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md), [0004](../blob/main/docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md)\n- Depends on: #63",
+  "reproduction": "Fourth PR in Candidate 2. Migrates the success and failure paths of `publishPost` to the aggregate. After this PR, the worker's `publishPost` is a thin orchestrator over pure decisions.",
+  "recommendation": "- Add to `packages/shared/src/post/aggregate.ts`:\n  - `planRecordSuccess(currentRow: PostState, platformPostId: string): PostPatch`\n    - Returns `{ status: 'published', platformPostId, publishedAt: <wall clock from caller>, bumpVersion: true }`\n    - Throws `PostInvariantError({ kind: 'already_published' })` if the row already has a different `platformPostId`\n  - `planRecordFailure(currentRow: PostState, failure: PublishFailure, isFinalAttempt: boolean): PostPatch`\n    - If `failure.kind === 'permanent'` or `isFinalAttempt`: `{ status: 'failed', failureReason: <classified message>, bumpVersion: true }`\n    - Otherwise (transient with retries remaining): `{ failureReason: <classified message>, lastAttemptAt, bumpVersion: false }` — status stays `publishing` so BullMQ's retry can resume\n- Update `packages/worker/src/post-lifecycle.service.ts`:\n  - Replace inline success-recording with `planRecordSuccess(...)`\n  - Replace inline `recordFailureAttempt(...)` decision logic with `planRecordFailure(...)` — the worker still owns the `post_attempts` insert (audit row) and the notification-emit-after-commit ordering for `token_revoked`\n- Unit tests for both: branch coverage on every decision path",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- Existing `recordFailureAttempt` tests pass without modification\n- The \"persist classification BEFORE the UnrecoverableError replaces the error object\" pitfall (RESEARCH.md Pitfall 8 — top of `post-lifecycle.service.ts`) is preserved",
+  "minimumFixScope": "packages/shared/src/post/aggregate.ts, packages/worker/src/post-lifecycle.service.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T184337-152ac9",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "Original evidence paths still exist. packages/shared/src/post/aggregate.ts currently defines planDelete, planUpdate, and planTransitionToPublishing only; rg found no planRecordSuccess or planRecordFailure, and PostPatch in packages/shared/src/post/types.ts still lacks platformPostId, publishedAt, failureReason, lastAttemptAt, or failedAt fields. packages/worker/src/post-lifecycle.service.ts still imports only planTransitionToPublishing from @sms/shared, records success inline in the Phase 3 transaction by setting status='published', publishedAt, and platformPostId, and keeps recordFailureAttempt as worker-local inline decision logic with no isFinalAttempt input. Current worker tests also assert the old transient behavior, reverting status to scheduled, not the requested aggregate-planned publishing retry state. I attempted a targeted shared aggregate test run, but the read-only sandbox prevented Vitest from writing its .vite-temp config file, so runtime test execution could not complete; the current source and test assertions are still enough to classify the finding as open.",
+      "commands": [
+        "pwd && rg -n \"planRecordSuccess|planRecordFailure|recordFailureAttempt|PublishFailure|already_published\" packages/shared/src/post packages/worker/src || true",
+        "rg --files packages/shared/src/post packages/worker/src | sort",
+        "git status --short",
+        "nl -ba packages/shared/src/post/aggregate.ts | sed -n '1,260p'",
+        "nl -ba packages/shared/src/post/types.ts | sed -n '1,260p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '1,220p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '500,780p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '780,840p'",
+        "rg -n \"planTransitionToPublishing|planRecordSuccess|planRecordFailure|aggregate|permanent_fail|transient_fail|recordFailureAttempt|failureReason|failedAt|status: 'scheduled'|status.*scheduled\" packages/shared packages/worker/src/__tests__ package.json pnpm-workspace.yaml",
+        "nl -ba packages/worker/src/__tests__/post-lifecycle.test.ts | sed -n '240,380p'",
+        "rg -n \"shared.*test|@sms/shared|packages/shared|vitest|test\" package.json packages/shared/package.json packages/worker/package.json",
+        "nl -ba packages/shared/src/__tests__/post-aggregate.test.ts | sed -n '1,270p'",
+        "nl -ba packages/worker/src/__tests__/integration/post-lifecycle.integration.test.ts | sed -n '220,335p'",
+        "pnpm --filter @sms/shared test -- --run packages/shared/src/__tests__/post-aggregate.test.ts",
+        "rg -n \"publishedAt|failureReason|lastAttemptAt|failedAt|platformPostId|planRecord\" packages/shared/src/post packages/shared/src/__tests__/post-aggregate.test.ts packages/shared/src/index.ts",
+        "nl -ba packages/shared/src/index.ts | sed -n '1,80p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '300,500p'"
+      ],
+      "createdAt": "2026-05-20T18:44:47.932Z"
+    },
+    {
+      "runId": "20260520T185152-dc9f47",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "Original evidence paths still exist. Current packages/shared/src/post/aggregate.ts defines planRecordSuccess and planRecordFailure, with PostPatch fields for publishedAt, failedAt, lastAttemptAt, failureReason, and platformPostId in packages/shared/src/post/types.ts, exported through packages/shared/src/index.ts. Current packages/worker/src/post-lifecycle.service.ts imports both aggregate helpers, uses planRecordSuccess in the success transaction, and uses planRecordFailure inside recordFailureAttempt while preserving the post_attempts audit insert and post-commit token_revoked notification ordering. Current tests cover the new aggregate branches, transient retry remaining in publishing, final transient failure moving to failed, and publish-worker isFinalAttempt propagation. @sms/shared and @sms/worker typechecks pass. Targeted Vitest and build commands could not complete because the read-only sandbox blocks writes to .vite-temp and dist, not because of test or TypeScript failures.",
+      "commands": [
+        "pwd && git status --short",
+        "rg -n \"planRecordSuccess|planRecordFailure|recordFailureAttempt|PublishFailure|already_published|planTransitionToPublishing\" packages/shared/src/post packages/worker/src",
+        "rg --files packages/shared/src/post packages/shared/src packages/worker/src | sort",
+        "nl -ba packages/shared/src/post/aggregate.ts | sed -n '1,260p'",
+        "nl -ba packages/shared/src/post/types.ts | sed -n '1,260p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '1,220p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '620,860p'",
+        "nl -ba packages/shared/src/__tests__/post-aggregate.test.ts | sed -n '1,360p'",
+        "nl -ba packages/worker/src/__tests__/post-lifecycle.test.ts | sed -n '260,430p'",
+        "nl -ba packages/worker/src/__tests__/integration/post-lifecycle.integration.test.ts | sed -n '210,340p'",
+        "rg -n \"planRecordSuccess|planRecordFailure\" packages/shared/src/index.ts packages/shared/src/post packages/shared/src/__tests__/post-aggregate.test.ts packages/worker/src/__tests__ packages/worker/src/post-lifecycle.service.ts",
+        "pnpm --filter @sms/shared test -- --run packages/shared/src/__tests__/post-aggregate.test.ts",
+        "pnpm --filter @sms/worker test -- --run packages/worker/src/__tests__/post-lifecycle.test.ts",
+        "pnpm --filter @sms/shared build",
+        "pnpm --filter @sms/worker build",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/worker typecheck"
+      ],
+      "createdAt": "2026-05-20T18:53:20.423Z"
+    },
+    {
+      "runId": "20260520T190118-3df7c2",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "Original evidence paths still exist. Current packages/shared/src/post/aggregate.ts defines planRecordSuccess and planRecordFailure; PostPatch in packages/shared/src/post/types.ts includes publishedAt, failedAt, lastAttemptAt, failureReason, and platformPostId; packages/shared/src/index.ts re-exports the aggregate. Current packages/worker/src/post-lifecycle.service.ts imports both helpers, uses planRecordSuccess in the success transaction, and uses planRecordFailure inside recordFailureAttempt while preserving the post_attempts audit insert, original error rethrow, and post-commit token_revoked notification ordering. Current tests include aggregate branch coverage for success, different platform id rejection, transient retry remaining in publishing, final transient failure, and permanent failure, plus worker tests for transient retry state, final attempt failure, permanent failure, and publish-worker isFinalAttempt propagation. Typecheck passed for @sms/shared and @sms/worker. Targeted Vitest runs could not execute because the read-only sandbox prevents Vite from writing .vite-temp config files, so the test source and passing typechecks are the usable verification evidence.",
+      "commands": [
+        "pwd && git status --short",
+        "rg -n \"planRecordSuccess|planRecordFailure|recordFailureAttempt|PublishFailure|already_published|planTransitionToPublishing\" packages/shared/src/post packages/shared/src/index.ts packages/worker/src",
+        "rg --files packages/shared/src/post packages/shared/src/__tests__ packages/worker/src/__tests__ packages/worker/src | sort",
+        "nl -ba packages/shared/src/post/aggregate.ts | sed -n '1,280p'",
+        "nl -ba packages/shared/src/post/types.ts | sed -n '1,260p'",
+        "nl -ba packages/shared/src/index.ts | sed -n '1,120p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '1,240p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '600,840p'",
+        "nl -ba packages/shared/src/__tests__/post-aggregate.test.ts | sed -n '1,380p'",
+        "nl -ba packages/worker/src/__tests__/post-lifecycle.test.ts | sed -n '270,440p'",
+        "nl -ba packages/worker/src/__tests__/publish-worker.test.ts | sed -n '70,130p'",
+        "pnpm --filter @sms/shared test -- --run packages/shared/src/__tests__/post-aggregate.test.ts",
+        "pnpm --filter @sms/worker test -- --run packages/worker/src/__tests__/post-lifecycle.test.ts packages/worker/src/__tests__/publish-worker.test.ts",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/worker typecheck",
+        "nl -ba packages/worker/src/publish-worker.ts | sed -n '150,230p'",
+        "rg -n \"isFinalAttempt|attemptsMade|currentAttemptNum|recordFailureAttempt\\(\" packages/worker/src/publish-worker.ts packages/worker/src/post-lifecycle.service.ts packages/worker/src/__tests__",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '520,580p'",
+        "nl -ba packages/worker/src/__tests__/integration/post-lifecycle.integration.test.ts | sed -n '220,330p'",
+        "rg -n \"lastAttemptAt|last_attempt|failureReason|failedAt|publishedAt|platformPostId\" packages/db packages/shared packages/worker/src/post-lifecycle.service.ts",
+        "nl -ba packages/db/src/schema.ts | sed -n '1,220p'"
+      ],
+      "createdAt": "2026-05-20T19:02:41.280Z"
+    }
+  ],
+  "signature": "sig_gh-64_3d46e5c731",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-64-3d46e5c731-b5dabfd_dbd2a63eeb"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T19:02:41.280Z"
+}

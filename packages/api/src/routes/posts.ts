@@ -11,8 +11,9 @@ import {
   updatePostSchema,
   postQuerySchema,
   conflictCheckSchema,
-  transitionPost,
+  planRetryFailedPost,
   JOB_NAMES,
+  AppError,
   type PostStatus,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -26,7 +27,6 @@ import {
   getPostById,
   getPosts,
   checkConflicts,
-  PostServiceError,
 } from '../services/post.service.js';
 import {
   checkTwitterBudgetWithDb,
@@ -415,7 +415,7 @@ export function createPostsRouter({
 
       res.status(201).json(post);
     } catch (err: unknown) {
-      if (err instanceof PostServiceError) {
+      if (err instanceof AppError) {
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
@@ -770,7 +770,7 @@ export function createPostsRouter({
 
       res.json(updatedPost);
     } catch (err: unknown) {
-      if (err instanceof PostServiceError) {
+      if (err instanceof AppError) {
         // T-DATA-01 invariant 2: PLATFORM_IMMUTABLE → 409 with the canonical
         // platform_immutable code shape so the UI can render the right toast.
         if (err.code === 'PLATFORM_IMMUTABLE') {
@@ -790,7 +790,7 @@ export function createPostsRouter({
       await deletePost(db, req.session.userId!, postId);
       res.json({ success: true });
     } catch (err: unknown) {
-      if (err instanceof PostServiceError) {
+      if (err instanceof AppError) {
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
@@ -818,27 +818,26 @@ export function createPostsRouter({
           .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
         if (!existingPost) {
-          throw new PostServiceError('Post not found', 404);
+          throw new AppError('Post not found', 404);
         }
 
         if (existingPost.status !== 'failed') {
-          throw new PostServiceError(
+          throw new AppError(
             'Only failed posts can be retried.',
             409,
           );
         }
 
-        // Validate transition rules even though we already checked status
-        // above — keeps the single authoritative transition function as the
-        // source of truth (POST_STATE_TRANSITIONS).
-        transitionPost(existingPost.status as PostStatus, 'scheduled');
+        const retryPatch = planRetryFailedPost({
+          status: existingPost.status as PostStatus,
+        });
 
         const [updatedPostRow] = await tx
           .update(posts)
           .set({
-            status: 'scheduled',
-            failureReason: null,
-            failedAt: null,
+            status: retryPatch.status,
+            failureReason: retryPatch.failureReason,
+            failedAt: retryPatch.failedAt,
             postVersion: sql`${posts.postVersion} + 1`,
             updatedAt: new Date(),
           })
@@ -861,7 +860,7 @@ export function createPostsRouter({
 
       res.status(200).json(updated);
     } catch (err: unknown) {
-      if (err instanceof PostServiceError) {
+      if (err instanceof AppError) {
         res.status(err.statusCode).json({ error: err.message });
         return;
       }

@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Job, Queue } from 'bullmq';
 import { UnrecoverableError } from 'bullmq';
-import { PublishFailure } from '@sms/shared';
+import { PostInvariantError, PublishFailure } from '@sms/shared';
 import type { StorageBackend } from '@sms/shared/storage';
 import { createPublishHandler, type PublishJobPayload } from '../publish-worker.js';
 import { PostLifecycleAbort } from '../post-lifecycle.service.js';
+
+function lifecycleAbort(kind: PostInvariantError['kind']): PostLifecycleAbort {
+  return new PostLifecycleAbort(new PostInvariantError(kind));
+}
 
 function buildJob(
   overrides: Partial<Job<PublishJobPayload>> = {},
@@ -63,6 +67,7 @@ describe('createPublishHandler', () => {
     expect(ctxArg.expectedVersion).toBe(1);
     expect(ctxArg.correlationId).toBe('corr_abc');
     expect(ctxArg.currentAttemptNum).toBe(1);
+    expect(ctxArg.isFinalAttempt).toBe(false);
     expect(ctxArg.storage).toBe(deps.storage);
     expect(result).toEqual({ platformPostId: 'tw_success_1' });
   });
@@ -72,6 +77,27 @@ describe('createPublishHandler', () => {
     await handler(buildJob({ attemptsMade: 2 } as Partial<Job<PublishJobPayload>>));
     const [, ctxArg] = deps.publishPostImpl.mock.calls[0];
     expect(ctxArg.currentAttemptNum).toBe(3);
+  });
+
+  it('marks the lifecycle context final on the last configured attempt', async () => {
+    const handler = createPublishHandler(deps);
+    await handler(buildJob({ attemptsMade: 3 } as Partial<Job<PublishJobPayload>>));
+    const [, ctxArg] = deps.publishPostImpl.mock.calls[0];
+    expect(ctxArg.currentAttemptNum).toBe(4);
+    expect(ctxArg.isFinalAttempt).toBe(true);
+  });
+
+  it('treats jobs without a configured attempts cap as final on the first attempt', async () => {
+    const handler = createPublishHandler(deps);
+    await handler(
+      buildJob({
+        attemptsMade: 0,
+        opts: {},
+      } as Partial<Job<PublishJobPayload>>),
+    );
+    const [, ctxArg] = deps.publishPostImpl.mock.calls[0];
+    expect(ctxArg.currentAttemptNum).toBe(1);
+    expect(ctxArg.isFinalAttempt).toBe(true);
   });
 
   it('rethrows transient errors so BullMQ retries', async () => {
@@ -116,7 +142,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(already_published) — idempotency skip', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('already_published'));
+      .mockRejectedValue(lifecycleAbort('already_published'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
@@ -126,7 +152,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(version_mismatch)', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('version_mismatch'));
+      .mockRejectedValue(lifecycleAbort('version_mismatch'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
@@ -136,7 +162,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(budget_exhausted)', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('budget_exhausted'));
+      .mockRejectedValue(lifecycleAbort('budget_exhausted'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
@@ -146,7 +172,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(not_scheduled)', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('not_scheduled'));
+      .mockRejectedValue(lifecycleAbort('not_scheduled'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
@@ -156,7 +182,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(thread_unsupported)', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('thread_unsupported'));
+      .mockRejectedValue(lifecycleAbort('thread_unsupported'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
