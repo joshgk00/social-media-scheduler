@@ -67,6 +67,7 @@ describe('createPublishHandler', () => {
     expect(ctxArg.expectedVersion).toBe(1);
     expect(ctxArg.correlationId).toBe('corr_abc');
     expect(ctxArg.currentAttemptNum).toBe(1);
+    expect(ctxArg.isFinalAttempt).toBe(false);
     expect(ctxArg.storage).toBe(deps.storage);
     expect(result).toEqual({ platformPostId: 'tw_success_1' });
   });
@@ -76,6 +77,27 @@ describe('createPublishHandler', () => {
     await handler(buildJob({ attemptsMade: 2 } as Partial<Job<PublishJobPayload>>));
     const [, ctxArg] = deps.publishPostImpl.mock.calls[0];
     expect(ctxArg.currentAttemptNum).toBe(3);
+  });
+
+  it('marks the lifecycle context final on the last configured attempt', async () => {
+    const handler = createPublishHandler(deps);
+    await handler(buildJob({ attemptsMade: 3 } as Partial<Job<PublishJobPayload>>));
+    const [, ctxArg] = deps.publishPostImpl.mock.calls[0];
+    expect(ctxArg.currentAttemptNum).toBe(4);
+    expect(ctxArg.isFinalAttempt).toBe(true);
+  });
+
+  it('treats jobs without a configured attempts cap as final on the first attempt', async () => {
+    const handler = createPublishHandler(deps);
+    await handler(
+      buildJob({
+        attemptsMade: 0,
+        opts: {},
+      } as Partial<Job<PublishJobPayload>>),
+    );
+    const [, ctxArg] = deps.publishPostImpl.mock.calls[0];
+    expect(ctxArg.currentAttemptNum).toBe(1);
+    expect(ctxArg.isFinalAttempt).toBe(true);
   });
 
   it('rethrows transient errors so BullMQ retries', async () => {

@@ -77,6 +77,7 @@ describe('publishPost lifecycle', () => {
     expect((publishedUpdate?.set as { platformPostId?: string }).platformPostId).toBe(
       'tw_test_777',
     );
+    expect((publishedUpdate?.set as { failureReason?: string | null }).failureReason).toBeNull();
   });
 
   it('loads media bytes and passes them into publish', async () => {
@@ -131,7 +132,7 @@ describe('publishPost lifecycle', () => {
     );
   });
 
-  it('records a transient failure and reverts to scheduled when media storage fails', async () => {
+  it('records a transient failure and leaves publishing status unchanged when media storage fails', async () => {
     seedHappyPath(db);
     db.__pushSelect(() => [
       {
@@ -158,10 +159,13 @@ describe('publishPost lifecycle', () => {
     expect(transientAttempt).toBeDefined();
     expect(transientAttempt?.errorCode).toBe('unknown');
     expect(transientAttempt?.errorMessage).toBe('storage object missing');
-    const revertUpdate = db.__updates.find(
-      (u) => (u.set as { status?: string }).status === 'scheduled',
+    const transientUpdate = db.__updates.find(
+      (u) =>
+        (u.set as { failureReason?: string }).failureReason ===
+        'storage object missing',
     );
-    expect(revertUpdate).toBeDefined();
+    expect(transientUpdate).toBeDefined();
+    expect((transientUpdate?.set as { status?: string }).status).toBeUndefined();
   });
 
   it('aborts with already_published when platform_post_id is set AND status is already published', async () => {
@@ -211,6 +215,42 @@ describe('publishPost lifecycle', () => {
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
     ).rejects.toMatchObject({ invariant: { kind: 'not_scheduled' } });
     expect(ctx.publish).not.toHaveBeenCalled();
+  });
+
+  it('reruns graceful preflights when retrying from publishing status', async () => {
+    const lockedPost = seedLockedPost({ status: 'publishing' });
+    const profile = seedSocialProfile();
+    db.__pushExecute(() => [lockedPost]);
+    db.__pushSelect(() => [{ count: '0' }]);
+    db.__pushSelect(() => [profile]);
+    const ctx = buildCtx({
+      checkBudget: vi.fn().mockResolvedValue({ wouldExceed: true }),
+    });
+
+    await expect(
+      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
+    ).rejects.toMatchObject({ invariant: { kind: 'budget_exhausted' } });
+
+    expect(ctx.checkBudget).toHaveBeenCalledWith(lockedPost.profile_id);
+    expect(ctx.publish).not.toHaveBeenCalled();
+  });
+
+  it('publishes retrying publishing posts when graceful preflights still pass', async () => {
+    const lockedPost = seedLockedPost({ status: 'publishing' });
+    const profile = seedSocialProfile();
+    db.__pushExecute(() => [lockedPost]);
+    db.__pushSelect(() => [{ count: '0' }]);
+    db.__pushSelect(() => [profile]);
+    const ctx = buildCtx();
+
+    const result = await publishPost(
+      db as unknown as Parameters<typeof publishPost>[0],
+      ctx,
+    );
+
+    expect(result.platformPostId).toBe('tw_test_777');
+    expect(ctx.checkBudget).toHaveBeenCalledWith(lockedPost.profile_id);
+    expect(ctx.publish).toHaveBeenCalledTimes(1);
   });
 
   it('aborts with budget_exhausted and leaves post scheduled when checkBudget reports wouldExceed', async () => {
@@ -282,11 +322,42 @@ describe('publishPost lifecycle', () => {
       (row) => (row as { outcome?: string }).outcome === 'transient_fail',
     );
     expect(transientAttempt).toBeDefined();
-    // Status is reverted to scheduled so BullMQ retry can pick it up again
-    const revertUpdate = db.__updates.find(
-      (u) => (u.set as { status?: string }).status === 'scheduled',
+    // Status stays publishing so BullMQ retries the in-flight job.
+    const transientUpdate = db.__updates.find(
+      (u) => (u.set as { failureReason?: string }).failureReason === 'upstream',
     );
-    expect(revertUpdate).toBeDefined();
+    expect(transientUpdate).toBeDefined();
+    expect((transientUpdate?.set as { status?: string }).status).toBeUndefined();
+  });
+
+  it('records a transient failure as failed on the final attempt', async () => {
+    seedHappyPath(db);
+    const transientErr = new PublishFailure({
+      kind: 'transient',
+      errorCode: 'http_500',
+      message: 'upstream exhausted',
+      httpStatus: 500,
+    });
+    const ctx = buildCtx({
+      isFinalAttempt: true,
+      publish: vi.fn().mockRejectedValue(transientErr),
+    });
+
+    await expect(
+      publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
+    ).rejects.toBe(transientErr);
+
+    const transientAttempt = db.__insertedRows.find(
+      (row) => (row as { outcome?: string }).outcome === 'transient_fail',
+    );
+    expect(transientAttempt).toBeDefined();
+    const failedUpdate = db.__updates.find(
+      (u) => (u.set as { status?: string }).status === 'failed',
+    );
+    expect(failedUpdate).toBeDefined();
+    expect((failedUpdate?.set as { failureReason?: string }).failureReason).toBe(
+      'upstream exhausted',
+    );
   });
 
   it('records permanent_fail attempt and transitions to failed on 401 auth revoked', async () => {

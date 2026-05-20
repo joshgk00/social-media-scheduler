@@ -133,11 +133,13 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
     });
 
     try {
+      const attemptsCap = job.opts.attempts ?? 1;
       const result = await runPublish(deps.db, {
         postId: job.data.postId,
         expectedVersion: job.data.postVersion,
         correlationId: job.data.correlationId,
         currentAttemptNum: job.attemptsMade + 1,
+        isFinalAttempt: job.attemptsMade + 1 >= attemptsCap,
         publish: async (profile, publishablePost, publishCtx) => {
           return publishers[publishablePost.platform].publish(
             profile,
@@ -283,7 +285,7 @@ export function createPublishWorker({
   worker.on('failed', async (job, err) => {
     if (!job) return;
 
-    const attemptsCap = job.opts.attempts ?? DEFAULT_MAX_ATTEMPTS;
+    const attemptsCap = job.opts.attempts ?? 1;
     const isFinalFailure =
       err.name === 'UnrecoverableError' || job.attemptsMade >= attemptsCap;
     if (!isFinalFailure) return;
