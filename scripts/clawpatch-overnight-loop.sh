@@ -6,6 +6,7 @@ RUNS=0
 MAX_PER_RUN=1
 LOG_FILE="logs/clawpatch-overnight.log"
 BACKGROUND=0
+REPAIR_ATTEMPTS=3
 
 usage() {
   cat <<'EOF'
@@ -17,10 +18,23 @@ Flags:
   --interval-seconds <n>  Seconds between attempts. Default: 1800
   --runs <n>              Number of attempts before stopping. Default: 0 (unlimited)
   --max-per-run <n>       Findings per attempt. Default: 1
+  --repair-attempts <n>   Repair retries after the initial fix attempt.
+                          Default: 3
   --log <path>            Log file. Default: logs/clawpatch-overnight.log
   --background            Start with nohup in the background and print the PID
   -h, --help              Show this help
 EOF
+}
+
+require_flag_value() {
+  local flag="$1"
+  local value="${2:-}"
+
+  if [[ -z "$value" ]]; then
+    echo "$flag requires a value" >&2
+    usage >&2
+    exit 2
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -29,6 +43,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --interval-seconds)
+      require_flag_value "$1" "${2:-}"
       INTERVAL_SECONDS="${2:-}"
       shift 2
       ;;
@@ -37,6 +52,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --runs)
+      require_flag_value "$1" "${2:-}"
       RUNS="${2:-}"
       shift 2
       ;;
@@ -45,6 +61,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --max-per-run)
+      require_flag_value "$1" "${2:-}"
       MAX_PER_RUN="${2:-}"
       shift 2
       ;;
@@ -52,7 +69,17 @@ while [[ $# -gt 0 ]]; do
       MAX_PER_RUN="${1#--max-per-run=}"
       shift
       ;;
+    --repair-attempts)
+      require_flag_value "$1" "${2:-}"
+      REPAIR_ATTEMPTS="${2:-}"
+      shift 2
+      ;;
+    --repair-attempts=*)
+      REPAIR_ATTEMPTS="${1#--repair-attempts=}"
+      shift
+      ;;
     --log)
+      require_flag_value "$1" "${2:-}"
       LOG_FILE="${2:-}"
       shift 2
       ;;
@@ -91,6 +118,11 @@ if ! [[ "$MAX_PER_RUN" =~ ^[0-9]+$ ]] || [[ "$MAX_PER_RUN" -lt 1 ]]; then
   exit 2
 fi
 
+if ! [[ "$REPAIR_ATTEMPTS" =~ ^[0-9]+$ ]]; then
+  echo "--repair-attempts must be a non-negative integer" >&2
+  exit 2
+fi
+
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -100,6 +132,7 @@ if [[ "$BACKGROUND" -eq 1 ]]; then
     --interval-seconds "$INTERVAL_SECONDS" \
     --runs "$RUNS" \
     --max-per-run "$MAX_PER_RUN" \
+    --repair-attempts "$REPAIR_ATTEMPTS" \
     --log "$LOG_FILE" \
     >>"$LOG_FILE" 2>&1 &
   echo "$!"
@@ -120,7 +153,7 @@ while [[ "$RUNS" -eq 0 || "$attempt" -lt "$RUNS" ]]; do
   {
     echo "=== $(date -u '+%Y-%m-%dT%H:%M:%SZ') attempt=$attempt ==="
     pnpm clawpatch:queue-gh -- next --plain || true
-    pnpm clawpatch:fix-gh -- --max "$MAX_PER_RUN"
+    pnpm clawpatch:fix-gh -- --max "$MAX_PER_RUN" --repair-attempts "$REPAIR_ATTEMPTS" --park-failed
   } >>"$LOG_FILE" 2>&1
   status=$?
   set -e
