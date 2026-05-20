@@ -6,6 +6,7 @@ import type {
   TokenVault,
   TwitterCredentials,
 } from '../types.js';
+import { TokenVaultError } from '../vault.js';
 
 const defaultTwitterCredentials: TwitterCredentials = {
   kind: 'twitter',
@@ -55,7 +56,11 @@ export function createFakeTokenVault(
     unsealTwitter: () => twitter,
     sealOAuth2: () => fakeEncryptedOAuth2Field,
     unsealOAuth2: () => oauth2,
-    unsealForProfile: (profile) => (profile.platform === 'twitter' ? twitter : oauth2),
+    unsealForProfile: (profile) => {
+      if (profile.platform === 'twitter') return twitter;
+      if (profile.platform === 'linkedin' || profile.platform === 'facebook') return oauth2;
+      throw new TokenVaultError(`Unsupported token platform: ${String(profile.platform)}`);
+    },
     toSafeProfile: (profile: SafeProfile) => ({
       platform: profile.platform,
       platformAccountId: profile.platformAccountId,

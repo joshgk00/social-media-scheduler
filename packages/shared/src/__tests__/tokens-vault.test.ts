@@ -147,6 +147,35 @@ describe('TokenVault', () => {
     });
   });
 
+  it('normalizes Buffer-backed Twitter cipher fields before unsealing', () => {
+    const vault = createTokenVault(encryptionKey);
+    const credentials = {
+      kind: 'twitter' as const,
+      consumerKey: 'buffer-ck',
+      consumerSecret: 'buffer-cs',
+      accessToken: 'buffer-at',
+      accessTokenSecret: 'buffer-ats',
+    };
+    const sealed = vault.sealTwitter(credentials);
+
+    expect(
+      vault.unsealTwitter({
+        consumerKeyCiphertext: Buffer.from(sealed.consumerKeyCiphertext, 'hex'),
+        consumerKeyIv: Buffer.from(sealed.consumerKeyIv, 'hex'),
+        consumerKeyAuthTag: Buffer.from(sealed.consumerKeyAuthTag, 'hex'),
+        consumerSecretCiphertext: Buffer.from(sealed.consumerSecretCiphertext, 'hex'),
+        consumerSecretIv: Buffer.from(sealed.consumerSecretIv, 'hex'),
+        consumerSecretAuthTag: Buffer.from(sealed.consumerSecretAuthTag, 'hex'),
+        accessTokenCiphertext: Buffer.from(sealed.accessTokenCiphertext, 'hex'),
+        accessTokenIv: Buffer.from(sealed.accessTokenIv, 'hex'),
+        accessTokenAuthTag: Buffer.from(sealed.accessTokenAuthTag, 'hex'),
+        accessTokenSecretCiphertext: Buffer.from(sealed.accessTokenSecretCiphertext, 'hex'),
+        accessTokenSecretIv: Buffer.from(sealed.accessTokenSecretIv, 'hex'),
+        accessTokenSecretAuthTag: Buffer.from(sealed.accessTokenSecretAuthTag, 'hex'),
+      }),
+    ).toEqual(credentials);
+  });
+
   it('throws contextual TokenVaultError for invalid, tampered, and unsupported inputs', () => {
     const vault = createTokenVault(encryptionKey);
     const sealed = vault.sealOAuth2({
@@ -237,6 +266,12 @@ describe('createFakeTokenVault', () => {
       kind: 'twitter',
       accessTokenSecret: 'fake-ats',
     });
+    expect(() =>
+      vault.unsealForProfile({
+        ...baseProfile('twitter'),
+        platform: 'mastodon' as ProfileWithEncryptedTokens['platform'],
+      }),
+    ).toThrow('Unsupported token platform: mastodon');
   });
 
   it('uses default fake credentials', () => {
