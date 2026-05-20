@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-34-f319aead5b_f2344b158d",
+  "featureId": "feat_gh-34_ae664d7f2e",
+  "title": "gh#34: Bug: Auto-destruct help copy hardcoded to \"Twitter/X\" on LinkedIn and Facebook composer forms",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/web/src/components/posts/SharedPostFields.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/34.\nBacklog section: Bugs.\n\n## Summary\n\nThe Auto-destruct toggle on the new-post / edit-post composer shows the help text:\n\n> Automatically delete this post from Twitter/X after the specified time. The deletion runs in the background.\n\nThis copy renders verbatim on LinkedIn and Facebook composer forms after the profile picker switches platforms. It's misleading — and if auto-destruct isn't supported on LI/FB at all, the toggle itself shouldn't appear on those platforms.\n\n## Reproduction\n\n1. Open `/posts/new`.\n2. Select a LinkedIn profile — the form switches to LinkedIn shape, but the Auto-destruct help copy still references \"Twitter/X\".\n3. Switch to a Facebook profile — same copy.\n\n## Open question\n\nIs auto-destruct actually supported on LinkedIn or Facebook? If not, the right fix is to hide the toggle entirely on those platforms (it already isn't part of the LinkedIn / Facebook posting flows in the worker). If it is supported, the help text needs platform-aware copy.\n\n## Suggested fix\n\nEither:\n\n1. Move the Auto-destruct toggle into `TwitterPostFields.tsx` only (current `LinkedInPostFields.tsx` and `FacebookPostFields.tsx` shouldn't include it).\n2. Or keep it shared and parameterize the help-text string by platform.\n\n## Affected files\n\n- `packages/web/src/components/posts/SharedPostFields.tsx` (or wherever the auto-destruct block lives)\n- `packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx`\n\n## Scope\n\nPhase 8 platform-branching gap — auto-destruct UI was placed in a shared region without platform gating. Surfaced during browser verification.",
+  "reproduction": "1. Open `/posts/new`.\n2. Select a LinkedIn profile — the form switches to LinkedIn shape, but the Auto-destruct help copy still references \"Twitter/X\".\n3. Switch to a Facebook profile — same copy.",
+  "recommendation": "Phase 8 platform-branching gap — auto-destruct UI was placed in a shared region without platform gating. Surfaced during browser verification.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/components/posts/SharedPostFields.tsx, packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-34_f319aead5b",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

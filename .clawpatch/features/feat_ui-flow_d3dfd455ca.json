@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_ui-flow_d3dfd455ca",
+  "title": "React component scroll-area",
+  "summary": "React component implemented by packages/web/src/components/ui/scroll-area.tsx.",
+  "kind": "ui-flow",
+  "source": "react-component",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/ui/scroll-area.tsx",
+      "symbol": "scroll-area",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/ui/scroll-area.tsx",
+      "reason": "component implementation"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "react",
+    "component",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

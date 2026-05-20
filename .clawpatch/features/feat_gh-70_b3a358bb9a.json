@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-70_b3a358bb9a",
+  "title": "gh#70: R3.5 — Switch Publishers to receive Credentials from dispatcher",
+  "summary": "Imported from GitHub issue gh#70 in BACKLOG.md section \"Candidate 3 — TokenVault\".",
+  "kind": "job",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/worker/src/publishers/{twitter,linkedin,facebook}.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/shared/src/publisher.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/worker/src/publish-worker.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/worker/src/publishers/{twitter,linkedin,facebook}.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/publisher.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/publish-worker.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/tokens",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "docs/adr/0002-publisher-receives-raw-profile-row.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#70"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#70",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/70",
+    "backlog-order:0015",
+    "backlog-section:candidate-3-tokenvault",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "auth",
+    "filesystem",
+    "secrets",
+    "concurrency",
+    "external-api"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-70-5c6cfd4822_f9e214f516"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#70",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_ui-flow_4d5d978f0a",
+  "title": "React component RemoveDuplicatesDialog",
+  "summary": "React component implemented by packages/web/src/components/bulk/RemoveDuplicatesDialog.tsx.",
+  "kind": "ui-flow",
+  "source": "react-component",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/bulk/RemoveDuplicatesDialog.tsx",
+      "symbol": "RemoveDuplicatesDialog",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/bulk/RemoveDuplicatesDialog.tsx",
+      "reason": "component implementation"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/components/bulk/ConfirmSimpleDialog.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/bulk/__tests__/ConfirmDestructiveDialog.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/components/bulk/__tests__/ConfirmDestructiveDialog.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "react",
+    "component",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

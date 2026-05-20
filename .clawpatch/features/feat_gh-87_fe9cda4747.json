@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-87_fe9cda4747",
+  "title": "gh#87: nginx: add real_ip module support so rate limits + audit logs key on real client IP behind layered proxies",
+  "summary": "Imported from GitHub issue gh#87 in BACKLOG.md section \"Bugs\".",
+  "kind": "infra",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "nginx/nginx.conf",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "nginx/nginx.conf",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#87"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#87",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/87",
+    "backlog-order:0022",
+    "backlog-section:bugs"
+  ],
+  "trustBoundaries": [
+    "auth",
+    "network",
+    "filesystem",
+    "database"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-87-e93d2424a2_624f22bef7"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#87",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

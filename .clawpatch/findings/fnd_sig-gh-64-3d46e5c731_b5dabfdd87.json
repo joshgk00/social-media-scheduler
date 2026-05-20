@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-64-3d46e5c731_b5dabfdd87",
+  "featureId": "feat_gh-64_f6d8f1e3e0",
+  "title": "gh#64: R2.4 — Add planRecordSuccess + planRecordFailure",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/shared/src/post/aggregate.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/post-lifecycle.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/64.\nBacklog section: Candidate 2 — Post Lifecycle aggregate.\n\n## Context\n\nFourth PR in Candidate 2. Migrates the success and failure paths of `publishPost` to the aggregate. After this PR, the worker's `publishPost` is a thin orchestrator over pure decisions.\n\n## Scope\n\n- Add to `packages/shared/src/post/aggregate.ts`:\n  - `planRecordSuccess(currentRow: PostState, platformPostId: string): PostPatch`\n    - Returns `{ status: 'published', platformPostId, publishedAt: <wall clock from caller>, bumpVersion: true }`\n    - Throws `PostInvariantError({ kind: 'already_published' })` if the row already has a different `platformPostId`\n  - `planRecordFailure(currentRow: PostState, failure: PublishFailure, isFinalAttempt: boolean): PostPatch`\n    - If `failure.kind === 'permanent'` or `isFinalAttempt`: `{ status: 'failed', failureReason: <classified message>, bumpVersion: true }`\n    - Otherwise (transient with retries remaining): `{ failureReason: <classified message>, lastAttemptAt, bumpVersion: false }` — status stays `publishing` so BullMQ's retry can resume\n- Update `packages/worker/src/post-lifecycle.service.ts`:\n  - Replace inline success-recording with `planRecordSuccess(...)`\n  - Replace inline `recordFailureAttempt(...)` decision logic with `planRecordFailure(...)` — the worker still owns the `post_attempts` insert (audit row) and the notification-emit-after-commit ordering for `token_revoked`\n- Unit tests for both: branch coverage on every decision path\n\n## Out of scope\n\n- Sweep / deletions (R2.5)\n- Auto-destruct lifecycle (separate concern, separate aggregate if it ever exists)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- Existing `recordFailureAttempt` tests pass without modification\n- The \"persist classification BEFORE the UnrecoverableError replaces the error object\" pitfall (RESEARCH.md Pitfall 8 — top of `post-lifecycle.service.ts`) is preserved\n\n## References\n\n- ADRs: [0003](../blob/main/docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md), [0004](../blob/main/docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md)\n- Depends on: #63",
+  "reproduction": "Fourth PR in Candidate 2. Migrates the success and failure paths of `publishPost` to the aggregate. After this PR, the worker's `publishPost` is a thin orchestrator over pure decisions.",
+  "recommendation": "- Add to `packages/shared/src/post/aggregate.ts`:\n  - `planRecordSuccess(currentRow: PostState, platformPostId: string): PostPatch`\n    - Returns `{ status: 'published', platformPostId, publishedAt: <wall clock from caller>, bumpVersion: true }`\n    - Throws `PostInvariantError({ kind: 'already_published' })` if the row already has a different `platformPostId`\n  - `planRecordFailure(currentRow: PostState, failure: PublishFailure, isFinalAttempt: boolean): PostPatch`\n    - If `failure.kind === 'permanent'` or `isFinalAttempt`: `{ status: 'failed', failureReason: <classified message>, bumpVersion: true }`\n    - Otherwise (transient with retries remaining): `{ failureReason: <classified message>, lastAttemptAt, bumpVersion: false }` — status stays `publishing` so BullMQ's retry can resume\n- Update `packages/worker/src/post-lifecycle.service.ts`:\n  - Replace inline success-recording with `planRecordSuccess(...)`\n  - Replace inline `recordFailureAttempt(...)` decision logic with `planRecordFailure(...)` — the worker still owns the `post_attempts` insert (audit row) and the notification-emit-after-commit ordering for `token_revoked`\n- Unit tests for both: branch coverage on every decision path",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- Existing `recordFailureAttempt` tests pass without modification\n- The \"persist classification BEFORE the UnrecoverableError replaces the error object\" pitfall (RESEARCH.md Pitfall 8 — top of `post-lifecycle.service.ts`) is preserved",
+  "minimumFixScope": "packages/shared/src/post/aggregate.ts, packages/worker/src/post-lifecycle.service.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-64_3d46e5c731",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

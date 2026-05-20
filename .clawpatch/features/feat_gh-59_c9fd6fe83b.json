@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-59_c9fd6fe83b",
+  "title": "gh#59: R1.4 — Switch publish-worker to publishers map; drop parallel switches",
+  "summary": "Imported from GitHub issue gh#59 in BACKLOG.md section \"Candidate 1 — Publisher seam\".",
+  "kind": "job",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/worker/src/publish-worker.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/worker/src/post-lifecycle.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/worker/src/publish-worker.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/post-lifecycle.service.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "docs/adr/0001-publish-failure-is-thrown-not-returned.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "docs/adr/0002-publisher-receives-raw-profile-row.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#59"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#59",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/59",
+    "backlog-order:0004",
+    "backlog-section:candidate-1-publisher-seam",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "filesystem",
+    "secrets",
+    "concurrency",
+    "external-api"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-59-e3f36278ce_2e4178b8f3"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#59",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T01:10:12.374Z"
+}

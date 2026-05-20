@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-71_b7aa6132f2",
+  "title": "gh#71: R3.6 — Sweep: narrow encryption exports; mark ADR-0002 superseded",
+  "summary": "Imported from GitHub issue gh#71 in BACKLOG.md section \"Candidate 3 — TokenVault\".",
+  "kind": "test-suite",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/shared/src/tokens/",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/shared/src/__tests__/",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/shared/src/tokens/",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/__tests__/",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/encryption",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#71"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/shared/src/__tests__/",
+      "command": null
+    }
+  ],
+  "tags": [
+    "github-issue",
+    "gh#71",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/71",
+    "backlog-order:0016",
+    "backlog-section:candidate-3-tokenvault",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "auth",
+    "network",
+    "filesystem",
+    "secrets",
+    "concurrency"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-71-bc4469278b_882701b03b"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#71",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T20:19:35.980Z"
+}

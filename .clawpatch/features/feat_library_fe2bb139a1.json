@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_fe2bb139a1",
+  "title": "Node source packages/web/src/components/posts#3",
+  "summary": "Node/TypeScript source group packages/web/src/components/posts#3 with 4 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/package.json",
+      "symbol": "packages/web/src/components/posts#3",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/posts/ThreadEditor.tsx",
+      "reason": "source group packages/web/src/components/posts#3"
+    },
+    {
+      "path": "packages/web/src/components/posts/TweetPreview.tsx",
+      "reason": "source group packages/web/src/components/posts#3"
+    },
+    {
+      "path": "packages/web/src/components/posts/TwitterPostFields.tsx",
+      "reason": "source group packages/web/src/components/posts#3"
+    },
+    {
+      "path": "packages/web/src/components/posts/VisibilitySelector.tsx",
+      "reason": "source group packages/web/src/components/posts#3"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/__tests__/VisibilitySelector.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/__tests__/VisibilitySelector.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@sms/web",
+    "project-root:packages/web"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

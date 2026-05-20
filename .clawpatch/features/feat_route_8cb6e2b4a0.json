@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_route_8cb6e2b4a0",
+  "title": "React route /settings",
+  "summary": "React Router route '/settings' rendered by SettingsPage.",
+  "kind": "route",
+  "source": "react-router-route",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/pages/settings/SettingsPage.tsx",
+      "symbol": "SettingsPage",
+      "route": "/settings",
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/pages/settings/SettingsPage.tsx",
+      "reason": "route component"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/App.tsx",
+      "reason": "route declaration"
+    },
+    {
+      "path": "packages/web/src/hooks/use-auth.ts",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/settings/components/ProfileSection.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/settings/components/PreferencesSection.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/settings/components/SecuritySection.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/settings/components/StorageUsageCard.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/settings/components/NotificationsTab.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/skeleton.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/components/ui/tabs.tsx",
+      "reason": "direct import"
+    },
+    {
+      "path": "packages/web/src/pages/settings/__tests__/EmailLogsPage.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/pages/settings/__tests__/NotificationsTab.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/pages/settings/__tests__/EmailLogsPage.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/pages/settings/__tests__/NotificationsTab.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "react",
+    "react-router",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_81dfe25af1",
+  "title": "Node source packages/web/src/components/posts#1",
+  "summary": "Node/TypeScript source group packages/web/src/components/posts#1 with 12 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/package.json",
+      "symbol": "packages/web/src/components/posts#1",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/posts/AutoDestructPicker.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/CharacterCountRing.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/FacebookPostFields.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/FacebookPreview.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/LinkedInPostFields.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/LinkedInPreview.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/MediaDropZone.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/MediaThumbnail.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/MediaThumbnailGrid.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/PollingIndicator.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/PostActionsMenu.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    },
+    {
+      "path": "packages/web/src/components/posts/PostErrorCell.tsx",
+      "reason": "source group packages/web/src/components/posts#1"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/__tests__/FacebookPreview.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/__tests__/LinkedInPreview.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/__tests__/FacebookPreview.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/__tests__/LinkedInPreview.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@sms/web",
+    "project-root:packages/web"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

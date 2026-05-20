@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_7f6aedfb61",
+  "title": "Node source packages/api/src/services#1",
+  "summary": "Node/TypeScript source group packages/api/src/services#1 with 12 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/api/package.json",
+      "symbol": "packages/api/src/services#1",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/services/auth.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/auto-destruct-queue.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/bulk-export.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/bulk-import.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/bulk-ops-queue.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/facebook.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/linkedin.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/notifications.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/oauth.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/post.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    },
+    {
+      "path": "packages/api/src/services/profile.service.ts",
+      "reason": "source group packages/api/src/services#1"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/api/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/facebook.service.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/linkedin.service.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/oauth.service.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/profile.service.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/publish-queue.service.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/rate-limit.service.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/snippet.service.test.ts",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/api/src/services/__tests__/facebook.service.test.ts",
+      "command": "pnpm --dir packages/api test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/linkedin.service.test.ts",
+      "command": "pnpm --dir packages/api test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/oauth.service.test.ts",
+      "command": "pnpm --dir packages/api test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/profile.service.test.ts",
+      "command": "pnpm --dir packages/api test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/publish-queue.service.test.ts",
+      "command": "pnpm --dir packages/api test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/rate-limit.service.test.ts",
+      "command": "pnpm --dir packages/api test"
+    },
+    {
+      "path": "packages/api/src/services/__tests__/snippet.service.test.ts",
+      "command": "pnpm --dir packages/api test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@sms/api",
+    "project-root:packages/api"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

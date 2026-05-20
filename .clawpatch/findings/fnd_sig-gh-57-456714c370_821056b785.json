@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-57-456714c370_821056b785",
+  "featureId": "feat_gh-57_8ac82b19aa",
+  "title": "gh#57: R1.2 — Implement TwitterPublisher; fold classifyTwitterError inside",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/worker/src/publishers/twitter.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/lib/error-classifier",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/57.\nBacklog section: Candidate 1 — Publisher seam.\n\n## Context\n\nSecond PR in Candidate 1. Implements the first concrete Publisher and moves Twitter error classification inside it as a private function. The existing `twitter-publish.service.ts` stays intact — the worker doesn't switch over until R1.4.\n\n## Scope\n\n- Add `packages/worker/src/publishers/twitter.ts` exporting `createTwitterPublisher(): Publisher`\n- Implementation reads from `PublishablePost`, decrypts OAuth 1.0a credentials inline (matches existing `twitter-publish.service.ts` discipline — no caching, no logging, function-scope plaintext)\n- Move `classifyTwitterError` logic into this file as a private function (delete the export from `@sms/shared/lib/error-classifier` in R1.5)\n- Map any caught error to a thrown `PublishFailure` with the correct `kind` + `errorCode` — including token-shape redaction before the message escapes the Publisher\n- Phase 4 thread-unsupported behavior: throw `PublishFailure({ kind: 'permanent', errorCode: 'thread_unsupported' })` for now (the lifecycle's pre-flight thread check makes this unreachable in practice, but the Publisher must be safe in isolation)\n- Unit tests: success path returns `{ platformPostId }`; permanent and transient failure paths throw `PublishFailure` with correct `kind`; redaction strips token-shaped substrings from messages\n\n## Out of scope\n\n- LinkedIn / Facebook Publishers (R1.3)\n- Wiring changes to `publish-worker.ts` (R1.4)\n- Removing the old `twitter-publish.service.ts` (R1.5)\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/worker test` passes\n- Test fake fixture: `createFakeTwitterPublisher({ result?, error? })` available for downstream tests\n\n## References\n\n- ADRs: [0001](../blob/main/docs/adr/0001-publish-failure-is-thrown-not-returned.md), [0002](../blob/main/docs/adr/0002-publisher-receives-raw-profile-row.md)\n- Depends on: #56",
+  "reproduction": "Second PR in Candidate 1. Implements the first concrete Publisher and moves Twitter error classification inside it as a private function. The existing `twitter-publish.service.ts` stays intact — the worker doesn't switch over until R1.4.",
+  "recommendation": "- Add `packages/worker/src/publishers/twitter.ts` exporting `createTwitterPublisher(): Publisher`\n- Implementation reads from `PublishablePost`, decrypts OAuth 1.0a credentials inline (matches existing `twitter-publish.service.ts` discipline — no caching, no logging, function-scope plaintext)\n- Move `classifyTwitterError` logic into this file as a private function (delete the export from `@sms/shared/lib/error-classifier` in R1.5)\n- Map any caught error to a thrown `PublishFailure` with the correct `kind` + `errorCode` — including token-shape redaction before the message escapes the Publisher\n- Phase 4 thread-unsupported behavior: throw `PublishFailure({ kind: 'permanent', errorCode: 'thread_unsupported' })` for now (the lifecycle's pre-flight thread check makes this unreachable in practice, but the Publisher must be safe in isolation)\n- Unit tests: success path returns `{ platformPostId }`; permanent and transient failure paths throw `PublishFailure` with correct `kind`; redaction strips token-shaped substrings from messages",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` passes\n- `pnpm --filter @sms/worker test` passes\n- Test fake fixture: `createFakeTwitterPublisher({ result?, error? })` available for downstream tests",
+  "minimumFixScope": "packages/worker/src/publishers/twitter.ts, packages/shared/src/lib/error-classifier",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260519T230516-afbab8",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The finding is still open. The original worker evidence path `packages/worker/src/publishers/twitter.ts` does not exist, and there is no `publishers` directory or `createTwitterPublisher`/`createFakeTwitterPublisher` implementation anywhere under `packages/worker` or `packages/shared`. The shared evidence still exists as `packages/shared/src/lib/error-classifier.ts`, and `classifyTwitterError` is still exported there. Current worker code still imports/uses `classifyTwitterError` from `@sms/shared/lib/error-classifier` in `publish-worker.ts` and `post-lifecycle.service.ts`, so the requested move/fold into a TwitterPublisher has not happened. `pnpm --filter @sms/worker typecheck` passed. `pnpm --filter @sms/worker test -- --run` could not start because the read-only sandbox prevented Vitest/Vite from writing its `.vite-temp` config file, so tests do not provide passing evidence in this environment.",
+      "commands": [
+        "pwd && rg --files | rg '^(packages/worker/src/publishers/twitter\\.ts|packages/shared/src/lib/error-classifier|packages/worker/src/.*twitter.*|packages/worker/.*publisher.*|packages/shared/src/lib/.*error.*|packages/worker/.*test.*twitter.*|packages/worker/.*publishers.*)'",
+        "git status --short",
+        "rg -n \"createTwitterPublisher|classifyTwitterError|TwitterPublisher|PublishFailure|thread_unsupported|createFakeTwitterPublisher|token-shaped|redact|redaction\" packages/worker packages/shared",
+        "sed -n '1,220p' packages/shared/src/lib/error-classifier.ts",
+        "sed -n '1,240p' packages/worker/src/twitter-publish.service.ts",
+        "sed -n '1,180p' packages/shared/src/publisher.ts",
+        "rg -n \"interface PublishablePost|type PublishablePost|PublishablePost\" packages/shared packages/worker",
+        "sed -n '1,220p' packages/worker/package.json",
+        "sed -n '1,220p' package.json",
+        "rg -n \"publishers/|create.*Publisher|Publisher<|Publisher =|Publisher\\b|createFake.*Publisher|FakeTwitter\" packages/worker packages/shared",
+        "find packages/worker/src -maxdepth 3 -type d -print | sort",
+        "sed -n '1,220p' packages/worker/src/__tests__/twitter-401-detection.test.ts",
+        "sed -n '1,220p' packages/worker/src/__tests__/helpers/mock-twitter.ts",
+        "rg -n \"classifyTwitterError|duplicate_content|auth_revoked|Twitter credentials|Network error contacting Twitter|http_429|error-classifier\" packages/shared/src packages/worker/src/__tests__",
+        "ls -la packages/worker/src/publishers packages/worker/src/__tests__/publishers 2>/dev/null",
+        "pnpm --filter @sms/worker test -- --run",
+        "pnpm --filter @sms/worker typecheck"
+      ],
+      "createdAt": "2026-05-19T23:06:20.222Z"
+    },
+    {
+      "runId": "20260519T235432-cf278c",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original worker evidence path now exists as packages/worker/src/publishers/twitter.ts. It exports createTwitterPublisher(), defines classifyTwitterError as a private local function, decrypts OAuth 1.0a credential fields inside the publish call path, returns { platformPostId } on success, converts caught errors into PublishFailure with kind/errorCode/httpStatus, redacts token-shaped substrings before exposing messages, and throws permanent thread_unsupported for direct thread posts. The downstream fake fixture also exists as createFakeTwitterPublisher() in the same file. Focused tests now exist at packages/worker/src/__tests__/publishers/twitter.test.ts covering success, permanent failure, transient failure, redaction, thread_unsupported, and the fake fixture. The shared classifier still exists and is still imported by the old worker paths, but the finding explicitly kept twitter-publish.service.ts/worker switchover out of scope and noted shared export removal for R1.5, so that remaining evidence is not enough to keep R1.2 open. pnpm --filter @sms/worker typecheck passed. pnpm --filter @sms/worker build and the focused Vitest command were blocked by the read-only sandbox with EPERM writes to dist/.vite-temp, not by TypeScript or test assertion failures.",
+      "commands": [
+        "pwd",
+        "git status --short",
+        "rg --files | rg '^(packages/worker/src/publishers/twitter\\.ts|packages/shared/src/lib/error-classifier|packages/worker/src/.*twitter.*|packages/worker/.*publisher.*|packages/shared/src/lib/.*error.*|packages/worker/.*test.*twitter.*|packages/worker/.*publishers.*)'",
+        "sed -n '1,260p' packages/worker/src/publishers/twitter.ts",
+        "sed -n '1,260p' packages/worker/src/__tests__/publishers/twitter.test.ts",
+        "sed -n '1,240p' packages/shared/src/lib/error-classifier.ts",
+        "rg -n \"createTwitterPublisher|classifyTwitterError|createFakeTwitterPublisher|PublishFailure|thread_unsupported|token|redact|redaction|Publisher\" packages/worker packages/shared",
+        "sed -n '1,140p' packages/shared/src/publisher.ts",
+        "sed -n '1,220p' packages/worker/src/__tests__/helpers/mock-twitter.ts",
+        "sed -n '1,180p' packages/worker/package.json",
+        "sed -n '1,160p' packages/shared/src/index.ts && sed -n '1,80p' packages/shared/src/lib/index.ts",
+        "pnpm --filter @sms/worker typecheck",
+        "pnpm --filter @sms/worker test -- --run packages/worker/src/__tests__/publishers/twitter.test.ts",
+        "pnpm --filter @sms/worker build",
+        "rg -n \"from '@sms/shared/lib/error-classifier'|classifyTwitterError|createTwitterPublisher|createFakeTwitterPublisher\" packages/worker/src packages/shared/src packages/worker/src/__tests__/publishers/twitter.test.ts"
+      ],
+      "createdAt": "2026-05-19T23:55:43.452Z"
+    }
+  ],
+  "signature": "sig_gh-57_456714c370",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-57-456714c370-821056b_c408373039"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-19T23:55:43.452Z"
+}

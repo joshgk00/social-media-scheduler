@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_3f552547ec",
+  "title": "Node source packages/worker/src/notifications/handlers",
+  "summary": "Node/TypeScript source group packages/worker/src/notifications/handlers with 11 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/worker/package.json",
+      "symbol": "packages/worker/src/notifications/handlers",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/worker/src/notifications/handlers/auto-destruct-failed.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/bulk-completed.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/common.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/publish-failed.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/queue-empty.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/rate-limit-reached.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/rate-limit-warn.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/token-expiring-soon.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/token-reauth-required.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/token-refresh-failed.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/token-revoked.handler.ts",
+      "reason": "source group packages/worker/src/notifications/handlers"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/worker/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/auto-destruct-failed.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/bulk-completed.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/publish-failed.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/queue-empty.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/rate-limit-reached.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/rate-limit-warn.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/token-expiring-soon.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/token-reauth-required.test.ts",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/auto-destruct-failed.test.ts",
+      "command": "pnpm --dir packages/worker test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/bulk-completed.test.ts",
+      "command": "pnpm --dir packages/worker test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/publish-failed.test.ts",
+      "command": "pnpm --dir packages/worker test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/queue-empty.test.ts",
+      "command": "pnpm --dir packages/worker test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/rate-limit-reached.test.ts",
+      "command": "pnpm --dir packages/worker test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/rate-limit-warn.test.ts",
+      "command": "pnpm --dir packages/worker test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/token-expiring-soon.test.ts",
+      "command": "pnpm --dir packages/worker test"
+    },
+    {
+      "path": "packages/worker/src/notifications/handlers/__tests__/token-reauth-required.test.ts",
+      "command": "pnpm --dir packages/worker test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@sms/worker",
+    "project-root:packages/worker"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

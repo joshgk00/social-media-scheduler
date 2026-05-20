@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_87ad00bad9",
+  "title": "Node source packages/web/src/components/dashboard",
+  "summary": "Node/TypeScript source file packages/web/src/components/dashboard/RateLimitsCard.tsx.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/package.json",
+      "symbol": "packages/web/src/components/dashboard",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/dashboard/RateLimitsCard.tsx",
+      "reason": "source group packages/web/src/components/dashboard"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/__tests__/RateLimitsCard.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/__tests__/RateLimitsCard.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@sms/web",
+    "project-root:packages/web"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

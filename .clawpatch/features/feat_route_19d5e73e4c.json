@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_route_19d5e73e4c",
+  "title": "React route /setup",
+  "summary": "React Router route '/setup' rendered by SetupPage.",
+  "kind": "route",
+  "source": "react-router-route",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/pages/setup/SetupPage.tsx",
+      "symbol": "SetupPage",
+      "route": "/setup",
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/pages/setup/SetupPage.tsx",
+      "reason": "route component"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/App.tsx",
+      "reason": "route declaration"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "react",
+    "react-router",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}

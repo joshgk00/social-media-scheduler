@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_23a880f674",
+  "title": "Node source packages/web/src/components",
+  "summary": "Node/TypeScript source group packages/web/src/components with 4 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/web/package.json",
+      "symbol": "packages/web/src/components",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/ErrorBoundary.tsx",
+      "reason": "source group packages/web/src/components"
+    },
+    {
+      "path": "packages/web/src/components/PageSkeleton.tsx",
+      "reason": "source group packages/web/src/components"
+    },
+    {
+      "path": "packages/web/src/components/ProtectedRoute.tsx",
+      "reason": "source group packages/web/src/components"
+    },
+    {
+      "path": "packages/web/src/components/SetupGuard.tsx",
+      "reason": "source group packages/web/src/components"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "packages/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "packages/web/src/components/bulk/__tests__/ConfirmDestructiveDialog.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/layout/__tests__/NotificationBell.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/DeleteProfileDialog.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/EditProfileDialog.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/PageOrgPickerDialog.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/ProfileNetworkFilter.test.tsx",
+      "reason": "associated test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/TokenHealthBadge.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/components/bulk/__tests__/ConfirmDestructiveDialog.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/layout/__tests__/NotificationBell.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/DeleteProfileDialog.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/EditProfileDialog.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/PageOrgPickerDialog.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/ProfileNetworkFilter.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    },
+    {
+      "path": "packages/web/src/components/profiles/__tests__/TokenHealthBadge.test.tsx",
+      "command": "pnpm --dir packages/web test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@sms/web",
+    "project-root:packages/web"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-05-18T23:00:06.938Z",
+  "updatedAt": "2026-05-18T23:00:06.938Z"
+}
