@@ -1,7 +1,4 @@
-import { DateTime } from 'luxon';
-import { sql, and, eq, gte, inArray } from 'drizzle-orm';
 import type { Db } from '@sms/db';
-import { posts, socialProfiles } from '@sms/db';
 import {
   checkTwitterBudget,
   checkBulkBudget,
@@ -10,6 +7,21 @@ import {
   type BudgetCheckResult,
   type PlatformBudgetCheckResult,
 } from '@sms/shared';
+import {
+  loadTwitterUsage,
+  loadLinkedInWindowUsage as loadLinkedInUsage,
+  loadFacebookWindowUsage as loadFacebookUsage,
+  type UsageSnapshot,
+  type PlatformWindowSnapshot,
+} from '@sms/shared/rate-limit/loaders';
+
+export {
+  loadTwitterUsage,
+  loadLinkedInUsage,
+  loadFacebookUsage,
+  type UsageSnapshot,
+};
+export type PlatformRateLimitSnapshot = PlatformWindowSnapshot;
 
 // Thin DB-backed wrapper around the pure calculators in
 // `@sms/shared/rate-limit/check-budget.ts`. The math lives in @sms/shared so
@@ -21,84 +33,6 @@ import {
 // Route handlers (Plan 04) MUST assert ownership before calling them —
 // otherwise one authenticated user can probe another user's budget. This is
 // tracked as T-04-02-06 in the plan's threat model.
-
-// D-21: the monthly tweet counter is the count of posts transitioned into
-// any "has-been-published" state this UTC calendar month. Scheduled, draft,
-// and failed posts do NOT count — they never consumed the Twitter quota.
-const COUNTED_STATUSES = ['published', 'auto_destructing', 'destroyed'] as const;
-
-export interface UsageSnapshot {
-  currentUsage: number;
-  monthlyBudget: number;
-  warnThresholdPercent: number;
-  monthStartUtc: Date;
-  /**
-   * Start of the NEXT UTC calendar month — the moment the Twitter monthly
-   * budget resets. Always strictly in the future relative to `now`. The
-   * dashboard's "Resets …" row reads this, NOT `monthStartUtc` (which is the
-   * start of the current window and would always render in the past).
-   */
-  monthResetAtUtc: Date;
-}
-
-/**
- * Load the live monthly usage counter for a single profile. Uses the
- * `posts_profile_status` composite index added in Phase 3.
- *
- * Throws if the profile does not exist. Callers that already verified
- * ownership can let the error propagate to the 404 handler; other callers
- * should catch and map it.
- *
- * `now` is injectable for deterministic unit tests; when omitted we read
- * the clock via Luxon so existing tests that pin `Settings.now` keep
- * working (production reads the wall clock).
- */
-export async function loadTwitterUsage(
-  db: Db,
-  profileId: string,
-  now?: Date,
-): Promise<UsageSnapshot> {
-  const nowUtc =
-    now === undefined
-      ? DateTime.utc()
-      : DateTime.fromJSDate(now, { zone: 'utc' });
-  // Anchor both boundaries to the same instant so reset is guaranteed to be
-  // exactly one month after start (invariant the issue-#35 tests assert).
-  const monthStart = nowUtc.startOf('month');
-  const monthStartUtc = monthStart.toJSDate();
-  const monthResetAtUtc = monthStart.plus({ months: 1 }).toJSDate();
-
-  const [profileRow] = await db
-    .select({
-      monthlyBudget: socialProfiles.monthlyTweetBudget,
-      warnThresholdPercent: socialProfiles.warnThresholdPercent,
-    })
-    .from(socialProfiles)
-    .where(eq(socialProfiles.id, profileId));
-
-  if (!profileRow) {
-    throw new Error(`Profile ${profileId} not found`);
-  }
-
-  const [countRow] = await db
-    .select({ publishedCount: sql<number>`count(*)::int` })
-    .from(posts)
-    .where(
-      and(
-        eq(posts.profileId, profileId),
-        gte(posts.publishedAt, monthStartUtc),
-        inArray(posts.status, [...COUNTED_STATUSES]),
-      ),
-    );
-
-  return {
-    currentUsage: Number(countRow?.publishedCount ?? 0),
-    monthlyBudget: profileRow.monthlyBudget,
-    warnThresholdPercent: profileRow.warnThresholdPercent,
-    monthStartUtc,
-    monthResetAtUtc,
-  };
-}
 
 /**
  * Single-post publish pre-flight check (LIMIT-01/02/03/04).
@@ -183,117 +117,6 @@ export type RateLimitExceededBody =
   | TwitterBudgetExceededBody
   | LinkedInRateLimitExceededBody
   | FacebookRateLimitExceededBody;
-
-const DEFAULT_WARN_THRESHOLD_PERCENT = 80;
-
-function utcDayStart(now: Date): Date {
-  const dayStart = new Date(now);
-  dayStart.setUTCHours(0, 0, 0, 0);
-  return dayStart;
-}
-
-function utcNextDayStart(now: Date): Date {
-  const next = utcDayStart(now);
-  next.setUTCDate(next.getUTCDate() + 1);
-  return next;
-}
-
-function rollingHourThreshold(now: Date): Date {
-  return new Date(now.getTime() - 60 * 60 * 1000);
-}
-
-function nextHourTop(now: Date): Date {
-  const top = new Date(now);
-  top.setUTCMinutes(0, 0, 0);
-  top.setUTCHours(top.getUTCHours() + 1);
-  return top;
-}
-
-export interface PlatformRateLimitSnapshot {
-  currentCount: number;
-  limit: number;
-  warnThresholdPercent: number;
-  windowStartUtc: Date;
-  windowResetAt: Date;
-}
-
-/**
- * LinkedIn daily-window loader (LIMIT-07). Returns the effective snapshot
- * after applying the UTC-midnight reset rule (Pitfall 7): a window stamped
- * before today's UTC midnight is treated as count=0 starting at today's
- * midnight.
- *
- * No DB write — this is the read-side companion to
- * `checkLinkedInBudgetWithDb`, used by the rate-limit GET endpoint.
- */
-export async function loadLinkedInUsage(
-  db: Db,
-  profileId: string,
-  now: Date = new Date(),
-): Promise<PlatformRateLimitSnapshot> {
-  const rows = await db
-    .select({
-      limit: socialProfiles.linkedinDailyLimit,
-      count: socialProfiles.linkedinDailyCount,
-      windowStart: socialProfiles.linkedinWindowStartUtc,
-      warnThresholdPercent: socialProfiles.warnThresholdPercent,
-    })
-    .from(socialProfiles)
-    .where(eq(socialProfiles.id, profileId));
-
-  if (!rows || rows.length === 0) {
-    throw new Error(`Profile ${profileId} not found`);
-  }
-  const row = rows[0];
-
-  const dayStart = utcDayStart(now);
-  const windowStart = row.windowStart;
-  const isExpired = !windowStart || windowStart < dayStart;
-  return {
-    currentCount: isExpired ? 0 : row.count,
-    limit: row.limit,
-    warnThresholdPercent: row.warnThresholdPercent ?? DEFAULT_WARN_THRESHOLD_PERCENT,
-    windowStartUtc: !isExpired && windowStart ? windowStart : dayStart,
-    windowResetAt: utcNextDayStart(now),
-  };
-}
-
-/**
- * Facebook hourly-window loader (LIMIT-06). Returns the effective snapshot
- * after applying the rolling-hour reset rule (Pitfall 6): a window stamped
- * more than an hour before `now` is treated as count=0 starting at `now`.
- */
-export async function loadFacebookUsage(
-  db: Db,
-  profileId: string,
-  now: Date = new Date(),
-): Promise<PlatformRateLimitSnapshot> {
-  const rows = await db
-    .select({
-      limit: socialProfiles.facebookHourlyLimit,
-      count: socialProfiles.facebookHourlyCount,
-      windowStart: socialProfiles.facebookWindowStartUtc,
-      warnThresholdPercent: socialProfiles.warnThresholdPercent,
-    })
-    .from(socialProfiles)
-    .where(eq(socialProfiles.id, profileId));
-
-  if (!rows || rows.length === 0) {
-    throw new Error(`Profile ${profileId} not found`);
-  }
-  const row = rows[0];
-
-  const hourThreshold = rollingHourThreshold(now);
-  const windowStart = row.windowStart;
-  const isExpired = !windowStart || windowStart < hourThreshold;
-  return {
-    currentCount: isExpired ? 0 : row.count,
-    limit: row.limit,
-    warnThresholdPercent: row.warnThresholdPercent ?? DEFAULT_WARN_THRESHOLD_PERCENT,
-    windowStartUtc: !isExpired && windowStart ? windowStart : now,
-    windowResetAt: nextHourTop(now),
-  };
-}
 
 export interface PlatformBudgetCheckOutcome extends PlatformBudgetCheckResult {
   /** Projected current count (snapshot.currentCount + additionalCount); NOT mutated in DB. */
