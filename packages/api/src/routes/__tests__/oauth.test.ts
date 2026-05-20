@@ -58,6 +58,12 @@ import { MismatchedAccountError } from '../../services/oauth.service.js';
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 
+const mockTokenVault = {
+  sealTwitterCredentials: vi.fn(),
+  sealOAuth2AccessToken: vi.fn(),
+  sealOAuth2RefreshToken: vi.fn(),
+};
+
 function createTestApp(options: { redis: any; authenticated?: boolean; db?: any }) {
   const app = express();
   app.use(express.json());
@@ -69,7 +75,11 @@ function createTestApp(options: { redis: any; authenticated?: boolean; db?: any 
     }
     next();
   });
-  app.use(createOAuthRouter({ db: options.db ?? {}, redis: options.redis }));
+  app.use(createOAuthRouter({
+    db: options.db ?? {},
+    redis: options.redis,
+    getTokenVault: () => mockTokenVault as any,
+  }));
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });
   });

@@ -1,11 +1,11 @@
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { encrypt, validateEncryptionKey } from '@sms/shared/encryption';
 import { AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
 import { socialProfiles, posts, queues } from '@sms/db';
 import { TwitterApi } from 'twitter-api-v2';
 import { OAuthServiceError, MismatchedAccountError } from './oauth.service.js';
+import type { TokenVault } from './token-vault.service.js';
 
 // Phase 7 Plan 05 — extended profile list shape returned to the frontend.
 // Token-health fields (tokenStatus/tokenExpiresAt/tokenHealthCheckedAt) and
@@ -144,6 +144,7 @@ export async function createProfile(
   db: Db,
   userId: string,
   credentials: CreateProfileCredentials,
+  vault: TokenVault,
 ) {
   const twitterUser = await validateTwitterCredentials(
     credentials.consumerKey,
@@ -167,12 +168,7 @@ export async function createProfile(
     throw new ProfileServiceError('This Twitter account is already connected.', 409);
   }
 
-  const encryptionKey = validateEncryptionKey(process.env.ENCRYPTION_KEY ?? '');
-
-  const consumerKeyEncrypted = encrypt(credentials.consumerKey, encryptionKey, 1);
-  const consumerSecretEncrypted = encrypt(credentials.consumerSecret, encryptionKey, 1);
-  const accessTokenEncrypted = encrypt(credentials.accessToken, encryptionKey, 1);
-  const accessTokenSecretEncrypted = encrypt(credentials.accessTokenSecret, encryptionKey, 1);
+  const sealedCredentials = vault.sealTwitterCredentials(credentials);
 
   const [profile] = await db.insert(socialProfiles).values({
     userId,
@@ -182,21 +178,21 @@ export async function createProfile(
     handle: twitterUser.username,
     avatarUrl: twitterUser.profileImageUrl ?? null,
 
-    consumerKeyCiphertext: consumerKeyEncrypted.ciphertext,
-    consumerKeyIv: consumerKeyEncrypted.iv,
-    consumerKeyAuthTag: consumerKeyEncrypted.authTag,
+    consumerKeyCiphertext: sealedCredentials.consumerKey.ciphertext,
+    consumerKeyIv: sealedCredentials.consumerKey.iv,
+    consumerKeyAuthTag: sealedCredentials.consumerKey.authTag,
 
-    consumerSecretCiphertext: consumerSecretEncrypted.ciphertext,
-    consumerSecretIv: consumerSecretEncrypted.iv,
-    consumerSecretAuthTag: consumerSecretEncrypted.authTag,
+    consumerSecretCiphertext: sealedCredentials.consumerSecret.ciphertext,
+    consumerSecretIv: sealedCredentials.consumerSecret.iv,
+    consumerSecretAuthTag: sealedCredentials.consumerSecret.authTag,
 
-    accessTokenCiphertext: accessTokenEncrypted.ciphertext,
-    accessTokenIv: accessTokenEncrypted.iv,
-    accessTokenAuthTag: accessTokenEncrypted.authTag,
+    accessTokenCiphertext: sealedCredentials.accessToken.ciphertext,
+    accessTokenIv: sealedCredentials.accessToken.iv,
+    accessTokenAuthTag: sealedCredentials.accessToken.authTag,
 
-    accessTokenSecretCiphertext: accessTokenSecretEncrypted.ciphertext,
-    accessTokenSecretIv: accessTokenSecretEncrypted.iv,
-    accessTokenSecretAuthTag: accessTokenSecretEncrypted.authTag,
+    accessTokenSecretCiphertext: sealedCredentials.accessTokenSecret.ciphertext,
+    accessTokenSecretIv: sealedCredentials.accessTokenSecret.iv,
+    accessTokenSecretAuthTag: sealedCredentials.accessTokenSecret.authTag,
 
     tokenEncryptionVersion: 1,
   }).returning(SAFE_PROFILE_COLUMNS);
@@ -401,18 +397,6 @@ interface CreateProfileFromOAuthArgs {
   refreshTokenExpiresAt: Date | null;
 }
 
-function requireEncryptionKey(): Buffer {
-  const raw = process.env.ENCRYPTION_KEY;
-  if (!raw) {
-    throw new ProfileServiceError('Server configuration error', 500);
-  }
-  try {
-    return validateEncryptionKey(raw);
-  } catch {
-    throw new ProfileServiceError('Server configuration error', 500);
-  }
-}
-
 function isUniqueViolation(err: unknown): boolean {
   const maybeCode = (err as { code?: string })?.code;
   return maybeCode === '23505';
@@ -421,12 +405,11 @@ function isUniqueViolation(err: unknown): boolean {
 export async function createProfileFromOAuth(
   db: Db,
   args: CreateProfileFromOAuthArgs,
+  vault: TokenVault,
 ): Promise<{ profileId: string }> {
-  const encryptionKey = requireEncryptionKey();
-
-  const accessEncrypted = encrypt(args.accessToken, encryptionKey, 1);
+  const accessEncrypted = vault.sealOAuth2AccessToken(args.accessToken);
   const refreshEncrypted = args.refreshToken
-    ? encrypt(args.refreshToken, encryptionKey, 1)
+    ? vault.sealOAuth2RefreshToken(args.refreshToken)
     : null;
 
   try {
@@ -497,9 +480,8 @@ interface ReconnectRow {
 export async function reconnectProfile(
   db: Db,
   args: ReconnectProfileArgs,
+  vault: TokenVault,
 ): Promise<{ profileId: string; existingHandle: string }> {
-  const encryptionKey = requireEncryptionKey();
-
   return db.transaction(async (tx) => {
     // Ownership bound via userId in the WHERE clause so a cross-user profile
     // id returns 404 instead of 403 — never leaks existence.
@@ -544,7 +526,7 @@ export async function reconnectProfile(
       throw new MismatchedAccountError(existingHandle, args.incomingHandle);
     }
 
-    const accessEncrypted = encrypt(args.accessToken, encryptionKey, 1);
+    const accessEncrypted = vault.sealOAuth2AccessToken(args.accessToken);
 
     // Per RESEARCH Pitfall 3: LinkedIn does NOT rotate refresh tokens.
     // When incoming refreshToken is null we must SKIP the update so the
@@ -562,7 +544,7 @@ export async function reconnectProfile(
     };
 
     if (args.refreshToken !== null) {
-      const refreshEncrypted = encrypt(args.refreshToken, encryptionKey, 1);
+      const refreshEncrypted = vault.sealOAuth2RefreshToken(args.refreshToken);
       updatePayload.oauth2RefreshTokenCiphertext = refreshEncrypted.ciphertext;
       updatePayload.oauth2RefreshTokenIv = refreshEncrypted.iv;
       updatePayload.oauth2RefreshTokenAuthTag = refreshEncrypted.authTag;

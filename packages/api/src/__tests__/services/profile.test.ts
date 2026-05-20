@@ -168,6 +168,26 @@ const TEST_CREDENTIALS = {
   accessTokenSecret: 'ats-test-value-jkl012',
 };
 
+function encrypted(label: string) {
+  return {
+    ciphertext: `${label}-ciphertext`,
+    iv: `${label}-iv`,
+    authTag: `${label}-auth-tag`,
+    version: 1,
+  };
+}
+
+const mockVault = {
+  sealTwitterCredentials: vi.fn().mockReturnValue({
+    consumerKey: encrypted('consumer-key'),
+    consumerSecret: encrypted('consumer-secret'),
+    accessToken: encrypted('access-token'),
+    accessTokenSecret: encrypted('access-token-secret'),
+  }),
+  sealOAuth2AccessToken: vi.fn(),
+  sealOAuth2RefreshToken: vi.fn(),
+};
+
 describe('profile.service', () => {
   let createProfile: typeof import('../../services/profile.service.js').createProfile;
   let getProfiles: typeof import('../../services/profile.service.js').getProfiles;
@@ -178,6 +198,9 @@ describe('profile.service', () => {
     mockEncrypt.mockClear();
     mockValidateEncryptionKey.mockClear();
     mockCreateLogger.mockClear();
+    mockVault.sealTwitterCredentials.mockClear();
+    mockVault.sealOAuth2AccessToken.mockClear();
+    mockVault.sealOAuth2RefreshToken.mockClear();
 
     mockTwitterMe.mockReset();
     mockTwitterMe.mockResolvedValue({
@@ -203,8 +226,6 @@ describe('profile.service', () => {
       debug: vi.fn(),
     });
 
-    process.env.ENCRYPTION_KEY = 'a'.repeat(64);
-
     const mod = await import('../../services/profile.service.js');
     createProfile = mod.createProfile;
     getProfiles = mod.getProfiles;
@@ -213,53 +234,48 @@ describe('profile.service', () => {
   });
 
   describe('createProfile', () => {
-    it('encrypts all 4 credential fields independently using AES-256-GCM', async () => {
+    it('seals all 4 credential fields through TokenVault', async () => {
       const db = createMockDb();
 
-      await createProfile(db, 'user-1', TEST_CREDENTIALS);
+      await createProfile(db, 'user-1', TEST_CREDENTIALS, mockVault);
 
-      expect(mockEncrypt).toHaveBeenCalledTimes(4);
-
-      const encryptedValues = mockEncrypt.mock.calls.map(
-        (call: unknown[]) => call[0],
-      );
-      expect(encryptedValues).toContain(TEST_CREDENTIALS.consumerKey);
-      expect(encryptedValues).toContain(TEST_CREDENTIALS.consumerSecret);
-      expect(encryptedValues).toContain(TEST_CREDENTIALS.accessToken);
-      expect(encryptedValues).toContain(TEST_CREDENTIALS.accessTokenSecret);
+      expect(mockVault.sealTwitterCredentials).toHaveBeenCalledTimes(1);
+      expect(mockVault.sealTwitterCredentials).toHaveBeenCalledWith(TEST_CREDENTIALS);
+      expect(mockEncrypt).not.toHaveBeenCalled();
+      expect(mockValidateEncryptionKey).not.toHaveBeenCalled();
     });
 
     it('stores IV and authTag alongside ciphertext for each credential', async () => {
       const db = createMockDb();
 
-      await createProfile(db, 'user-1', TEST_CREDENTIALS);
+      await createProfile(db, 'user-1', TEST_CREDENTIALS, mockVault);
 
       const insertProxy = db.insert as ReturnType<typeof vi.fn>;
       const insertResult = insertProxy.mock.results[0].value;
       const valuesCall = insertResult.values.mock.calls[0][0];
 
-      expect(valuesCall.consumerKeyCiphertext).toBe('encrypted-data');
-      expect(valuesCall.consumerKeyIv).toBe('test-iv-hex');
-      expect(valuesCall.consumerKeyAuthTag).toBe('test-auth-tag');
+      expect(valuesCall.consumerKeyCiphertext).toBe('consumer-key-ciphertext');
+      expect(valuesCall.consumerKeyIv).toBe('consumer-key-iv');
+      expect(valuesCall.consumerKeyAuthTag).toBe('consumer-key-auth-tag');
 
-      expect(valuesCall.consumerSecretCiphertext).toBe('encrypted-data');
-      expect(valuesCall.consumerSecretIv).toBe('test-iv-hex');
-      expect(valuesCall.consumerSecretAuthTag).toBe('test-auth-tag');
+      expect(valuesCall.consumerSecretCiphertext).toBe('consumer-secret-ciphertext');
+      expect(valuesCall.consumerSecretIv).toBe('consumer-secret-iv');
+      expect(valuesCall.consumerSecretAuthTag).toBe('consumer-secret-auth-tag');
 
-      expect(valuesCall.accessTokenCiphertext).toBe('encrypted-data');
-      expect(valuesCall.accessTokenIv).toBe('test-iv-hex');
-      expect(valuesCall.accessTokenAuthTag).toBe('test-auth-tag');
+      expect(valuesCall.accessTokenCiphertext).toBe('access-token-ciphertext');
+      expect(valuesCall.accessTokenIv).toBe('access-token-iv');
+      expect(valuesCall.accessTokenAuthTag).toBe('access-token-auth-tag');
 
-      expect(valuesCall.accessTokenSecretCiphertext).toBe('encrypted-data');
-      expect(valuesCall.accessTokenSecretIv).toBe('test-iv-hex');
-      expect(valuesCall.accessTokenSecretAuthTag).toBe('test-auth-tag');
+      expect(valuesCall.accessTokenSecretCiphertext).toBe('access-token-secret-ciphertext');
+      expect(valuesCall.accessTokenSecretIv).toBe('access-token-secret-iv');
+      expect(valuesCall.accessTokenSecretAuthTag).toBe('access-token-secret-auth-tag');
     });
 
     it('calls Twitter GET /2/users/me to validate credentials before storing', async () => {
       const { TwitterApi } = await import('twitter-api-v2');
       const db = createMockDb();
 
-      await createProfile(db, 'user-1', TEST_CREDENTIALS);
+      await createProfile(db, 'user-1', TEST_CREDENTIALS, mockVault);
 
       expect(TwitterApi).toHaveBeenCalledWith({
         appKey: TEST_CREDENTIALS.consumerKey,
@@ -277,7 +293,7 @@ describe('profile.service', () => {
 
       const db = createMockDb();
 
-      await expect(createProfile(db, 'user-1', TEST_CREDENTIALS)).rejects.toThrow(
+      await expect(createProfile(db, 'user-1', TEST_CREDENTIALS, mockVault)).rejects.toThrow(
         'Could not verify these credentials',
       );
     });
@@ -289,7 +305,7 @@ describe('profile.service', () => {
 
       const db = createMockDb();
 
-      await expect(createProfile(db, 'user-1', TEST_CREDENTIALS)).rejects.toThrow();
+      await expect(createProfile(db, 'user-1', TEST_CREDENTIALS, mockVault)).rejects.toThrow();
       expect(db.insert).not.toHaveBeenCalled();
     });
 
@@ -298,7 +314,7 @@ describe('profile.service', () => {
         selectResult: [{ id: 'existing-profile-id' }],
       });
 
-      await expect(createProfile(db, 'user-1', TEST_CREDENTIALS)).rejects.toThrow(
+      await expect(createProfile(db, 'user-1', TEST_CREDENTIALS, mockVault)).rejects.toThrow(
         'already connected',
       );
 
@@ -315,7 +331,7 @@ describe('profile.service', () => {
 
       const db = createMockDb();
 
-      await expect(createProfile(db, 'user-1', TEST_CREDENTIALS)).rejects.toThrow();
+      await expect(createProfile(db, 'user-1', TEST_CREDENTIALS, mockVault)).rejects.toThrow();
 
       for (const method of ['info', 'error', 'warn', 'debug'] as const) {
         for (const call of loggerInstance[method].mock.calls) {

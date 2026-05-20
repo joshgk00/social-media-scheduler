@@ -34,6 +34,7 @@ import { createEmailLogsRouter } from './routes/email-logs.js';
 import { createSystemRouter } from './routes/system.js';
 import type { PublishQueueService } from './services/publish-queue.service.js';
 import type { BulkOpsQueueService } from './services/bulk-ops-queue.service.js';
+import { createTokenVault, type TokenVault } from './services/token-vault.service.js';
 import { createBulkImportRouter } from './routes/bulk-import.js';
 interface AppDependencies {
   redis: Redis;
@@ -48,6 +49,7 @@ interface AppDependencies {
   notificationQueue?: Queue;
   storage?: StorageBackend;
   transcodeQueue?: Queue;
+  tokenVault?: TokenVault;
 }
 
 const TRUSTED_PROXY_CIDRS = ['loopback', '172.16.0.0/12'];
@@ -62,8 +64,15 @@ export function createApp({
   notificationQueue,
   storage,
   transcodeQueue,
+  tokenVault,
 }: AppDependencies) {
   const app = express();
+  let fallbackTokenVault: TokenVault | null = null;
+  const getTokenVault = () => {
+    if (tokenVault) return tokenVault;
+    fallbackTokenVault ??= createTokenVault(process.env.ENCRYPTION_KEY ?? '');
+    return fallbackTokenVault;
+  };
 
   // Trust only loopback test/dev callers and the Docker private range where
   // the bundled nginx reaches the API. This lets Express honor nginx's
@@ -100,8 +109,8 @@ export function createApp({
   app.use(createRecoveryRouter({ db, redis }));
   app.use(createSettingsRouter({ db, redis }));
 
-  app.use(createProfilesRouter({ db }));
-  app.use(createOAuthRouter({ db, redis }));
+  app.use(createProfilesRouter({ db, getTokenVault }));
+  app.use(createOAuthRouter({ db, redis, getTokenVault }));
   if (bulkOpsQueueService) {
     app.use('/api/bulk-import', createBulkImportRouter({ db, bulkOpsQueueService }));
   }
