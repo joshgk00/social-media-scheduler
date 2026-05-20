@@ -147,6 +147,7 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 
 ### Enhancements / config
 
+- [ ] **gh#94** — Queue creation: add inline help + live "Next 5 publish times" preview *(operator confusion — interval modes vs hour windows aren't legible from the form alone)*
 - [ ] **gh#19** — Transcode worker missing retry attempts and backoff
 
 ---

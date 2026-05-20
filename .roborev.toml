@@ -1,5 +1,5 @@
-# RoboRev reviews local commits with Codex.
-agent = "codex"
+# RoboRev reviews local commits with Claude Code.
+agent = "claude-code"
 display_name = "social-media-scheduler"
 
 # Keep successful background reviews out of the active queue.
