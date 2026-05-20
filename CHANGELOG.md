@@ -127,14 +127,32 @@ needed; if you proxy directly to the container, point your upstream at
 `:8080`.
 
 If you run this nginx behind another TLS-terminating proxy (Cloudflare
-Tunnel, Caddy, Traefik, custom LAN nginx): the per-IP rate-limit zones
-on `/api/` and `/admin/` key on the immediate peer, so all users behind
-that upstream proxy share a single bucket, and Express `req.ip`
-resolves to the upstream proxy, not the real client. This is the same
-behaviour as v1.0.0 — the rate-limit zones are new, but they inherit
-the X-Forwarded-For overwrite from the #50 hotfix. Real-ip module
-support to per-real-client rate limit behind trusted upstreams is
-tracked in #87.
+Tunnel, Caddy, Traefik, custom LAN nginx), set
+`NGINX_TRUSTED_PROXY_CIDR` to the CIDR range for only that proxy hop.
+When set, nginx's real_ip module resolves `$remote_addr` from
+`X-Forwarded-For` before the `/api/` and `/admin/` rate-limit zones run,
+so rate limits and API audit logs key on the real client IP. Leave it
+unset for direct deployments; forged `X-Forwarded-For` from untrusted
+clients remains ignored.
+
+Common values:
+
+```env
+# Caddy/Traefik on the same host
+NGINX_TRUSTED_PROXY_CIDR=127.0.0.1/32
+
+# Docker bridge / colocated reverse proxy network
+NGINX_TRUSTED_PROXY_CIDR=172.16.0.0/12
+
+# LAN reverse proxy
+NGINX_TRUSTED_PROXY_CIDR=10.0.0.0/8
+# or
+NGINX_TRUSTED_PROXY_CIDR=192.168.0.0/16
+
+# Cloudflare Tunnel or Cloudflare proxy
+# Use the current published IPv4/IPv6 ranges from https://www.cloudflare.com/ips/
+NGINX_TRUSTED_PROXY_CIDR="<all current Cloudflare CIDRs, space-separated>"
+```
 
 To upgrade in place: `git pull && git checkout v1.0.1 && docker compose up -d --build`.
 

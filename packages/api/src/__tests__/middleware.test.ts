@@ -1,4 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
@@ -132,17 +136,62 @@ describe('trust proxy (issue #50)', () => {
     expect(trustFn('192.168.1.10', 0)).toBe(false);
   });
 
-  it('nginx overwrites spoofable forwarded headers before proxying to the API', () => {
+  it('nginx overwrites spoofable forwarded headers after optional real-ip resolution', () => {
     const prodConfig = readFileSync(new URL('../../../../nginx/nginx.conf', import.meta.url), 'utf8');
     const devConfig = readFileSync(new URL('../../../../nginx/nginx.dev.conf', import.meta.url), 'utf8');
+    const dockerfile = readFileSync(new URL('../../../../Dockerfile', import.meta.url), 'utf8');
+    const composeConfig = readFileSync(new URL('../../../../docker-compose.yml', import.meta.url), 'utf8');
 
     expect(prodConfig).not.toContain('$proxy_add_x_forwarded_for');
     expect(devConfig).not.toContain('$proxy_add_x_forwarded_for');
+    expect(prodConfig).toContain('include /tmp/nginx-realip/*.conf;');
+    expect(prodConfig.indexOf('include /tmp/nginx-realip/*.conf;')).toBeLessThan(
+      prodConfig.indexOf('limit_req_zone $binary_remote_addr zone=api_per_ip:10m rate=10r/s;'),
+    );
     expect(prodConfig.match(/proxy_set_header X-Forwarded-For \$remote_addr;/g)).toHaveLength(4);
     expect(devConfig.match(/proxy_set_header X-Forwarded-For \$remote_addr;/g)).toHaveLength(5);
     expect(prodConfig).toContain('default $scheme;');
     expect(prodConfig).toContain('"http"  http;');
     expect(prodConfig).toContain('"https" https;');
+    expect(dockerfile).toContain('COPY nginx/realip-env.sh /docker-entrypoint.d/40-realip-env.sh');
+    expect(dockerfile).toContain('chmod +x /docker-entrypoint.d/40-realip-env.sh');
+    expect(composeConfig).toContain('NGINX_TRUSTED_PROXY_CIDR: ${NGINX_TRUSTED_PROXY_CIDR:-}');
+  });
+
+  it('generates real_ip trust only when NGINX_TRUSTED_PROXY_CIDR is set', () => {
+    const scriptPath = fileURLToPath(new URL('../../../../nginx/realip-env.sh', import.meta.url));
+    const tempDir = mkdtempSync(join(tmpdir(), 'sms-realip-'));
+    const outputPath = join(tempDir, 'realip.conf');
+
+    try {
+      execFileSync('sh', [scriptPath], {
+        env: {
+          ...process.env,
+          NGINX_REALIP_CONF_PATH: outputPath,
+          NGINX_TRUSTED_PROXY_CIDR: '',
+        },
+      });
+      expect(readFileSync(outputPath, 'utf8')).toBe('');
+
+      execFileSync('sh', [scriptPath], {
+        env: {
+          ...process.env,
+          NGINX_REALIP_CONF_PATH: outputPath,
+          NGINX_TRUSTED_PROXY_CIDR: '127.0.0.1/32 172.16.0.0/12',
+        },
+      });
+      expect(readFileSync(outputPath, 'utf8')).toBe(
+        [
+          'set_real_ip_from 127.0.0.1/32;',
+          'set_real_ip_from 172.16.0.0/12;',
+          'real_ip_header X-Forwarded-For;',
+          'real_ip_recursive on;',
+          '',
+        ].join('\n'),
+      );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('issues session and CSRF cookies with Secure flag when X-Forwarded-Proto: https in production', async () => {
