@@ -6,6 +6,7 @@ import type { Sql } from 'postgres';
 import type { Queue } from 'bullmq';
 import type { Db } from '@sms/db';
 import type { StorageBackend } from '@sms/shared/storage';
+import { AppError } from '@sms/shared';
 
 import { correlationId } from './middleware/correlation-id.js';
 import { httpLogger } from './middleware/logger.js';
@@ -70,7 +71,14 @@ export function createApp({
   let fallbackTokenVault: TokenVault | null = null;
   const getTokenVault = () => {
     if (tokenVault) return tokenVault;
-    fallbackTokenVault ??= createTokenVault(process.env.ENCRYPTION_KEY ?? '');
+    try {
+      fallbackTokenVault ??= createTokenVault(process.env.ENCRYPTION_KEY ?? '');
+    } catch {
+      throw new AppError(
+        'Token encryption is not configured. Set ENCRYPTION_KEY to exactly 64 hex characters before using token-protected routes.',
+        500,
+      );
+    }
     return fallbackTokenVault;
   };
 

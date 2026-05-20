@@ -11,7 +11,6 @@ import {
 import { OAuthServiceError } from '../oauth.service.js';
 import type { TokenVault } from '../token-vault.service.js';
 
-const VALID_KEY = 'a'.repeat(64);
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 const PROFILE_ID = '22222222-2222-2222-2222-222222222222';
 
@@ -32,14 +31,12 @@ const mockVault = {
 
 describe('profile.service OAuth flows', () => {
   beforeEach(() => {
-    process.env.ENCRYPTION_KEY = VALID_KEY;
     mockVault.sealTwitterCredentials.mockClear();
     mockVault.sealOAuth2AccessToken.mockClear();
     mockVault.sealOAuth2RefreshToken.mockClear();
   });
 
   afterEach(() => {
-    delete process.env.ENCRYPTION_KEY;
     vi.restoreAllMocks();
   });
 
@@ -143,6 +140,38 @@ describe('profile.service OAuth flows', () => {
       ).rejects.toMatchObject({
         statusCode: 409,
       });
+    });
+
+    it('propagates vault failures before inserting a row', async () => {
+      const db = createMockDb();
+      db.insert = vi.fn();
+      const failingVault = {
+        sealTwitterCredentials: vi.fn(),
+        sealOAuth2AccessToken: vi.fn(() => {
+          throw new Error('token vault is misconfigured');
+        }),
+        sealOAuth2RefreshToken: vi.fn(),
+      } satisfies TokenVault;
+
+      await expect(
+        createProfileFromOAuth(db, {
+          userId: USER_ID,
+          platform: 'linkedin',
+          platformUserId: 'urn:li:person:abc',
+          platformAccountId: 'urn:li:organization:42',
+          displayName: 'Jane',
+          handle: 'jane',
+          avatarUrl: null,
+          accessToken: 'a',
+          refreshToken: 'b',
+          tokenExpiresAt: null,
+          refreshTokenExpiresAt: null,
+        }, failingVault),
+      ).rejects.toThrow('token vault is misconfigured');
+
+      expect(failingVault.sealOAuth2AccessToken).toHaveBeenCalledWith('a');
+      expect(failingVault.sealOAuth2RefreshToken).not.toHaveBeenCalled();
+      expect(db.insert).not.toHaveBeenCalled();
     });
   });
 
@@ -402,10 +431,6 @@ function buildRawProfileRow(overrides: Record<string, unknown> = {}) {
 }
 
 describe('getProfiles (Phase 7 — extended columns + nextScheduledAt)', () => {
-  beforeEach(() => {
-    process.env.ENCRYPTION_KEY = VALID_KEY;
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -462,10 +487,6 @@ describe('getProfiles (Phase 7 — extended columns + nextScheduledAt)', () => {
 });
 
 describe('updateProfileMetadata', () => {
-  beforeEach(() => {
-    process.env.ENCRYPTION_KEY = VALID_KEY;
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -590,10 +611,6 @@ describe('updateProfileMetadata', () => {
 });
 
 describe('getDeletePreview', () => {
-  beforeEach(() => {
-    process.env.ENCRYPTION_KEY = VALID_KEY;
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
