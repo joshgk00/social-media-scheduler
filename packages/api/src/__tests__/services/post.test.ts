@@ -737,6 +737,20 @@ describe('post.service', () => {
       expect(db.delete).toHaveBeenCalledTimes(1);
     });
 
+    it('returns 404 when post is not found', async () => {
+      const db = createDeleteMockDb({
+        existingPost: null,
+      });
+
+      try {
+        await deletePost(db, 'user-1', 'post-1');
+        expect.unreachable('should have thrown');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(PostServiceError);
+        expect(err.statusCode).toBe(404);
+      }
+    });
+
     it('rejects deletion of posts in publishing state', async () => {
       const db = createDeleteMockDb({
         deleteResult: [],

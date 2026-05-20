@@ -1,5 +1,5 @@
 import { eq, and, sql, inArray, gte, lte, ne, count as drizzleCount, isNull, type SQL } from 'drizzle-orm';
-import { AppError, PostInvariantError, planDelete, planUpdate } from '@sms/shared';
+import { AppError, DELETABLE_STATES, PostInvariantError, planDelete, planUpdate } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostPlatform, PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
@@ -369,18 +369,18 @@ export async function deletePost(
         and(
           eq(posts.id, postId),
           eq(posts.userId, userId),
-          eq(posts.status, existingPost.status),
+          inArray(posts.status, [...DELETABLE_STATES]),
         ),
       )
       .returning({ id: posts.id });
 
     if (deletedRows.length === 0) {
-      const existingPost = await tx
+      const postAfterFailedDelete = await tx
         .select({ id: posts.id, status: posts.status })
         .from(posts)
         .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
 
-      if (existingPost.length === 0) {
+      if (postAfterFailedDelete.length === 0) {
         throw new PostServiceError('Post not found', 404);
       }
 
