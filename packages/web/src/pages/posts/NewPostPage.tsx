@@ -152,6 +152,7 @@ export default function NewPostPage() {
       visibility: result.state.visibility ?? 'PUBLIC',
       linkUrl: result.state.linkUrl ?? '',
       isThread: result.state.isThread ?? false,
+      autoDestructAfter: newPlatform === 'twitter' ? prev.autoDestructAfter : null,
     }));
     if (result.state.mediaIds.length !== mediaItems.length) {
       const keepIds = new Set(result.state.mediaIds);
@@ -570,6 +571,7 @@ export default function NewPostPage() {
           {/* SHARED POST-CMN BLOCK (B-03) — every common control lives here */}
           <SharedPostFields
             mode={isQueueMode ? 'queue' : 'new'}
+            platform={platform}
             userTimezone={userTimezone}
             effectiveProfileId={effectiveProfileId}
             scheduledAt={formState.scheduledAt}

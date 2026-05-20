@@ -646,6 +646,7 @@ export default function EditPostPage() {
           {/* SHARED POST-CMN BLOCK (B-03) — every common control lives here */}
           <SharedPostFields
             mode="edit"
+            platform={formState.platform}
             userTimezone={userTimezone}
             effectiveProfileId={formState.profileId}
             excludePostId={postId}
