@@ -15,7 +15,7 @@ import { sql, eq } from 'drizzle-orm';
 import { UnrecoverableError } from 'bullmq';
 import { ApiResponseError } from 'twitter-api-v2';
 import { posts, socialProfiles } from '@sms/db';
-import { transitionPost, type PostStatus } from '@sms/shared';
+import { planRecordAutoDestructSuccess, planStartAutoDestruct, type PostStatus } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { WorkerDb } from './db.js';
 
@@ -86,12 +86,15 @@ export async function autoDestructPost(
     }
 
     if (post.status !== 'auto_destructing') {
-      // Validate state transition: published -> auto_destructing
-      transitionPost(post.status as PostStatus, 'auto_destructing');
+      const startPatch = planStartAutoDestruct({
+        status: post.status as PostStatus,
+        postVersion: 0,
+        scheduledAt: null,
+      });
 
       await tx
         .update(posts)
-        .set({ status: 'auto_destructing', updatedAt: new Date() })
+        .set({ status: startPatch.status, updatedAt: new Date() })
         .where(eq(posts.id, args.postId));
     } else {
       // Already in auto_destructing from a previous attempt — skip to Phase 2
@@ -141,13 +144,17 @@ export async function autoDestructPost(
   }
 
   // PHASE 3: Commit -- transition to destroyed
-  transitionPost('auto_destructing' as PostStatus, 'destroyed');
+  const successPatch = planRecordAutoDestructSuccess({
+    status: 'auto_destructing',
+    postVersion: 0,
+    scheduledAt: null,
+  });
 
   try {
     await db
       .update(posts)
       .set({
-        status: 'destroyed',
+        status: successPatch.status,
         destroyedAt: new Date(),
         updatedAt: new Date(),
       })

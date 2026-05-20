@@ -1,8 +1,8 @@
 import { eq, and, sql, count as drizzleCount, max, lt, gt, desc, asc, type SQL } from 'drizzle-orm';
 import type { InferInsertModel } from 'drizzle-orm';
 import { DateTime } from 'luxon';
-import { AppError, transitionPost, calculateNextRunAt } from '@sms/shared';
-import type { PostStatus, CreateQueueInput, UpdateQueueInput, QueueQueryInput } from '@sms/shared';
+import { AppError, calculateNextRunAt, planMoveToQueue } from '@sms/shared';
+import type { CreateQueueInput, UpdateQueueInput, QueueQueryInput } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
 import { queues, posts, socialProfiles, users } from '@sms/db';
@@ -346,8 +346,12 @@ export async function addPostToQueue(
     };
 
     if (post.status === 'draft') {
-      transitionPost(post.status as PostStatus, 'queued');
-      postPatch.status = 'queued';
+      const queuePatch = planMoveToQueue({
+        status: post.status,
+        postVersion: 0,
+        scheduledAt: null,
+      });
+      postPatch.status = queuePatch.status;
     }
 
     await tx

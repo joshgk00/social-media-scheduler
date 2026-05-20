@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Job, Queue } from 'bullmq';
 import { UnrecoverableError } from 'bullmq';
-import { PublishFailure } from '@sms/shared';
+import { PostInvariantError, PublishFailure } from '@sms/shared';
 import type { StorageBackend } from '@sms/shared/storage';
 import { createPublishHandler, type PublishJobPayload } from '../publish-worker.js';
 import { PostLifecycleAbort } from '../post-lifecycle.service.js';
+
+function lifecycleAbort(kind: PostInvariantError['kind']): PostLifecycleAbort {
+  return new PostLifecycleAbort(new PostInvariantError(kind));
+}
 
 function buildJob(
   overrides: Partial<Job<PublishJobPayload>> = {},
@@ -116,7 +120,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(already_published) — idempotency skip', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('already_published'));
+      .mockRejectedValue(lifecycleAbort('already_published'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
@@ -126,7 +130,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(version_mismatch)', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('version_mismatch'));
+      .mockRejectedValue(lifecycleAbort('version_mismatch'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
@@ -136,7 +140,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(budget_exhausted)', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('budget_exhausted'));
+      .mockRejectedValue(lifecycleAbort('budget_exhausted'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
@@ -146,7 +150,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(not_scheduled)', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('not_scheduled'));
+      .mockRejectedValue(lifecycleAbort('not_scheduled'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());
@@ -156,7 +160,7 @@ describe('createPublishHandler', () => {
   it('resolves successfully on PostLifecycleAbort(thread_unsupported)', async () => {
     deps.publishPostImpl = vi
       .fn()
-      .mockRejectedValue(new PostLifecycleAbort('thread_unsupported'));
+      .mockRejectedValue(lifecycleAbort('thread_unsupported'));
     const handler = createPublishHandler(deps);
 
     const result = await handler(buildJob());

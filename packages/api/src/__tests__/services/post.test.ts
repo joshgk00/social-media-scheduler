@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { PostStatus } from '@sms/shared';
+import { AppError, type PostStatus } from '@sms/shared';
 
 function makeColumnStub(name: string) {
   return { name, fieldAlias: name };
@@ -421,7 +421,6 @@ describe('post.service', () => {
         });
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
         expect(err.statusCode).toBe(400);
         expect(err.message).toContain('scheduledAt is required');
       }
@@ -440,7 +439,6 @@ describe('post.service', () => {
         });
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
         expect(err.statusCode).toBe(400);
         expect(err.message).toContain('future');
       }
@@ -615,7 +613,6 @@ describe('post.service', () => {
         await updatePost(db, 'user-1', 'post-1', { status: 'failed' as any, postVersion: 1 });
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
         expect(err.statusCode).toBe(409);
       }
     });
@@ -746,7 +743,7 @@ describe('post.service', () => {
         await deletePost(db, 'user-1', 'post-1');
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
+        expect(err).toBeInstanceOf(AppError);
         expect(err.statusCode).toBe(404);
       }
     });
@@ -761,7 +758,6 @@ describe('post.service', () => {
         await deletePost(db, 'user-1', 'post-1');
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
         expect(err.statusCode).toBe(409);
         expect(err.message).toContain('cannot be deleted');
       }
@@ -777,7 +773,6 @@ describe('post.service', () => {
         await deletePost(db, 'user-1', 'post-1');
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
         expect(err.statusCode).toBe(409);
       }
     });

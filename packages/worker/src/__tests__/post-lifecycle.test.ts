@@ -4,7 +4,7 @@ import {
   PostLifecycleAbort,
   type PublishContext,
 } from '../post-lifecycle.service.js';
-import { PublishFailure } from '@sms/shared';
+import { PostInvariantError, PublishFailure } from '@sms/shared';
 import type { StorageBackend } from '@sms/shared/storage';
 import { createMockWorkerDb, type MockWorkerDb } from './helpers/mock-db.js';
 import { seedLockedPost, seedSocialProfile } from './helpers/seed-post.js';
@@ -177,7 +177,7 @@ describe('publishPost lifecycle', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'already_published' });
+    ).rejects.toMatchObject({ invariant: { kind: 'already_published' } });
 
     expect(ctx.publish).not.toHaveBeenCalled();
   });
@@ -189,7 +189,7 @@ describe('publishPost lifecycle', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'version_mismatch' });
+    ).rejects.toMatchObject({ invariant: { kind: 'version_mismatch' } });
     expect(ctx.publish).not.toHaveBeenCalled();
   });
 
@@ -200,7 +200,7 @@ describe('publishPost lifecycle', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'not_scheduled' });
+    ).rejects.toMatchObject({ invariant: { kind: 'not_scheduled' } });
     expect(ctx.publish).not.toHaveBeenCalled();
   });
 
@@ -209,7 +209,7 @@ describe('publishPost lifecycle', () => {
     const ctx = buildCtx();
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'not_scheduled' });
+    ).rejects.toMatchObject({ invariant: { kind: 'not_scheduled' } });
     expect(ctx.publish).not.toHaveBeenCalled();
   });
 
@@ -221,7 +221,7 @@ describe('publishPost lifecycle', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'budget_exhausted' });
+    ).rejects.toMatchObject({ invariant: { kind: 'budget_exhausted' } });
     expect(ctx.publish).not.toHaveBeenCalled();
   });
 
@@ -235,7 +235,7 @@ describe('publishPost lifecycle', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'thread_unsupported' });
+    ).rejects.toMatchObject({ invariant: { kind: 'thread_unsupported' } });
   });
 
   it('uses the profile platform for thread support when the locked post platform is missing', async () => {
@@ -366,7 +366,7 @@ describe('publishPost media-readiness gate (MEDIA-05)', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'media_pending' });
+    ).rejects.toMatchObject({ invariant: { kind: 'media_pending' } });
     expect(ctx.publish).not.toHaveBeenCalled();
   });
 
@@ -376,7 +376,7 @@ describe('publishPost media-readiness gate (MEDIA-05)', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'media_pending' });
+    ).rejects.toMatchObject({ invariant: { kind: 'media_pending' } });
     expect(ctx.publish).not.toHaveBeenCalled();
   });
 
@@ -621,9 +621,11 @@ describe('publishPost crash-safe platform_post_id pre-write (issue #17)', () => 
 });
 
 describe('PostLifecycleAbort', () => {
-  it('preserves the reason in both message and property', () => {
-    const err = new PostLifecycleAbort('version_mismatch');
-    expect(err.reason).toBe('version_mismatch');
+  it('wraps the aggregate invariant in both message and property', () => {
+    const invariant = new PostInvariantError('version_mismatch');
+    const err = new PostLifecycleAbort(invariant);
+    expect(err.invariant).toBe(invariant);
+    expect(err.invariant.kind).toBe('version_mismatch');
     expect(err.message).toContain('version_mismatch');
     expect(err.name).toBe('PostLifecycleAbort');
   });
