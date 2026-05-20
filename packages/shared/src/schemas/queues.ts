@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+const isValidDateOnly = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
+};
+
+const startDateSchema = z.string().refine(
+  (value) =>
+    isValidDateOnly(value) || z.string().datetime().safeParse(value).success,
+  'Start date must be a valid date',
+);
+
 export const createQueueSchema = z.object({
   name: z.string().min(1, 'Queue name is required').max(255),
   profileId: z.string().uuid('Invalid profile ID'),
@@ -8,7 +21,7 @@ export const createQueueSchema = z.object({
   intervalUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months', 'years']),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'At least one day required'),
   hourSlots: z.array(z.number().int().min(6).max(23)).min(1, 'At least one hour slot required'),
-  startDate: z.string().datetime().optional(),
+  startDate: startDateSchema.optional(),
   seasonalStart: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional(),
   seasonalEnd: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional(),
   seasonalRepeat: z.boolean().default(false),
