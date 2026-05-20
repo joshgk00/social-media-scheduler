@@ -86,9 +86,6 @@ export function useCreateQueue() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to create queue');
-    },
   });
 }
 
@@ -100,9 +97,6 @@ export function useUpdateQueue() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
       queryClient.invalidateQueries({ queryKey: ['queues', variables.id] });
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to update queue');
     },
   });
 }
