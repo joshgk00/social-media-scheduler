@@ -1,1 +1,143 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-31-5dae44346a_01dbab8ac9","featureId":"feat_gh-31_a7bad3d97f","title":"gh#31: Phase 6 leftovers: worker TS build errors + posts-api test failure on develop","category":"bug","severity":"medium","confidence":"high","triage":"confirmed-bug","evidence":[{"path":"packages/worker/src/index.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/db","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/worker","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/worker/package.json","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/api/src/__tests__/integration/posts-api.test.ts","startLine":565,"endLine":null,"symbol":null,"quote":null},{"path":"packages/api/src/routes/posts.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"package.json","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/31.\nBacklog section: Bugs.\n\nTwo pre-existing failures from Phase 6 work that are present on `develop` today and were observed during the Phase 7 PR (#30) review cycle. Filing so they don't get lost — neither was caused by Phase 7 and both were intentionally left out of scope for that PR.\n\n## 1. `@sms/worker` TypeScript build fails\n\n`pnpm --filter @sms/worker exec tsc --noEmit` (or the workspace `pnpm build`) errors out with:\n\n```\nsrc/__tests__/transcode.test.ts(108,10): error TS2339: Property 'emit' does not exist on type 'ChildProcess'.\nsrc/__tests__/transcode.test.ts(119,10): error TS2339: Property 'emit' does not exist on type 'ChildProcess'.\nsrc/__tests__/transcode.test.ts(132,10): error TS2339: Property 'emit' does not exist on type 'ChildProcess'.\nsrc/__tests__/transcode.test.ts(171,10): error TS2339: Property 'emit' does not exist on type 'ChildProcess'.\nsrc/transcode.service.ts(49,10): error TS2339: Property 'on' does not exist on type 'ChildProcessWithoutNullStreams'.\nsrc/transcode.service.ts(49,23): error TS7006: Parameter 'code' implicitly has an 'any' type.\nsrc/transcode.service.ts(64,10): error TS2339: Property 'on' does not exist on type 'ChildProcessWithoutNullStreams'.\nsrc/transcode.service.ts(64,23): error TS7006: Parameter 'err' implicitly has an 'any' type.\n```\n\n`ChildProcess` is an `EventEmitter` so `.on()` / `.emit()` should exist via `node:events`. The most likely root cause is a `@types/node` resolution mismatch — `packages/db` and `packages/shared` declare `@types/node` `^25.5.2` directly, but `packages/worker` does not declare it at all and presumably picks up types via hoisting. Worth confirming whether the worker should pin its own `@types/node` so the resolution is deterministic.\n\n**Workarounds in place:** runtime tests pass via `vitest run` (which doesn't go through `tsc`), so worker behavior is verified end-to-end. The build failure only blocks the workspace `pnpm build` script.\n\n**Files involved:**\n- `packages/worker/src/transcode.service.ts:49,64`\n- `packages/worker/src/__tests__/transcode.test.ts:108,119,132,171`\n- `packages/worker/package.json` (missing `@types/node`)\n\n## 2. `posts-api.test.ts` — empty array vs `undefined` for `mediaIds`\n\n```\nFAIL  packages/api/src/__tests__/integration/posts-api.test.ts\n  > posts API integration > media association\n  > POST /api/posts without mediaIds passes undefined mediaIds to createPost\nAssertionError: expected [] to be undefined\n```\n\nTest at `packages/api/src/__tests__/integration/posts-api.test.ts:565` asserts:\n\n```ts\nexpect(postInput.mediaIds).toBeUndefined();\n```\n\n…but the route is now passing `[]` to `createPost`. Either the route handler started defaulting `mediaIds` to `[]` somewhere along the way, or the test's expected behavior is stale. Need to decide which is the intended contract:\n\n- If `createPost` should receive `undefined` when no media is attached → fix the route handler to omit the field\n- If `createPost` should always receive an array (possibly empty) → update the test + the function signature/typing\n\n**Files involved:**\n- `packages/api/src/__tests__/integration/posts-api.test.ts:565` (the failing assertion)\n- `packages/api/src/routes/posts.ts` (route handler that builds the `createPost` input)\n\n## Verification\n\nBoth failures reproduce on `develop` at `95759aa` and on every recent commit before that. Neither was introduced by PR #30.\n\n## Suggested next steps\n\n1. File a follow-up PR for the worker `@types/node` issue — likely a one-line `package.json` change plus a smoke test of `pnpm build`.\n2. Triage the `mediaIds` contract decision before fixing — probably a quick conversation about whether routes normalize to `[]` or pass through `undefined`.","reproduction":null,"recommendation":"1. File a follow-up PR for the worker `@types/node` issue — likely a one-line `package.json` change plus a smoke test of `pnpm build`.\n2. Triage the `mediaIds` contract decision before fixing — probably a quick conversation about whether routes normalize to `[]` or pass through `undefined`.","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"Both failures reproduce on `develop` at `95759aa` and on every recent commit before that. Neither was introduced by PR #30.","minimumFixScope":"packages/worker/src/index.ts, packages/db, packages/shared, packages/worker, packages/worker/package.json, packages/api/src/__tests__/integration/posts-api.test.ts, packages/api/src/routes/posts.ts, package.json","status":"open","history":[],"signature":"sig_gh-31_5dae44346a","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-31-5dae44346a_01dbab8ac9",
+  "featureId": "feat_gh-31_a7bad3d97f",
+  "title": "gh#31: Phase 6 leftovers: worker TS build errors + posts-api test failure on develop",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/worker/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/db",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/package.json",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/__tests__/integration/posts-api.test.ts",
+      "startLine": 565,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/routes/posts.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "package.json",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/31.\nBacklog section: Bugs.\n\nTwo pre-existing failures from Phase 6 work that are present on `develop` today and were observed during the Phase 7 PR (#30) review cycle. Filing so they don't get lost — neither was caused by Phase 7 and both were intentionally left out of scope for that PR.\n\n## 1. `@sms/worker` TypeScript build fails\n\n`pnpm --filter @sms/worker exec tsc --noEmit` (or the workspace `pnpm build`) errors out with:\n\n```\nsrc/__tests__/transcode.test.ts(108,10): error TS2339: Property 'emit' does not exist on type 'ChildProcess'.\nsrc/__tests__/transcode.test.ts(119,10): error TS2339: Property 'emit' does not exist on type 'ChildProcess'.\nsrc/__tests__/transcode.test.ts(132,10): error TS2339: Property 'emit' does not exist on type 'ChildProcess'.\nsrc/__tests__/transcode.test.ts(171,10): error TS2339: Property 'emit' does not exist on type 'ChildProcess'.\nsrc/transcode.service.ts(49,10): error TS2339: Property 'on' does not exist on type 'ChildProcessWithoutNullStreams'.\nsrc/transcode.service.ts(49,23): error TS7006: Parameter 'code' implicitly has an 'any' type.\nsrc/transcode.service.ts(64,10): error TS2339: Property 'on' does not exist on type 'ChildProcessWithoutNullStreams'.\nsrc/transcode.service.ts(64,23): error TS7006: Parameter 'err' implicitly has an 'any' type.\n```\n\n`ChildProcess` is an `EventEmitter` so `.on()` / `.emit()` should exist via `node:events`. The most likely root cause is a `@types/node` resolution mismatch — `packages/db` and `packages/shared` declare `@types/node` `^25.5.2` directly, but `packages/worker` does not declare it at all and presumably picks up types via hoisting. Worth confirming whether the worker should pin its own `@types/node` so the resolution is deterministic.\n\n**Workarounds in place:** runtime tests pass via `vitest run` (which doesn't go through `tsc`), so worker behavior is verified end-to-end. The build failure only blocks the workspace `pnpm build` script.\n\n**Files involved:**\n- `packages/worker/src/transcode.service.ts:49,64`\n- `packages/worker/src/__tests__/transcode.test.ts:108,119,132,171`\n- `packages/worker/package.json` (missing `@types/node`)\n\n## 2. `posts-api.test.ts` — empty array vs `undefined` for `mediaIds`\n\n```\nFAIL  packages/api/src/__tests__/integration/posts-api.test.ts\n  > posts API integration > media association\n  > POST /api/posts without mediaIds passes undefined mediaIds to createPost\nAssertionError: expected [] to be undefined\n```\n\nTest at `packages/api/src/__tests__/integration/posts-api.test.ts:565` asserts:\n\n```ts\nexpect(postInput.mediaIds).toBeUndefined();\n```\n\n…but the route is now passing `[]` to `createPost`. Either the route handler started defaulting `mediaIds` to `[]` somewhere along the way, or the test's expected behavior is stale. Need to decide which is the intended contract:\n\n- If `createPost` should receive `undefined` when no media is attached → fix the route handler to omit the field\n- If `createPost` should always receive an array (possibly empty) → update the test + the function signature/typing\n\n**Files involved:**\n- `packages/api/src/__tests__/integration/posts-api.test.ts:565` (the failing assertion)\n- `packages/api/src/routes/posts.ts` (route handler that builds the `createPost` input)\n\n## Verification\n\nBoth failures reproduce on `develop` at `95759aa` and on every recent commit before that. Neither was introduced by PR #30.\n\n## Suggested next steps\n\n1. File a follow-up PR for the worker `@types/node` issue — likely a one-line `package.json` change plus a smoke test of `pnpm build`.\n2. Triage the `mediaIds` contract decision before fixing — probably a quick conversation about whether routes normalize to `[]` or pass through `undefined`.",
+  "reproduction": null,
+  "recommendation": "1. File a follow-up PR for the worker `@types/node` issue — likely a one-line `package.json` change plus a smoke test of `pnpm build`.\n2. Triage the `mediaIds` contract decision before fixing — probably a quick conversation about whether routes normalize to `[]` or pass through `undefined`.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "Both failures reproduce on `develop` at `95759aa` and on every recent commit before that. Neither was introduced by PR #30.",
+  "minimumFixScope": "packages/worker/src/index.ts, packages/db, packages/shared, packages/worker, packages/worker/package.json, packages/api/src/__tests__/integration/posts-api.test.ts, packages/api/src/routes/posts.ts, package.json",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T222700-e927dc",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "Original evidence paths still exist. The specific Phase 6 transcode TypeScript errors appear fixed: packages/worker/src/transcode.service.ts now uses a local FfmpegProcess interface, packages/worker/src/__tests__/transcode.test.ts defines MockChildProcess extends EventEmitter, and rerunning the worker typecheck no longer reports ChildProcess/.on/.emit errors. The posts-api mediaIds assertion also appears fixed/stale: packages/api/src/__tests__/integration/posts-api.test.ts:558-571 now expects [] and packages/shared/src/schemas/posts.ts defines mediaIds with .default([]), while packages/api/src/routes/posts.ts forwards parsed.data to createPost. However the worker TypeScript build is still currently failing elsewhere: pnpm --filter @sms/worker exec tsc --noEmit reports packages/worker/src/post-lifecycle.impl.ts(79,62) TS2345. Because the finding's worker-build failure remains open in current code, although with moved/different evidence, the finding is still open. I could not execute the posts-api Vitest suite in this read-only sandbox because Vitest/Vite attempted to create temp files and failed with EPERM; api tsc also currently fails on an unrelated service type error.",
+      "commands": [
+        "git rev-parse --show-toplevel && git status --short",
+        "rg --files packages/worker packages/api/src/__tests__/integration packages/api/src/routes packages/db packages/shared | sort",
+        "nl -ba packages/api/src/__tests__/integration/posts-api.test.ts | sed -n '540,585p'",
+        "nl -ba packages/api/src/routes/posts.ts | sed -n '1,220p'",
+        "rg -n \"createPost\\(|mediaIds|router\\.post\\('/api/posts|router\\.post\\('/'\" packages/api/src/routes/posts.ts",
+        "nl -ba packages/worker/src/transcode.service.ts | sed -n '1,110p'",
+        "nl -ba packages/worker/src/__tests__/transcode.test.ts | sed -n '90,180p'",
+        "sed -n '1,220p' packages/worker/package.json && sed -n '1,220p' package.json",
+        "pnpm --filter @sms/worker exec tsc --noEmit",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/integration/posts-api.test.ts",
+        "sed -n '1,90p' packages/worker/src/__tests__/transcode.test.ts",
+        "rg -n '\"@types/node\"' package.json packages/*/package.json pnpm-lock.yaml | head -80",
+        "nl -ba packages/worker/src/post-lifecycle.impl.ts | sed -n '60,90p'",
+        "pnpm --filter @sms/api exec vitest --help | rg -n \"config|cache|pool|temp|deps\"",
+        "sed -n '1,180p' packages/api/vitest.config.ts",
+        "sed -n '1,130p' packages/shared/src/schemas/posts.ts",
+        "pnpm --filter @sms/api exec vitest run --configLoader runner src/__tests__/integration/posts-api.test.ts",
+        "pnpm --filter @sms/api exec tsc --noEmit",
+        "pnpm --filter @sms/worker exec tsc --noEmit --pretty false 2>&1 | rg -n \"transcode|ChildProcess|emit|Property 'on'|post-lifecycle\"",
+        "nl -ba packages/api/src/routes/posts.ts | sed -n '260,405p'",
+        "rg -n \"export const createPostSchema|mediaIds: z\\.array|\\.default\\(\\[\\]\\)|createPostSchema\" packages/shared/src/schemas/posts.ts packages/shared/src/index.ts"
+      ],
+      "createdAt": "2026-05-20T22:28:22.130Z"
+    },
+    {
+      "runId": "20260520T223008-fb93a5",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "All original evidence paths still exist. The worker TypeScript failure is fixed in the current repository: packages/worker/src/transcode.service.ts now uses a local FfmpegProcess interface, packages/worker/src/__tests__/transcode.test.ts uses MockChildProcess extends EventEmitter, and `pnpm --filter @sms/worker exec tsc --noEmit --pretty false` exits 0 with no ChildProcess/.on/.emit errors. The posts-api mediaIds failure is also fixed/stale: the old assertion at packages/api/src/__tests__/integration/posts-api.test.ts:565 no longer expects undefined; the test now expects `postInput.mediaIds` to equal `[]`, packages/shared/src/schemas/posts.ts defaults mediaIds to `[]`, and packages/api/src/routes/posts.ts forwards parsed.data to createPost. I could not execute the Vitest suites in this read-only sandbox because Vitest/Vite fails before loading tests with EPERM creating its temp SSR directory; `pnpm --filter @sms/api exec tsc --noEmit --pretty false` still fails, but on an unrelated `scheduled_at_invalid` type error outside this finding.",
+      "commands": [
+        "pwd && git rev-parse --show-toplevel && git status --short",
+        "rg --files packages/worker packages/api/src/__tests__/integration packages/api/src/routes packages/db packages/shared package.json | sort",
+        "nl -ba packages/api/src/__tests__/integration/posts-api.test.ts | sed -n '545,580p'",
+        "rg -n \"mediaIds|createPost\\(|createPostSchema\" packages/api/src/routes/posts.ts packages/shared/src/schemas/posts.ts packages/shared/src/index.ts",
+        "nl -ba packages/worker/src/transcode.service.ts | sed -n '1,110p' && nl -ba packages/worker/src/__tests__/transcode.test.ts | sed -n '90,180p'",
+        "sed -n '1,220p' packages/worker/package.json && rg -n '\"@types/node\"' package.json packages/*/package.json pnpm-lock.yaml | head -100",
+        "pnpm --filter @sms/worker exec tsc --noEmit --pretty false",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/integration/posts-api.test.ts --configLoader runner",
+        "nl -ba packages/worker/src/post-lifecycle.impl.ts | sed -n '60,95p'",
+        "nl -ba packages/api/src/routes/posts.ts | sed -n '260,405p'",
+        "nl -ba packages/shared/src/schemas/posts.ts | sed -n '35,165p'",
+        "nl -ba packages/worker/src/__tests__/transcode.test.ts | sed -n '1,95p'",
+        "pnpm --filter @sms/worker exec vitest run src/__tests__/transcode.test.ts --configLoader runner",
+        "pnpm --filter @sms/api exec tsc --noEmit --pretty false",
+        "pnpm --filter @sms/worker exec tsc --noEmit --pretty false 2>&1 | rg -n \"transcode|ChildProcess|emit|Property 'on'|post-lifecycle\"",
+        "git diff -- packages/worker/src/post-lifecycle.impl.ts .clawpatch/findings/fnd_sig-gh-31-5dae44346a_01dbab8ac9.json",
+        "pnpm exec tsx -e \"import { createPostSchema } from './packages/shared/src/schemas/posts.ts'; const parsed = createPostSchema.parse({ platform: 'twitter', profileId: '00000000-0000-4000-8000-000000000001', text: 'Post without media' }); console.log(JSON.stringify(parsed));\"",
+        "pnpm --filter @sms/worker exec tsc --noEmit --pretty false 2>&1 | rg -n \"transcode|ChildProcess|emit|Property 'on'|Property 'emit'|post-lifecycle\""
+      ],
+      "createdAt": "2026-05-20T22:31:31.483Z"
+    }
+  ],
+  "signature": "sig_gh-31_5dae44346a",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-31-5dae44346a-01dbab8_798d4c0952"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T22:31:31.483Z"
+}
