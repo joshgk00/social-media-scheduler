@@ -5,6 +5,7 @@ export type PostInvariantErrorKind =
   | 'invalid_transition'
   | 'version_mismatch'
   | 'scheduled_at_required'
+  | 'scheduled_at_invalid'
   | 'scheduled_at_must_be_future'
   | 'not_deletable'
   | 'tag_not_found'

@@ -12,7 +12,7 @@ export interface PostState {
 export interface PostPatch {
   text?: string;
   isThread?: boolean;
-  status?: 'draft' | 'scheduled';
+  status?: PostStatus;
   scheduledAt?: Date | null;
   hasSpinnableText?: boolean;
   autoDestructAfter?: string | null;

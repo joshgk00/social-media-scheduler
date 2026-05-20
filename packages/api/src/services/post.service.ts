@@ -1,7 +1,7 @@
 import { eq, and, sql, inArray, gte, lte, ne, count as drizzleCount, isNull, type SQL } from 'drizzle-orm';
 import { AppError, DELETABLE_STATES, PostInvariantError, planUpdate } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
-import type { PostStatus } from '@sms/shared';
+import type { PostPlatform, PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
 import { posts, postTags, tags, socialProfiles, postMedia } from '@sms/db';
 
@@ -9,14 +9,12 @@ import { softDeleteMediaForPost, associateMediaToPost } from './media.service.js
 
 const logger = createLogger('post-service');
 
-type Platform = 'twitter' | 'linkedin' | 'facebook';
-
 interface CreatePostInput {
   profileId: string;
   // Phase 8: discriminator. Required for new payloads; defaults to 'twitter'
   // when callers (older Phase 3-7 paths) omit it so the existing single-shape
   // contract keeps working until every caller migrates to the union.
-  platform?: Platform;
+  platform?: PostPlatform;
   text: string;
   isThread?: boolean;
   status?: 'draft' | 'scheduled';
@@ -35,7 +33,7 @@ interface CreatePostInput {
 interface UpdatePostInput {
   // Phase 8: T-DATA-01 invariant 2 — platform is immutable post-insert.
   // updatePost rejects if this doesn't match the existing posts.platform value.
-  platform?: Platform;
+  platform?: PostPlatform;
   text?: string;
   isThread?: boolean;
   status?: 'draft' | 'scheduled';
@@ -80,6 +78,7 @@ const postInvariantHttpStatus: Record<PostInvariantError['kind'], number> = {
   invalid_transition: 409,
   version_mismatch: 409,
   scheduled_at_required: 400,
+  scheduled_at_invalid: 400,
   scheduled_at_must_be_future: 400,
   not_deletable: 409,
   tag_not_found: 400,
@@ -141,7 +140,7 @@ export async function createPost(db: Db, userId: string, input: CreatePostInput)
       'PLATFORM_MISMATCH',
     );
   }
-  const effectivePlatform = (ownedProfile.platform ?? 'twitter') as Platform;
+  const effectivePlatform = (ownedProfile.platform ?? 'twitter') as PostPlatform;
 
   const tagIds = input.tagIds ?? [];
 
@@ -221,7 +220,7 @@ export async function updatePost(
           status: existingPost.status as PostStatus,
           postVersion: existingPost.postVersion,
           scheduledAt: existingPost.scheduledAt,
-          platform: existingPost.platform as Platform,
+          platform: existingPost.platform as PostPlatform,
         },
         input,
         input.postVersion,

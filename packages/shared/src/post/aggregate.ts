@@ -10,13 +10,26 @@ interface PlanUpdateInput {
   platform?: PostPlatform;
   text?: string;
   isThread?: boolean;
-  status?: 'draft' | 'scheduled';
+  status?: PostStatus;
   scheduledAt?: string | null;
   hasSpinnableText?: boolean;
   autoDestructAfter?: string | null;
   notes?: string | null;
   visibility?: 'PUBLIC' | 'CONNECTIONS' | null;
   linkUrl?: string | null;
+}
+
+function parseScheduledAt(value: string): Date {
+  const scheduledAt = new Date(value);
+
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw new PostInvariantError(
+      'scheduled_at_invalid',
+      'scheduledAt must be a valid datetime.',
+    );
+  }
+
+  return scheduledAt;
 }
 
 export function planUpdate(
@@ -48,7 +61,7 @@ export function planUpdate(
 
   if (input.status && input.status !== currentRow.status) {
     try {
-      transitionPost(currentRow.status, input.status as PostStatus);
+      transitionPost(currentRow.status, input.status);
     } catch {
       throw new PostInvariantError(
         'invalid_transition',
@@ -57,11 +70,17 @@ export function planUpdate(
     }
   }
 
+  const inputScheduledAt = input.scheduledAt === undefined
+    ? undefined
+    : input.scheduledAt === null
+      ? null
+      : parseScheduledAt(input.scheduledAt);
+
   const effectiveStatus = input.status ?? currentRow.status;
   if (effectiveStatus === 'scheduled') {
     const effectiveScheduledAt = input.scheduledAt !== undefined
-      ? input.scheduledAt
-      : (currentRow.scheduledAt?.toISOString() ?? null);
+      ? inputScheduledAt
+      : currentRow.scheduledAt;
 
     if (!effectiveScheduledAt) {
       throw new PostInvariantError(
@@ -70,11 +89,18 @@ export function planUpdate(
       );
     }
 
+    if (Number.isNaN(effectiveScheduledAt.getTime())) {
+      throw new PostInvariantError(
+        'scheduled_at_invalid',
+        'scheduledAt must be a valid datetime.',
+      );
+    }
+
     const scheduledAtChanged = input.scheduledAt !== undefined;
     const statusChangedToScheduled = input.status === 'scheduled' && currentRow.status !== 'scheduled';
 
     if (scheduledAtChanged || statusChangedToScheduled) {
-      if (new Date(effectiveScheduledAt) < now) {
+      if (effectiveScheduledAt < now) {
         throw new PostInvariantError(
           'scheduled_at_must_be_future',
           'scheduledAt must be in the future.',
@@ -89,7 +115,7 @@ export function planUpdate(
   if (input.isThread !== undefined) patch.isThread = input.isThread;
   if (input.status !== undefined) patch.status = input.status;
   if (input.scheduledAt !== undefined) {
-    patch.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+    patch.scheduledAt = inputScheduledAt;
   }
   if (input.hasSpinnableText !== undefined) patch.hasSpinnableText = input.hasSpinnableText;
   if (input.autoDestructAfter !== undefined) patch.autoDestructAfter = input.autoDestructAfter;

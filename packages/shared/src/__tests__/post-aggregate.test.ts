@@ -97,6 +97,18 @@ describe('planUpdate', () => {
     );
   });
 
+  it('rejects invalid scheduledAt values', () => {
+    expectPostInvariant(
+      () => planUpdate(
+        basePost(),
+        { status: 'scheduled', scheduledAt: 'not-a-date', postVersion: 3 },
+        3,
+        now,
+      ),
+      'scheduled_at_invalid',
+    );
+  });
+
   it('allows editing a scheduled post whose existing scheduledAt has drifted into the past', () => {
     expect(planUpdate(
       basePost({ status: 'scheduled', scheduledAt: new Date('2029-12-31T23:59:59.000Z') }),
