@@ -1,1 +1,133 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-67-af375cc2c7_f3ade6888f","featureId":"feat_gh-67_5970b49f22","title":"gh#67: R3.2 — Switch api/profile.service to TokenVault for seal direction","category":"maintainability","severity":"low","confidence":"high","triage":"risk","evidence":[{"path":"packages/api/src/services/profile.service.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/api/src/index.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/api/src/__tests__/services/profile.test.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/67.\nBacklog section: Candidate 3 — TokenVault.\n\n## Context\n\nSecond PR in Candidate 3. Migrates the API's connect-flow encryption calls to the vault. Smallest behavioral change in the series — just swaps the call shape.\n\n## Scope\n\n- Modify `packages/api/src/services/profile.service.ts`:\n  - Inject `vault: TokenVault` via service-factory pattern (or pass as param to the connect functions, editorial call)\n  - Replace the four inline `encrypt(credentials.X, encryptionKey, 1)` calls (line ~172–175) with `vault.sealTwitterCredentials({ ... })`\n  - Replace the OAuth 2.0 `encrypt` calls in the LinkedIn callback path (line ~427+) with `vault.sealOAuth2AccessToken(...)` and `vault.sealOAuth2RefreshToken(...)`\n  - Replace the OAuth 2.0 `encrypt` calls in the Facebook callback path (line ~547+) similarly\n  - Remove `process.env.ENCRYPTION_KEY` reads inside these functions — the vault is constructed once at process start and injected\n- Update `packages/api/src/index.ts` (or wherever app composition happens) to construct the vault and inject it\n- Update existing tests in `packages/api/src/__tests__/services/profile.test.ts` to inject a fake vault\n\n## Out of scope\n\n- token-refresh-worker (R3.3)\n- twitter-delete service (R3.4)\n- Publishers (R3.5)\n\n## Acceptance\n\n- `pnpm --filter @sms/api build` and test pass\n- `rg \"encrypt\\(\" packages/api/src/services/profile.service.ts` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/api/src/services/profile.service.ts` returns no matches\n\n## References\n\n- Depends on: #66","reproduction":"Second PR in Candidate 3. Migrates the API's connect-flow encryption calls to the vault. Smallest behavioral change in the series — just swaps the call shape.","recommendation":"- Modify `packages/api/src/services/profile.service.ts`:\n  - Inject `vault: TokenVault` via service-factory pattern (or pass as param to the connect functions, editorial call)\n  - Replace the four inline `encrypt(credentials.X, encryptionKey, 1)` calls (line ~172–175) with `vault.sealTwitterCredentials({ ... })`\n  - Replace the OAuth 2.0 `encrypt` calls in the LinkedIn callback path (line ~427+) with `vault.sealOAuth2AccessToken(...)` and `vault.sealOAuth2RefreshToken(...)`\n  - Replace the OAuth 2.0 `encrypt` calls in the Facebook callback path (line ~547+) similarly\n  - Remove `process.env.ENCRYPTION_KEY` reads inside these functions — the vault is constructed once at process start and injected\n- Update `packages/api/src/index.ts` (or wherever app composition happens) to construct the vault and inject it\n- Update existing tests in `packages/api/src/__tests__/services/profile.test.ts` to inject a fake vault","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/api build` and test pass\n- `rg \"encrypt\\(\" packages/api/src/services/profile.service.ts` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/api/src/services/profile.service.ts` returns no matches","minimumFixScope":"packages/api/src/services/profile.service.ts, packages/api/src/index.ts, packages/api/src/__tests__/services/profile.test.ts","status":"open","history":[],"signature":"sig_gh-67_af375cc2c7","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-67-af375cc2c7_f3ade6888f",
+  "featureId": "feat_gh-67_5970b49f22",
+  "title": "gh#67: R3.2 — Switch api/profile.service to TokenVault for seal direction",
+  "category": "maintainability",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/api/src/services/profile.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/__tests__/services/profile.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/67.\nBacklog section: Candidate 3 — TokenVault.\n\n## Context\n\nSecond PR in Candidate 3. Migrates the API's connect-flow encryption calls to the vault. Smallest behavioral change in the series — just swaps the call shape.\n\n## Scope\n\n- Modify `packages/api/src/services/profile.service.ts`:\n  - Inject `vault: TokenVault` via service-factory pattern (or pass as param to the connect functions, editorial call)\n  - Replace the four inline `encrypt(credentials.X, encryptionKey, 1)` calls (line ~172–175) with `vault.sealTwitterCredentials({ ... })`\n  - Replace the OAuth 2.0 `encrypt` calls in the LinkedIn callback path (line ~427+) with `vault.sealOAuth2AccessToken(...)` and `vault.sealOAuth2RefreshToken(...)`\n  - Replace the OAuth 2.0 `encrypt` calls in the Facebook callback path (line ~547+) similarly\n  - Remove `process.env.ENCRYPTION_KEY` reads inside these functions — the vault is constructed once at process start and injected\n- Update `packages/api/src/index.ts` (or wherever app composition happens) to construct the vault and inject it\n- Update existing tests in `packages/api/src/__tests__/services/profile.test.ts` to inject a fake vault\n\n## Out of scope\n\n- token-refresh-worker (R3.3)\n- twitter-delete service (R3.4)\n- Publishers (R3.5)\n\n## Acceptance\n\n- `pnpm --filter @sms/api build` and test pass\n- `rg \"encrypt\\(\" packages/api/src/services/profile.service.ts` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/api/src/services/profile.service.ts` returns no matches\n\n## References\n\n- Depends on: #66",
+  "reproduction": "Second PR in Candidate 3. Migrates the API's connect-flow encryption calls to the vault. Smallest behavioral change in the series — just swaps the call shape.",
+  "recommendation": "- Modify `packages/api/src/services/profile.service.ts`:\n  - Inject `vault: TokenVault` via service-factory pattern (or pass as param to the connect functions, editorial call)\n  - Replace the four inline `encrypt(credentials.X, encryptionKey, 1)` calls (line ~172–175) with `vault.sealTwitterCredentials({ ... })`\n  - Replace the OAuth 2.0 `encrypt` calls in the LinkedIn callback path (line ~427+) with `vault.sealOAuth2AccessToken(...)` and `vault.sealOAuth2RefreshToken(...)`\n  - Replace the OAuth 2.0 `encrypt` calls in the Facebook callback path (line ~547+) similarly\n  - Remove `process.env.ENCRYPTION_KEY` reads inside these functions — the vault is constructed once at process start and injected\n- Update `packages/api/src/index.ts` (or wherever app composition happens) to construct the vault and inject it\n- Update existing tests in `packages/api/src/__tests__/services/profile.test.ts` to inject a fake vault",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/api build` and test pass\n- `rg \"encrypt\\(\" packages/api/src/services/profile.service.ts` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/api/src/services/profile.service.ts` returns no matches",
+  "minimumFixScope": "packages/api/src/services/profile.service.ts, packages/api/src/index.ts, packages/api/src/__tests__/services/profile.test.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T192635-7c708c",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. packages/api/src/services/profile.service.ts still imports encrypt/validateEncryptionKey and directly reads process.env.ENCRYPTION_KEY at lines 170 and 405. It still directly calls encrypt for Twitter credentials at lines 172-175, OAuth profile creation at lines 427 and 429, and reconnect/OAuth update at lines 547 and 565. packages/api/src/index.ts only requires ENCRYPTION_KEY at startup and does not construct or inject a TokenVault into createApp/profile routes. packages/api/src/__tests__/services/profile.test.ts still mocks @sms/shared/encryption and sets process.env.ENCRYPTION_KEY rather than injecting a fake vault. A repo-wide TokenVault/seal* search found no matching implementation or usage. Typecheck passes, but the focused Vitest command could not run in this read-only sandbox because Vite tried to write packages/api/node_modules/.vite-temp. The acceptance criteria `rg \"encrypt\\(\" packages/api/src/services/profile.service.ts` and `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/api/src/services/profile.service.ts` still return matches, so the finding remains open.",
+      "commands": [
+        "rg -n \"encrypt\\(|process\\.env\\.ENCRYPTION_KEY|TokenVault|sealTwitterCredentials|sealOAuth2\" packages/api/src/services/profile.service.ts packages/api/src/index.ts packages/api/src/__tests__/services/profile.test.ts",
+        "sed -n '1,260p' packages/api/src/services/profile.service.ts",
+        "sed -n '1,220p' packages/api/src/index.ts",
+        "sed -n '1,240p' packages/api/src/__tests__/services/profile.test.ts",
+        "sed -n '380,590p' packages/api/src/services/profile.service.ts",
+        "sed -n '240,520p' packages/api/src/__tests__/services/profile.test.ts",
+        "rg -n \"class TokenVault|interface TokenVault|createTokenVault|sealTwitterCredentials|sealOAuth2AccessToken|sealOAuth2RefreshToken\" packages -S",
+        "rg -n \"TokenVault|token vault|sealTwitterCredentials|sealOAuth2AccessToken|sealOAuth2RefreshToken|TokenSealer|vault\" packages/api packages/shared packages -S",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/services/profile.test.ts packages/api/src/services/__tests__/profile.service.test.ts",
+        "cat packages/api/package.json",
+        "rg -n \"createApp\\(|TokenVault|vault|ENCRYPTION_KEY|profile\" packages/api/src/app.ts packages/api/src/routes/profiles.ts packages/api/src/routes/oauth.ts",
+        "nl -ba packages/api/src/services/profile.service.ts | sed -n '1,190p'",
+        "nl -ba packages/api/src/services/profile.service.ts | sed -n '400,570p'",
+        "nl -ba packages/api/src/index.ts | sed -n '1,85p'",
+        "nl -ba packages/api/src/__tests__/services/profile.test.ts | sed -n '1,240p'",
+        "pnpm --filter @sms/api typecheck"
+      ],
+      "createdAt": "2026-05-20T19:27:44.819Z"
+    },
+    {
+      "runId": "20260520T193517-4a0d55",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current packages/api/src/services/profile.service.ts imports TokenVault, accepts a vault parameter in createProfile/createProfileFromOAuth/reconnectProfile, uses vault.sealTwitterCredentials at line 171, vault.sealOAuth2AccessToken at lines 410 and 529, and vault.sealOAuth2RefreshToken at lines 412 and 547. The acceptance searches for encrypt( and process.env.ENCRYPTION_KEY in profile.service.ts both returned no matches. packages/api/src/index.ts now constructs createTokenVault(ENCRYPTION_KEY) at line 39 and passes tokenVault into createApp at line 68; routes pass getTokenVault() into the profile service. Tests have been updated to use a mock TokenVault in the original test path and the service OAuth test path. pnpm --filter @sms/api typecheck passed. The focused Vitest command and build could not complete in this read-only sandbox because Vitest tried to write node_modules/.vite-temp and tsc build tried to write dist files, so those failures are environmental EPERM failures rather than evidence that the finding remains open.",
+      "commands": [
+        "rg -n \"encrypt\\(|process\\.env\\.ENCRYPTION_KEY|TokenVault|sealTwitterCredentials|sealOAuth2\" packages/api/src/services/profile.service.ts packages/api/src/index.ts packages/api/src/__tests__/services/profile.test.ts",
+        "rg -n \"class TokenVault|interface TokenVault|createTokenVault|sealTwitterCredentials|sealOAuth2AccessToken|sealOAuth2RefreshToken|TokenSealer|vault\" packages -S",
+        "git status --short",
+        "nl -ba packages/api/src/services/profile.service.ts | sed -n '130,190p'",
+        "nl -ba packages/api/src/services/profile.service.ts | sed -n '390,570p'",
+        "nl -ba packages/api/src/index.ts | sed -n '1,80p'",
+        "nl -ba packages/api/src/app.ts | sed -n '55,85p'",
+        "nl -ba packages/api/src/__tests__/services/profile.test.ts | sed -n '160,255p'",
+        "rg -n \"encrypt\\(\" packages/api/src/services/profile.service.ts",
+        "rg -n \"process\\.env\\.ENCRYPTION_KEY\" packages/api/src/services/profile.service.ts",
+        "cat packages/api/package.json",
+        "nl -ba packages/api/src/services/token-vault.service.ts | sed -n '1,90p'",
+        "rg -n \"createProfile\\(|createProfileFromOAuth\\(|reconnectProfile\\(\" packages/api/src -S",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/services/profile.test.ts packages/api/src/services/__tests__/profile.service.test.ts packages/api/src/routes/__tests__/oauth.test.ts",
+        "pnpm --filter @sms/api build",
+        "nl -ba packages/api/src/services/__tests__/profile.service.test.ts | sed -n '1,380p'",
+        "nl -ba packages/api/src/routes/profiles.ts | sed -n '1,75p'",
+        "nl -ba packages/api/src/routes/oauth.ts | sed -n '420,475p'",
+        "rg -n \"process\\.env\\.ENCRYPTION_KEY|encrypt\\(\" packages/api/src/services/profile.service.ts packages/api/src/index.ts packages/api/src/app.ts packages/api/src/routes/profiles.ts packages/api/src/routes/oauth.ts packages/api/src/__tests__/services/profile.test.ts packages/api/src/services/__tests__/profile.service.test.ts"
+      ],
+      "createdAt": "2026-05-20T19:36:33.147Z"
+    },
+    {
+      "runId": "20260520T194419-c21547",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current packages/api/src/services/profile.service.ts imports TokenVault and accepts a vault parameter for createProfile, createProfileFromOAuth, and reconnectProfile; Twitter credentials are sealed with vault.sealTwitterCredentials at line 171, OAuth access tokens with vault.sealOAuth2AccessToken at lines 410 and 529, and refresh tokens with vault.sealOAuth2RefreshToken at lines 412 and 547. The acceptance searches for encrypt( and process.env.ENCRYPTION_KEY in profile.service.ts returned no matches. packages/api/src/index.ts constructs createTokenVault(ENCRYPTION_KEY) at line 39 and passes tokenVault into createApp at line 68; app/routes pass getTokenVault() into the profile service. The original test path now injects a mock vault and asserts TokenVault use, and the OAuth service tests also use a TokenVault mock. pnpm --filter @sms/api typecheck passed. Focused Vitest and build commands could not complete because the read-only sandbox blocked Vite/tsc writes with EPERM, which is environmental rather than evidence the finding remains open.",
+      "commands": [
+        "rg -n \"encrypt\\(|process\\.env\\.ENCRYPTION_KEY|TokenVault|createTokenVault|sealTwitterCredentials|sealOAuth2\" packages/api/src/services/profile.service.ts packages/api/src/index.ts packages/api/src/__tests__/services/profile.test.ts packages/api/src/app.ts packages/api/src/routes/profiles.ts packages/api/src/routes/oauth.ts packages/api/src/services/__tests__/profile.service.test.ts",
+        "rg -n \"class TokenVault|interface TokenVault|type TokenVault|createTokenVault|sealTwitterCredentials|sealOAuth2AccessToken|sealOAuth2RefreshToken\" packages -S",
+        "git status --short",
+        "nl -ba packages/api/src/services/profile.service.ts | sed -n '1,190p'",
+        "nl -ba packages/api/src/services/profile.service.ts | sed -n '390,570p'",
+        "nl -ba packages/api/src/index.ts | sed -n '1,85p'",
+        "nl -ba packages/api/src/app.ts | sed -n '45,125p'",
+        "rg -n \"encrypt\\(\" packages/api/src/services/profile.service.ts",
+        "rg -n \"process\\.env\\.ENCRYPTION_KEY\" packages/api/src/services/profile.service.ts",
+        "nl -ba packages/api/src/services/token-vault.service.ts | sed -n '1,80p'",
+        "nl -ba packages/api/src/__tests__/services/profile.test.ts | sed -n '170,255p'",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/services/profile.test.ts packages/api/src/services/__tests__/profile.service.test.ts packages/api/src/routes/__tests__/oauth.test.ts",
+        "pnpm --filter @sms/api build",
+        "rg -n \"createProfile\\(|createProfileFromOAuth\\(|reconnectProfile\\(\" packages/api/src -S",
+        "nl -ba packages/api/src/services/__tests__/profile.service.test.ts | sed -n '1,190p'",
+        "nl -ba packages/api/src/routes/profiles.ts | sed -n '1,70p'",
+        "nl -ba packages/api/src/routes/oauth.ts | sed -n '430,480p'"
+      ],
+      "createdAt": "2026-05-20T19:45:20.476Z"
+    }
+  ],
+  "signature": "sig_gh-67_af375cc2c7",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-67-af375cc2c7-f3ade68_2c48775959"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T19:45:20.476Z"
+}

@@ -20,6 +20,7 @@ import {
   ProfileServiceError,
 } from '../services/profile.service.js';
 import { checkTwitterBudgetWithDb } from '../services/rate-limit.service.js';
+import type { TokenVault } from '../services/token-vault.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { profileLimiter } from '../middleware/rate-limiter.js';
 import { validateUuidParam } from '../middleware/validation.js';
@@ -33,9 +34,10 @@ function requestCorrelationId(req: { id?: string }): string {
 
 interface ProfilesDependencies {
   db: Db;
+  getTokenVault: () => TokenVault;
 }
 
-export function createProfilesRouter({ db }: ProfilesDependencies) {
+export function createProfilesRouter({ db, getTokenVault }: ProfilesDependencies) {
   const router = Router();
 
   router.post('/api/profiles', requireAuth, profileLimiter, async (req, res) => {
@@ -46,7 +48,7 @@ export function createProfilesRouter({ db }: ProfilesDependencies) {
     }
 
     try {
-      const profile = await createProfile(db, req.session.userId!, parsed.data);
+      const profile = await createProfile(db, req.session.userId!, parsed.data, getTokenVault());
       res.status(201).json(profile);
     } catch (err: unknown) {
       if (err instanceof ProfileServiceError) {

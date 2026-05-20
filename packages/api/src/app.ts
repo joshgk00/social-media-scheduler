@@ -6,6 +6,7 @@ import type { Sql } from 'postgres';
 import type { Queue } from 'bullmq';
 import type { Db } from '@sms/db';
 import type { StorageBackend } from '@sms/shared/storage';
+import { AppError } from '@sms/shared';
 
 import { correlationId } from './middleware/correlation-id.js';
 import { httpLogger } from './middleware/logger.js';
@@ -34,6 +35,7 @@ import { createEmailLogsRouter } from './routes/email-logs.js';
 import { createSystemRouter } from './routes/system.js';
 import type { PublishQueueService } from './services/publish-queue.service.js';
 import type { BulkOpsQueueService } from './services/bulk-ops-queue.service.js';
+import { createTokenVault, type TokenVault } from './services/token-vault.service.js';
 import { createBulkImportRouter } from './routes/bulk-import.js';
 interface AppDependencies {
   redis: Redis;
@@ -48,6 +50,7 @@ interface AppDependencies {
   notificationQueue?: Queue;
   storage?: StorageBackend;
   transcodeQueue?: Queue;
+  tokenVault?: TokenVault;
 }
 
 const TRUSTED_PROXY_CIDRS = ['loopback', '172.16.0.0/12'];
@@ -62,8 +65,22 @@ export function createApp({
   notificationQueue,
   storage,
   transcodeQueue,
+  tokenVault,
 }: AppDependencies) {
   const app = express();
+  let fallbackTokenVault: TokenVault | null = null;
+  const getTokenVault = () => {
+    if (tokenVault) return tokenVault;
+    try {
+      fallbackTokenVault ??= createTokenVault(process.env.ENCRYPTION_KEY ?? '');
+    } catch {
+      throw new AppError(
+        'Token encryption is not configured. Set ENCRYPTION_KEY to exactly 64 hex characters before using token-protected routes.',
+        500,
+      );
+    }
+    return fallbackTokenVault;
+  };
 
   // Trust only loopback test/dev callers and the Docker private range where
   // the bundled nginx reaches the API. This lets Express honor nginx's
@@ -100,8 +117,8 @@ export function createApp({
   app.use(createRecoveryRouter({ db, redis }));
   app.use(createSettingsRouter({ db, redis }));
 
-  app.use(createProfilesRouter({ db }));
-  app.use(createOAuthRouter({ db, redis }));
+  app.use(createProfilesRouter({ db, getTokenVault }));
+  app.use(createOAuthRouter({ db, redis, getTokenVault }));
   if (bulkOpsQueueService) {
     app.use('/api/bulk-import', createBulkImportRouter({ db, bulkOpsQueueService }));
   }
