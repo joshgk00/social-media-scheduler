@@ -98,6 +98,34 @@
         "nl -ba packages/worker/src/__tests__/helpers/mock-db.ts | sed -n '1,180p'"
       ],
       "createdAt": "2026-05-20T18:30:04.633Z"
+    },
+    {
+      "runId": "20260520T183953-7b6043",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current packages/shared/src/post/aggregate.ts defines planTransitionToPublishing with proceed/recover decisions and all requested PostInvariantError branches; packages/shared/src/post/types.ts defines PostTransitionProfile, TransitionDecision as proceed|recover, and PreflightState. The shared barrel exports these, and packages/shared/src/__tests__/post-aggregate.test.ts covers proceed, recover, already_published, not_scheduled, thread_unsupported, non-Twitter thread allowance, and each preflight failure kind. Current packages/worker/src/post-lifecycle.service.ts imports the planner/types, maps the locked row and profile projection, computes PreflightState from budget/media/token checks, calls planTransitionToPublishing for the transition, writes the returned publishing patch, preserves the issue #17 recovery path, and translates PostInvariantError to PostLifecycleAbort. Worker tests still cover idempotent already_published, version_mismatch optimistic locking, budget/media/token/rate-limit aborts before publish, lock-release/prewrite ordering, and recovery. Type-only verification passed for shared and worker with `tsc --noEmit`. Vitest and normal build commands could not complete because this session is read-only and Vite/tsc attempted to write `.vite-temp` or `dist`, not because of observed code failures.",
+      "commands": [
+        "pwd && git status --short",
+        "rg -n \"planTransitionToPublishing|TransitionDecision|PreflightState|PostTransitionProfile|PostInvariantError|already_published|not_scheduled|thread_unsupported|media_pending|token_unhealthy|budget_exhausted|rate_limit_exhausted\" packages/shared/src packages/worker/src -g '*.{ts,tsx}'",
+        "rg --files packages/shared/src packages/worker/src | rg 'post/(aggregate|types|errors)\\.ts$|post-lifecycle\\.service\\.ts$|post-aggregate\\.test\\.ts$|post-lifecycle.*test\\.ts$|index\\.ts$'",
+        "nl -ba packages/shared/src/post/aggregate.ts | sed -n '1,220p'",
+        "nl -ba packages/shared/src/post/types.ts | sed -n '1,120p'",
+        "nl -ba packages/shared/src/__tests__/post-aggregate.test.ts | sed -n '1,280p'",
+        "nl -ba packages/worker/src/post-lifecycle.service.ts | sed -n '1,560p'",
+        "nl -ba packages/shared/src/index.ts | sed -n '1,120p'",
+        "rg -n \"Idempotency|Optimistic lock|Runtime budget re-check|Row lock is released|already_published|version_mismatch|budget_exhausted|outside the transaction|publish outside|toHaveBeenCalledTimes\\(1\\)|not\\.toHaveBeenCalled\\(\\)|invocationCallOrder|media_pending|token_unhealthy|rate_limit_exhausted\" packages/worker/src/__tests__ -g '*post-lifecycle*.test.ts'",
+        "nl -ba packages/worker/src/__tests__/post-lifecycle.test.ts | sed -n '150,660p'",
+        "nl -ba packages/worker/src/__tests__/post-lifecycle.token-health.test.ts | sed -n '1,160p'",
+        "nl -ba packages/worker/src/__tests__/post-lifecycle-rate-limit.test.ts | sed -n '1,140p'",
+        "pnpm --filter @sms/shared exec tsc --noEmit --pretty false",
+        "pnpm --filter @sms/worker exec tsc --noEmit --pretty false",
+        "pnpm --filter @sms/shared test -- --run packages/shared/src/__tests__/post-aggregate.test.ts",
+        "pnpm --filter @sms/worker test -- --run packages/worker/src/__tests__/post-lifecycle.test.ts packages/worker/src/__tests__/post-lifecycle.token-health.test.ts packages/worker/src/__tests__/post-lifecycle-rate-limit.test.ts",
+        "pnpm --filter @sms/shared build",
+        "pnpm --filter @sms/worker build"
+      ],
+      "createdAt": "2026-05-20T18:41:37.890Z"
     }
   ],
   "signature": "sig_gh-63_f14639dd59",
@@ -106,5 +134,5 @@
   ],
   "createdByRunId": "20260519T201935-c24f6a",
   "createdAt": "2026-05-19T20:19:35.980Z",
-  "updatedAt": "2026-05-20T18:30:04.633Z"
+  "updatedAt": "2026-05-20T18:41:37.890Z"
 }

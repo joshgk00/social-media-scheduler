@@ -263,27 +263,6 @@ function classifyPublishError(err: unknown): ClassifiedError {
   return { kind: 'transient', httpStatus: null, errorCode: 'unknown', message };
 }
 
-function logPostInvariantAbort(
-  lifecycleLogger: { info: (...args: unknown[]) => void },
-  err: PostInvariantError,
-  currentState: PostState,
-): void {
-  if (err.kind === 'already_published') {
-    lifecycleLogger.info(
-      {
-        platformPostId: currentState.platformPostId ?? null,
-        status: currentState.status,
-      },
-      'Idempotent skip — post already has platform_post_id',
-    );
-  } else if (err.kind === 'not_scheduled') {
-    lifecycleLogger.info(
-      { actualStatus: currentState.status },
-      'Skipping publish — post is no longer scheduled',
-    );
-  }
-}
-
 export async function publishPost(
   db: WorkerDb,
   ctx: PublishContext,
@@ -445,7 +424,6 @@ export async function publishPost(
           );
         } catch (err) {
           if (err instanceof PostInvariantError) {
-            logPostInvariantAbort(lifecycleLogger, err, currentState);
             if (err.kind === 'media_pending') {
               lifecycleLogger.info(
                 { postId: ctx.postId, pendingMediaCount },

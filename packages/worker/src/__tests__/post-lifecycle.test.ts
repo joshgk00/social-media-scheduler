@@ -172,10 +172,7 @@ describe('publishPost lifecycle', () => {
       platformPostId: 'tw_already_789',
       status: 'published',
     });
-    const profile = seedSocialProfile();
     db.__pushExecute(() => [lockedPost]);
-    db.__pushSelect(() => [{ count: '0' }]);
-    db.__pushSelect(() => [profile]);
     const ctx = buildCtx();
 
     await expect(
