@@ -9,9 +9,6 @@
 // budget_exhausted abort leaves the post in `scheduled` state for the next
 // scanner pass to re-evaluate once the month rolls.
 
-import { DateTime } from 'luxon';
-import { sql, and, eq, gte, inArray } from 'drizzle-orm';
-import { posts, socialProfiles } from '@sms/db';
 import {
   checkTwitterBudget,
   checkLinkedInBudget,
@@ -20,55 +17,15 @@ import {
   type PlatformBudgetCheckResult,
   type PlatformBudgetSnapshot,
 } from '@sms/shared';
+import {
+  loadTwitterUsage as loadWorkerUsage,
+  loadLinkedInWindowUsage,
+  loadFacebookWindowUsage,
+  type PlatformWindowSnapshot,
+} from '@sms/shared/rate-limit/loaders';
 import type { WorkerDb } from './db.js';
 
-// D-21: only these statuses represent posts that actually consumed Twitter
-// quota this month. Keep in lockstep with @sms/api rate-limit.service.ts.
-const COUNTED_STATUSES = ['published', 'auto_destructing', 'destroyed'] as const;
-
-export interface WorkerUsageSnapshot {
-  currentUsage: number;
-  monthlyBudget: number;
-  warnThresholdPercent: number;
-  monthStartUtc: Date;
-}
-
-export async function loadWorkerUsage(
-  db: WorkerDb,
-  profileId: string,
-): Promise<WorkerUsageSnapshot> {
-  const monthStartUtc = DateTime.utc().startOf('month').toJSDate();
-
-  const [profileRow] = await db
-    .select({
-      monthlyBudget: socialProfiles.monthlyTweetBudget,
-      warnThresholdPercent: socialProfiles.warnThresholdPercent,
-    })
-    .from(socialProfiles)
-    .where(eq(socialProfiles.id, profileId));
-
-  if (!profileRow) {
-    throw new Error(`Profile ${profileId} not found`);
-  }
-
-  const [countRow] = await db
-    .select({ publishedCount: sql<number>`count(*)::int` })
-    .from(posts)
-    .where(
-      and(
-        eq(posts.profileId, profileId),
-        gte(posts.publishedAt, monthStartUtc),
-        inArray(posts.status, [...COUNTED_STATUSES]),
-      ),
-    );
-
-  return {
-    currentUsage: Number(countRow?.publishedCount ?? 0),
-    monthlyBudget: profileRow.monthlyBudget,
-    warnThresholdPercent: profileRow.warnThresholdPercent,
-    monthStartUtc,
-  };
-}
+export { loadWorkerUsage };
 
 /** Runtime re-check for the publish worker (D-26 / LIMIT-03). */
 export async function checkBudgetForWorker(
@@ -89,86 +46,14 @@ export async function checkBudgetForWorker(
 // Phase 8 — per-platform window loaders + checkers (LIMIT-06, LIMIT-07)
 // ============================================================================
 //
-// Mirrors the API-side rate-limit.service.ts loaders. Each loader applies the
-// per-platform window expiry rule (UTC-midnight for LinkedIn, rolling-hour for
-// Facebook) before returning the snapshot, so the pure calculator from
-// @sms/shared sees a clean count of zero when the window has rolled.
-//
-// We deliberately duplicate this read logic instead of importing from @sms/api
-// (revision Blocker 4 / T-04-03-10 — the worker must not depend on the API
-// package). The math itself lives once in @sms/shared.
+// The DB read-side loaders live in @sms/shared so API and worker use the same
+// quota windows without a package dependency on @sms/api.
 
-export interface PlatformWindowSnapshot {
-  currentCount: number;
-  limit: number;
-  warnThresholdPercent: number;
-  windowStartUtc: Date;
-  windowResetAt: Date;
-}
-
-export async function loadLinkedInWindowUsage(
-  db: WorkerDb,
-  profileId: string,
-  now: Date = new Date(),
-): Promise<PlatformWindowSnapshot> {
-  const [row] = await db
-    .select({
-      limit: socialProfiles.linkedinDailyLimit,
-      count: socialProfiles.linkedinDailyCount,
-      windowStart: socialProfiles.linkedinWindowStartUtc,
-      warnThresholdPercent: socialProfiles.warnThresholdPercent,
-    })
-    .from(socialProfiles)
-    .where(eq(socialProfiles.id, profileId));
-  if (!row) throw new Error(`Profile ${profileId} not found`);
-
-  const dayStart = DateTime.fromJSDate(now).toUTC().startOf('day').toJSDate();
-  const isExpired = !row.windowStart || row.windowStart < dayStart;
-  const nextDay = DateTime.fromJSDate(now)
-    .toUTC()
-    .startOf('day')
-    .plus({ days: 1 })
-    .toJSDate();
-  return {
-    currentCount: isExpired ? 0 : row.count,
-    limit: row.limit,
-    warnThresholdPercent: row.warnThresholdPercent ?? 80,
-    windowStartUtc: !isExpired && row.windowStart ? row.windowStart : dayStart,
-    windowResetAt: nextDay,
-  };
-}
-
-export async function loadFacebookWindowUsage(
-  db: WorkerDb,
-  profileId: string,
-  now: Date = new Date(),
-): Promise<PlatformWindowSnapshot> {
-  const [row] = await db
-    .select({
-      limit: socialProfiles.facebookHourlyLimit,
-      count: socialProfiles.facebookHourlyCount,
-      windowStart: socialProfiles.facebookWindowStartUtc,
-      warnThresholdPercent: socialProfiles.warnThresholdPercent,
-    })
-    .from(socialProfiles)
-    .where(eq(socialProfiles.id, profileId));
-  if (!row) throw new Error(`Profile ${profileId} not found`);
-
-  const hourThreshold = new Date(now.getTime() - 60 * 60 * 1000);
-  const isExpired = !row.windowStart || row.windowStart < hourThreshold;
-  const nextHour = DateTime.fromJSDate(now)
-    .toUTC()
-    .startOf('hour')
-    .plus({ hours: 1 })
-    .toJSDate();
-  return {
-    currentCount: isExpired ? 0 : row.count,
-    limit: row.limit,
-    warnThresholdPercent: row.warnThresholdPercent ?? 80,
-    windowStartUtc: !isExpired && row.windowStart ? row.windowStart : now,
-    windowResetAt: nextHour,
-  };
-}
+export {
+  loadLinkedInWindowUsage,
+  loadFacebookWindowUsage,
+  type PlatformWindowSnapshot,
+};
 
 export async function checkLinkedInBudgetForWorker(
   db: WorkerDb,

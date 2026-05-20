@@ -175,6 +175,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ~3.1030.0
         version: 3.1030.0
+      drizzle-orm:
+        specifier: ~0.45.2
+        version: 0.45.2(postgres@3.4.9)
       luxon:
         specifier: ~3.7.2
         version: 3.7.2

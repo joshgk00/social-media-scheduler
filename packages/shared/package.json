@@ -28,6 +28,10 @@
     "./tokens": {
       "types": "./dist/tokens/index.d.ts",
       "import": "./dist/tokens/index.js"
+    },
+    "./rate-limit/loaders": {
+      "types": "./dist/rate-limit/loaders.d.ts",
+      "import": "./dist/rate-limit/loaders.js"
     }
   },
   "scripts": {
@@ -37,6 +41,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "~3.1030.0",
+    "drizzle-orm": "~0.45.2",
     "luxon": "~3.7.2",
     "pino": "~10.3.1",
     "twitter-api-v2": "~1.29.0",
