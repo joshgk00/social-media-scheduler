@@ -1,0 +1,2 @@
+text,queue_name,position,tags,spinnable,auto_destruct_after,notes
+Evergreen queue post,Example Queue,1,evergreen;tips,false,7d,Example queued post
