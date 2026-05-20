@@ -10,7 +10,8 @@ import { requireAuth } from '../middleware/auth-guard.js';
 import { bulkOperationsLimiter } from '../middleware/rate-limiter.js';
 import { csvUpload } from '../middleware/csv-upload.js';
 import { checkBulkBudgetWithDb } from '../services/rate-limit.service.js';
-import { parseCsvBuffer, writeErrorReport } from '../services/bulk-import.service.js';
+import { CsvParseError, parseCsvBuffer, writeErrorReport } from '../services/bulk-import.service.js';
+import type { CsvRowError } from '../services/bulk-import.service.js';
 import type { BulkOpsQueueService } from '../services/bulk-ops-queue.service.js';
 
 interface BulkImportRouterDeps {
@@ -28,6 +29,45 @@ function parseIdempotencyKey(rawHeader: string | undefined): string | null {
   if (rawHeader === undefined) return randomUUID();
   const idempotencyKey = rawHeader.trim();
   return UUID_PATTERN.test(idempotencyKey) ? idempotencyKey : null;
+}
+
+function csvValidationDetails(errors: CsvRowError[]) {
+  return errors.slice(0, 10).map((error) => ({
+    rowNumber: error.rowNumber,
+    reason: error.reason,
+  }));
+}
+
+export function buildCsvValidationFailure(parsedCsv: { rows: unknown[]; errors: CsvRowError[] }) {
+  if (parsedCsv.errors.length > 0) {
+    return {
+      error: 'CSV validation failed',
+      code: 'csv_validation_failed',
+      errorCount: parsedCsv.errors.length,
+      details: csvValidationDetails(parsedCsv.errors),
+    };
+  }
+
+  if (parsedCsv.rows.length === 0) {
+    return {
+      error: 'CSV validation failed',
+      code: 'csv_validation_failed',
+      errorCount: 0,
+      details: [{ reason: 'CSV must include at least one data row.' }],
+    };
+  }
+
+  return null;
+}
+
+function rejectInvalidCsv(res: Response, parsedCsv: { rows: unknown[]; errors: CsvRowError[] }): boolean {
+  const failure = buildCsvValidationFailure(parsedCsv);
+  if (failure) {
+    res.status(400).json(failure);
+    return true;
+  }
+
+  return false;
 }
 
 export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRouterDeps): Router {
@@ -87,6 +127,9 @@ export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRo
       const parsedCsv = target === 'scheduled'
         ? await parseCsvBuffer(req.file.buffer, csvScheduledRowSchema)
         : await parseCsvBuffer(req.file.buffer, csvQueueRowSchema);
+      if (rejectInvalidCsv(res, parsedCsv)) {
+        return;
+      }
 
       let queueName: string | null = null;
       if (target === 'queue') {
@@ -209,6 +252,14 @@ export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRo
   router.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
       res.status(413).json({ error: 'CSV file exceeds 10 MB limit' });
+      return;
+    }
+    if (err instanceof CsvParseError) {
+      res.status(400).json({
+        error: 'CSV parse failed',
+        code: err.code,
+        details: [{ reason: err.message }],
+      });
       return;
     }
     if (err instanceof Error && err.message.includes('row limit')) {

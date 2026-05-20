@@ -22,6 +22,24 @@ describe('bulk CSV import service', () => {
     ]);
   });
 
+  it('collects row-level schema errors instead of throwing', async () => {
+    const csv = Buffer.from('text,scheduled_at\nhello,not-a-date\n', 'utf8');
+
+    const result = await parseCsvBuffer(csv, z.object({
+      text: z.string().min(1),
+      scheduled_at: z.string().datetime({ offset: true }),
+    }).strict());
+
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toEqual([
+      {
+        rowNumber: 2,
+        reason: 'scheduled_at: Invalid datetime',
+        row: { text: 'hello', scheduled_at: 'not-a-date' },
+      },
+    ]);
+  });
+
   it('rejects non-UUID bulk operation ids for error reports', async () => {
     await expect(writeErrorReport('/tmp', '../escape', [
       { rowNumber: 2, reason: '=boom', row: { text: '=boom' } },

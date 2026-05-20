@@ -20,6 +20,8 @@ Top-of-queue. An automated workflow should pull from here first.
 
 ### P0 — Production blockers
 
+- [ ] **gh#95** — Import Posts template download links do not provide CSV templates
+- [ ] **gh#96** — CSV import failures return 500 and hidden toast instead of visible validation errors
 - [x] **gh#54** — Profile edit returns 500 (`Couldn't save profile: Internal server error`) *(merged in #77 / 93510a0)*
 - [x] **gh#53** — Profile delete returns 500 (`Couldn't delete profile: Internal server error`) *(merged in cbde4a0)*
 - [x] **gh#49** — Prod docker-compose.yml doesn't pass OAuth/notification env vars to api+worker containers
