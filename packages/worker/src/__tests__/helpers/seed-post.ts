@@ -17,6 +17,9 @@ export interface SeedPostOverrides {
   postVersion?: number;
   platformPostId?: string | null;
   profileId?: string | null;
+  platform?: string | null;
+  visibility?: string | null;
+  linkUrl?: string | null;
   scheduledAt?: Date;
 }
 
@@ -28,6 +31,9 @@ export interface SeededLockedPost {
   post_version: number;
   platform_post_id: string | null;
   profile_id: string | null;
+  platform: string | null;
+  visibility: string | null;
+  link_url: string | null;
 }
 
 export function seedLockedPost(overrides: SeedPostOverrides = {}): SeededLockedPost {
@@ -39,6 +45,9 @@ export function seedLockedPost(overrides: SeedPostOverrides = {}): SeededLockedP
     post_version: overrides.postVersion ?? 1,
     platform_post_id: overrides.platformPostId ?? null,
     profile_id: overrides.profileId ?? 'profile_00000000-0000-0000-0000-000000000001',
+    platform: overrides.platform ?? 'twitter',
+    visibility: overrides.visibility ?? null,
+    link_url: overrides.linkUrl ?? null,
   };
 }
 

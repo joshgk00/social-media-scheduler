@@ -24,10 +24,6 @@
     "./storage": {
       "types": "./dist/storage/index.d.ts",
       "import": "./dist/storage/index.js"
-    },
-    "./lib/error-classifier": {
-      "types": "./dist/lib/error-classifier.d.ts",
-      "import": "./dist/lib/error-classifier.js"
     }
   },
   "scripts": {

@@ -3,7 +3,7 @@
 // verify DB state (post status, platform_post_id, post_attempts rows).
 //
 // Uses real Postgres + Redis testcontainers with Drizzle migrations applied.
-// The Twitter HTTP layer is replaced by injecting a mock callTwitter
+// The Twitter HTTP layer is replaced by injecting a mock publisher
 // implementation via the handler's dependency injection.
 //
 // Covers: WORKER-04, WORKER-05, WORKER-06, SCHED-04, LIMIT-03
@@ -13,7 +13,7 @@ import { Queue, Worker, UnrecoverableError } from 'bullmq';
 import { eq, sql, and, gte, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { users, socialProfiles, posts, postAttempts } from '@sms/db';
-import { QUEUE_NAMES, JOB_NAMES, buildPublishJobId } from '@sms/shared';
+import { PublishFailure, QUEUE_NAMES, JOB_NAMES, buildPublishJobId } from '@sms/shared';
 import { startTestEnv, type TestEnv } from '../helpers/testcontainer.js';
 import {
   createPublishHandler,
@@ -21,7 +21,6 @@ import {
   type PublishJobResult,
   type PublishHandlerDeps,
 } from '../../publish-worker.js';
-import { buildApiResponseError } from '../helpers/mock-twitter.js';
 
 let env: TestEnv;
 let publishQueue: Queue<PublishJobPayload>;
@@ -83,13 +82,13 @@ async function seedPost(overrides: Partial<typeof posts.$inferInsert> = {}) {
 }
 
 function buildWorkerWithMockedTwitter(
-  twitterMock: PublishHandlerDeps['callTwitterImpl'],
+  twitterMock: ReturnType<typeof vi.fn>,
   budgetMock?: PublishHandlerDeps['checkBudgetImpl'],
 ): Worker<PublishJobPayload, PublishJobResult> {
   const handler = createPublishHandler({
     db: env.db,
     notificationQueue,
-    callTwitterImpl: twitterMock,
+    publishers: { twitter: { publish: twitterMock } },
     checkBudgetImpl: budgetMock,
   });
 
@@ -224,7 +223,12 @@ describe('post-lifecycle integration', () => {
     const twitterMock = vi.fn().mockImplementation(async () => {
       callCount++;
       if (callCount <= 2) {
-        throw buildApiResponseError({ httpStatus: 503, message: 'Service Unavailable' });
+        throw new PublishFailure({
+          kind: 'transient',
+          errorCode: 'http_503',
+          message: 'Service Unavailable',
+          httpStatus: 503,
+        });
       }
       return { platformPostId: tweetId };
     });
@@ -236,7 +240,7 @@ describe('post-lifecycle integration', () => {
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
-      callTwitterImpl: twitterMock,
+      publishers: { twitter: { publish: twitterMock } },
     });
 
     // Simulate 3 attempts manually against the handler
@@ -287,13 +291,19 @@ describe('post-lifecycle integration', () => {
     const postId = await seedPost({ text: 'Auth failure tweet' });
 
     const twitterMock = vi.fn().mockRejectedValue(
-      buildApiResponseError({ httpStatus: 401, message: 'Unauthorized' }),
+      new PublishFailure({
+        kind: 'permanent',
+        errorCode: 'auth_revoked',
+        message:
+          'Twitter credentials are no longer valid - please reconnect the profile',
+        httpStatus: 401,
+      }),
     );
 
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
-      callTwitterImpl: twitterMock,
+      publishers: { twitter: { publish: twitterMock } },
     });
 
     const fakeJob = {
@@ -367,7 +377,7 @@ describe('post-lifecycle integration', () => {
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
-      callTwitterImpl: twitterMock,
+      publishers: { twitter: { publish: twitterMock } },
     });
 
     const fakeJob = {
