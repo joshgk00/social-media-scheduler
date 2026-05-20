@@ -1,1 +1,128 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-76-c77755017c_28c671c944","featureId":"feat_gh-76_f5b6620cc4","title":"gh#76: R6.1 — Push rate-limit DB loaders to @sms/shared/rate-limit/loaders.ts","category":"security","severity":"high","confidence":"high","triage":"confirmed-bug","evidence":[{"path":"packages/api/src/index.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/rate-limit/check-budget.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/rate-limit/loaders.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/package.json","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/api/src/services/rate-limit.service.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/worker/src/rate-limit.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/76.\nBacklog section: Candidate 6 — Rate-limit loader dedupe.\n\n## Context\n\nCandidate 6 closes the deliberate duplication between `api/services/rate-limit.service.ts` and `worker/rate-limit.ts`. Both files have *identical* loader functions (`loadTwitterUsage` ≡ `loadWorkerUsage`, plus the LinkedIn / Facebook window loaders). The worker comment explicitly says: *\"We deliberately duplicate this read logic instead of importing from `@sms/api` (revision Blocker 4)\"*.\n\nThe pure budget calculator already lives in `@sms/shared/rate-limit/check-budget.ts`. This PR moves the loaders alongside.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 6.\n\n## Scope\n\n- Add `packages/shared/src/rate-limit/loaders.ts`:\n  - `loadTwitterUsage(db: Db | WorkerDb, profileId, now?): Promise<UsageSnapshot>`\n  - `loadLinkedInWindowUsage(db, profileId, now?): Promise<PlatformWindowSnapshot>`\n  - `loadFacebookWindowUsage(db, profileId, now?): Promise<PlatformWindowSnapshot>`\n  - Loaders accept the union `Db | WorkerDb` so both packages can call them\n- `@sms/shared/package.json` gains `drizzle-orm` as a runtime dep (currently only a transitive type-import). This is consistent with the principle recorded in ADR-0007: shared MAY have drizzle for inherently I/O-bound utilities, but NOT for pure domain logic (the Post aggregate stays pure)\n- Switch `packages/api/src/services/rate-limit.service.ts`:\n  - Delete `loadTwitterUsage`, `loadLinkedInUsage`, `loadFacebookUsage` (now imported from shared)\n  - `checkTwitterBudgetWithDb`, `checkLinkedInBudgetWithDb`, `checkFacebookBudgetWithDb` keep their existing shape but compose the shared loader\n- Switch `packages/worker/src/rate-limit.ts`:\n  - Delete `loadWorkerUsage`, `loadLinkedInWindowUsage`, `loadFacebookWindowUsage`\n  - `checkBudgetForWorker`, `checkLinkedInBudgetForWorker`, `checkFacebookBudgetForWorker` compose the shared loader\n  - Delete the local `COUNTED_STATUSES` constant — now lives in shared loader\n  - Remove the *\"We deliberately duplicate\"* doc comment (now obsolete)\n- Update existing tests — most should keep working, may need to import paths updated\n\n## Out of scope\n\n- Restructuring the pure calculator (`check-budget.ts`) — it already lives in shared and is well-shaped\n- Changing the budget-check API (the `checkXBudgetWithDb` wrappers stay package-local, only loaders move)\n- LinkedIn/Facebook usage loaders in `api/services/rate-limit.service.ts` that aren't duplicated (verify with diff — keep package-local if no worker counterpart)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- `rg \"publishedCount: sql<number>\\`count\" packages/api packages/worker --type ts` returns matches only in shared (the count-loading SQL now lives in one place)\n- The `COUNTED_STATUSES` array exists in exactly one file (`@sms/shared/rate-limit/loaders.ts`)\n\n## References\n\n- ADRs: [0007](../blob/main/docs/adr/0007-drizzle-in-shared-allowed-for-io-utilities-not-pure-logic.md)\n- Depends on: nothing (independent of other candidates)","reproduction":"Candidate 6 closes the deliberate duplication between `api/services/rate-limit.service.ts` and `worker/rate-limit.ts`. Both files have *identical* loader functions (`loadTwitterUsage` ≡ `loadWorkerUsage`, plus the LinkedIn / Facebook window loaders). The worker comment explicitly says: *\"We deliberately duplicate this read logic instead of importing from `@sms/api` (revision Blocker 4)\"*.\n\nThe pure budget calculator already lives in `@sms/shared/rate-limit/check-budget.ts`. This PR moves the loaders alongside.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 6.","recommendation":"- Add `packages/shared/src/rate-limit/loaders.ts`:\n  - `loadTwitterUsage(db: Db | WorkerDb, profileId, now?): Promise<UsageSnapshot>`\n  - `loadLinkedInWindowUsage(db, profileId, now?): Promise<PlatformWindowSnapshot>`\n  - `loadFacebookWindowUsage(db, profileId, now?): Promise<PlatformWindowSnapshot>`\n  - Loaders accept the union `Db | WorkerDb` so both packages can call them\n- `@sms/shared/package.json` gains `drizzle-orm` as a runtime dep (currently only a transitive type-import). This is consistent with the principle recorded in ADR-0007: shared MAY have drizzle for inherently I/O-bound utilities, but NOT for pure domain logic (the Post aggregate stays pure)\n- Switch `packages/api/src/services/rate-limit.service.ts`:\n  - Delete `loadTwitterUsage`, `loadLinkedInUsage`, `loadFacebookUsage` (now imported from shared)\n  - `checkTwitterBudgetWithDb`, `checkLinkedInBudgetWithDb`, `checkFacebookBudgetWithDb` keep their existing shape but compose the shared loader\n- Switch `packages/worker/src/rate-limit.ts`:\n  - Delete `loadWorkerUsage`, `loadLinkedInWindowUsage`, `loadFacebookWindowUsage`\n  - `checkBudgetForWorker`, `checkLinkedInBudgetForWorker`, `checkFacebookBudgetForWorker` compose the shared loader\n  - Delete the local `COUNTED_STATUSES` constant — now lives in shared loader\n  - Remove the *\"We deliberately duplicate\"* doc comment (now obsolete)\n- Update existing tests — most should keep working, may need to import paths updated","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- `rg \"publishedCount: sql<number>\\`count\" packages/api packages/worker --type ts` returns matches only in shared (the count-loading SQL now lives in one place)\n- The `COUNTED_STATUSES` array exists in exactly one file (`@sms/shared/rate-limit/loaders.ts`)","minimumFixScope":"packages/api/src/index.ts, packages/shared/src/rate-limit/check-budget.ts, packages/shared/src/rate-limit/loaders.ts, packages/shared/src/package.json, packages/api/src/services/rate-limit.service.ts, packages/worker/src/rate-limit.ts","status":"open","history":[],"signature":"sig_gh-76_c77755017c","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-76-c77755017c_28c671c944",
+  "featureId": "feat_gh-76_f5b6620cc4",
+  "title": "gh#76: R6.1 — Push rate-limit DB loaders to @sms/shared/rate-limit/loaders.ts",
+  "category": "security",
+  "severity": "high",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/api/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/rate-limit/check-budget.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/rate-limit/loaders.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/package.json",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/services/rate-limit.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/rate-limit.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/76.\nBacklog section: Candidate 6 — Rate-limit loader dedupe.\n\n## Context\n\nCandidate 6 closes the deliberate duplication between `api/services/rate-limit.service.ts` and `worker/rate-limit.ts`. Both files have *identical* loader functions (`loadTwitterUsage` ≡ `loadWorkerUsage`, plus the LinkedIn / Facebook window loaders). The worker comment explicitly says: *\"We deliberately duplicate this read logic instead of importing from `@sms/api` (revision Blocker 4)\"*.\n\nThe pure budget calculator already lives in `@sms/shared/rate-limit/check-budget.ts`. This PR moves the loaders alongside.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 6.\n\n## Scope\n\n- Add `packages/shared/src/rate-limit/loaders.ts`:\n  - `loadTwitterUsage(db: Db | WorkerDb, profileId, now?): Promise<UsageSnapshot>`\n  - `loadLinkedInWindowUsage(db, profileId, now?): Promise<PlatformWindowSnapshot>`\n  - `loadFacebookWindowUsage(db, profileId, now?): Promise<PlatformWindowSnapshot>`\n  - Loaders accept the union `Db | WorkerDb` so both packages can call them\n- `@sms/shared/package.json` gains `drizzle-orm` as a runtime dep (currently only a transitive type-import). This is consistent with the principle recorded in ADR-0007: shared MAY have drizzle for inherently I/O-bound utilities, but NOT for pure domain logic (the Post aggregate stays pure)\n- Switch `packages/api/src/services/rate-limit.service.ts`:\n  - Delete `loadTwitterUsage`, `loadLinkedInUsage`, `loadFacebookUsage` (now imported from shared)\n  - `checkTwitterBudgetWithDb`, `checkLinkedInBudgetWithDb`, `checkFacebookBudgetWithDb` keep their existing shape but compose the shared loader\n- Switch `packages/worker/src/rate-limit.ts`:\n  - Delete `loadWorkerUsage`, `loadLinkedInWindowUsage`, `loadFacebookWindowUsage`\n  - `checkBudgetForWorker`, `checkLinkedInBudgetForWorker`, `checkFacebookBudgetForWorker` compose the shared loader\n  - Delete the local `COUNTED_STATUSES` constant — now lives in shared loader\n  - Remove the *\"We deliberately duplicate\"* doc comment (now obsolete)\n- Update existing tests — most should keep working, may need to import paths updated\n\n## Out of scope\n\n- Restructuring the pure calculator (`check-budget.ts`) — it already lives in shared and is well-shaped\n- Changing the budget-check API (the `checkXBudgetWithDb` wrappers stay package-local, only loaders move)\n- LinkedIn/Facebook usage loaders in `api/services/rate-limit.service.ts` that aren't duplicated (verify with diff — keep package-local if no worker counterpart)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- `rg \"publishedCount: sql<number>\\`count\" packages/api packages/worker --type ts` returns matches only in shared (the count-loading SQL now lives in one place)\n- The `COUNTED_STATUSES` array exists in exactly one file (`@sms/shared/rate-limit/loaders.ts`)\n\n## References\n\n- ADRs: [0007](../blob/main/docs/adr/0007-drizzle-in-shared-allowed-for-io-utilities-not-pure-logic.md)\n- Depends on: nothing (independent of other candidates)",
+  "reproduction": "Candidate 6 closes the deliberate duplication between `api/services/rate-limit.service.ts` and `worker/rate-limit.ts`. Both files have *identical* loader functions (`loadTwitterUsage` ≡ `loadWorkerUsage`, plus the LinkedIn / Facebook window loaders). The worker comment explicitly says: *\"We deliberately duplicate this read logic instead of importing from `@sms/api` (revision Blocker 4)\"*.\n\nThe pure budget calculator already lives in `@sms/shared/rate-limit/check-budget.ts`. This PR moves the loaders alongside.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 6.",
+  "recommendation": "- Add `packages/shared/src/rate-limit/loaders.ts`:\n  - `loadTwitterUsage(db: Db | WorkerDb, profileId, now?): Promise<UsageSnapshot>`\n  - `loadLinkedInWindowUsage(db, profileId, now?): Promise<PlatformWindowSnapshot>`\n  - `loadFacebookWindowUsage(db, profileId, now?): Promise<PlatformWindowSnapshot>`\n  - Loaders accept the union `Db | WorkerDb` so both packages can call them\n- `@sms/shared/package.json` gains `drizzle-orm` as a runtime dep (currently only a transitive type-import). This is consistent with the principle recorded in ADR-0007: shared MAY have drizzle for inherently I/O-bound utilities, but NOT for pure domain logic (the Post aggregate stays pure)\n- Switch `packages/api/src/services/rate-limit.service.ts`:\n  - Delete `loadTwitterUsage`, `loadLinkedInUsage`, `loadFacebookUsage` (now imported from shared)\n  - `checkTwitterBudgetWithDb`, `checkLinkedInBudgetWithDb`, `checkFacebookBudgetWithDb` keep their existing shape but compose the shared loader\n- Switch `packages/worker/src/rate-limit.ts`:\n  - Delete `loadWorkerUsage`, `loadLinkedInWindowUsage`, `loadFacebookWindowUsage`\n  - `checkBudgetForWorker`, `checkLinkedInBudgetForWorker`, `checkFacebookBudgetForWorker` compose the shared loader\n  - Delete the local `COUNTED_STATUSES` constant — now lives in shared loader\n  - Remove the *\"We deliberately duplicate\"* doc comment (now obsolete)\n- Update existing tests — most should keep working, may need to import paths updated",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- `pnpm --filter @sms/worker build` and test pass\n- `rg \"publishedCount: sql<number>\\`count\" packages/api packages/worker --type ts` returns matches only in shared (the count-loading SQL now lives in one place)\n- The `COUNTED_STATUSES` array exists in exactly one file (`@sms/shared/rate-limit/loaders.ts`)",
+  "minimumFixScope": "packages/api/src/index.ts, packages/shared/src/rate-limit/check-budget.ts, packages/shared/src/rate-limit/loaders.ts, packages/shared/src/package.json, packages/api/src/services/rate-limit.service.ts, packages/worker/src/rate-limit.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T212455-46f94f",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "Current evidence still matches the finding. `packages/shared/src/rate-limit/loaders.ts` does not exist; `find packages/shared/src/rate-limit -maxdepth 1 -type f -print` shows only `check-budget.ts`. The package metadata path in the finding, `packages/shared/src/package.json`, is stale/nonexistent, and the real `packages/shared/package.json` still has no `drizzle-orm` dependency. The duplicated DB loader logic remains in both places: `packages/api/src/services/rate-limit.service.ts` still defines `COUNTED_STATUSES`, `loadTwitterUsage`, `loadLinkedInUsage`, and `loadFacebookUsage`, including the `publishedCount: sql<number>` count query; `packages/worker/src/rate-limit.ts` still defines its own `COUNTED_STATUSES`, `loadWorkerUsage`, `loadLinkedInWindowUsage`, and `loadFacebookWindowUsage`, and still contains the obsolete 'We deliberately duplicate this read logic' comment. The acceptance grep returns matches in api and worker, not shared. Typecheck evidence: `pnpm --filter @sms/shared typecheck` passes; `@sms/api` and `@sms/worker` typechecks currently fail on unrelated files (`post-crud.service.ts` and `post-lifecycle.impl.ts`), so the requested package acceptance gates are not clean, but the static evidence is sufficient to classify this issue as still open.",
+      "commands": [
+        "rg --files packages/api/src packages/shared/src packages/worker/src | sort",
+        "sed -n '1,260p' packages/api/src/services/rate-limit.service.ts",
+        "sed -n '1,260p' packages/worker/src/rate-limit.ts",
+        "test -f packages/shared/src/rate-limit/loaders.ts && sed -n '1,260p' packages/shared/src/rate-limit/loaders.ts || true",
+        "sed -n '1,220p' packages/shared/src/rate-limit/check-budget.ts",
+        "sed -n '1,180p' packages/shared/package.json",
+        "rg -n -e 'COUNTED_STATUSES' -e 'loadTwitterUsage' -e 'loadWorkerUsage' -e 'loadLinkedInUsage' -e 'loadLinkedInWindowUsage' -e 'loadFacebookUsage' -e 'loadFacebookWindowUsage' -e 'publishedCount: sql<number>`count' -e 'We deliberately duplicate' packages/api packages/shared packages/worker --type ts",
+        "find packages/shared/src/rate-limit -maxdepth 1 -type f -print",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/worker typecheck"
+      ],
+      "createdAt": "2026-05-20T21:26:08.101Z"
+    },
+    {
+      "runId": "20260520T213429-489c40",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "Current code shows the finding has been addressed. `packages/shared/src/rate-limit/loaders.ts` now exists and defines `loadTwitterUsage`, `loadLinkedInWindowUsage`, `loadFacebookWindowUsage`, and the sole `COUNTED_STATUSES`. `packages/shared/package.json` exports `./rate-limit/loaders` and has `drizzle-orm` as a runtime dependency; the original `packages/shared/src/package.json` evidence path is stale/nonexistent. `packages/api/src/services/rate-limit.service.ts` and `packages/worker/src/rate-limit.ts` now import the shared loaders instead of defining duplicate DB loaders, and the obsolete worker duplication comment is gone. Searches for the counted-status constant and rate-limit DB fields show the loader SQL now lives in shared, not in api/worker. Typecheck and targeted test commands were attempted, but this workspace install is incomplete: package scripts fail because `tsc` and `vitest` are not linked/found, and the `.pnpm` package dirs checked are empty, so dynamic verification could not run. Static current-code evidence satisfies the acceptance criteria.",
+      "commands": [
+        "pwd && rg --files packages/api/src packages/shared packages/worker/src | sort",
+        "rg -n -e 'COUNTED_STATUSES' -e 'loadTwitterUsage' -e 'loadWorkerUsage' -e 'loadLinkedInUsage' -e 'loadLinkedInWindowUsage' -e 'loadFacebookUsage' -e 'loadFacebookWindowUsage' -e 'publishedCount: sql<number>`count' -e 'We deliberately duplicate' packages/api packages/shared packages/worker --type ts",
+        "test -f packages/shared/src/rate-limit/loaders.ts && sed -n '1,260p' packages/shared/src/rate-limit/loaders.ts; test -f packages/shared/src/package.json && sed -n '1,160p' packages/shared/src/package.json; sed -n '1,200p' packages/shared/package.json",
+        "sed -n '1,260p' packages/api/src/services/rate-limit.service.ts",
+        "sed -n '1,220p' packages/worker/src/rate-limit.ts",
+        "sed -n '1,220p' packages/shared/src/rate-limit/check-budget.ts && sed -n '1,140p' packages/shared/src/index.ts",
+        "find packages/shared/src/rate-limit -maxdepth 1 -type f -print | sort",
+        "rg -n 'publishedCount: sql<number>`count' packages/api packages/worker packages/shared --type ts",
+        "rg -n 'COUNTED_STATUSES' packages/api packages/worker packages/shared --type ts",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/worker typecheck",
+        "pnpm --filter @sms/api test -- --run packages/api/src/services/__tests__/rate-limit.service.test.ts",
+        "pnpm --filter @sms/worker test -- --run packages/worker/src/__tests__/rate-limit.test.ts",
+        "pnpm --filter @sms/shared test -- --run packages/shared/src/__tests__/check-budget.test.ts",
+        "ls -la node_modules packages/shared/node_modules packages/api/node_modules packages/worker/node_modules 2>/dev/null",
+        "rg -n -e 'published_at >=' -e 'monthly_tweet_budget' -e 'linkedin_daily_limit' -e 'facebook_hourly_limit' -e 'linkedin_daily_count' -e 'facebook_hourly_count' -e 'status in \\(' packages/api/src packages/worker/src packages/shared/src --type ts",
+        "sed -n '1,220p' packages/api/src/services/__tests__/rate-limit.service.test.ts",
+        "sed -n '1,160p' packages/worker/src/__tests__/rate-limit.test.ts",
+        "sed -n '1,160p' package.json && sed -n '1,160p' pnpm-workspace.yaml",
+        "find node_modules/.pnpm -maxdepth 1 -type d \\( -name 'typescript@*' -o -name 'vitest@*' \\) | sort | head -20",
+        "ls -la node_modules/.bin 2>/dev/null || true",
+        "node node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsc --noEmit -p packages/shared/tsconfig.json",
+        "node node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsc --noEmit -p packages/api/tsconfig.json",
+        "node node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsc --noEmit -p packages/worker/tsconfig.json",
+        "find node_modules/.pnpm/typescript@5.9.3 -maxdepth 3 -type f | head -20",
+        "find node_modules/.pnpm/vitest@4.1.3_* -maxdepth 3 -type f | head -20"
+      ],
+      "createdAt": "2026-05-20T21:36:13.791Z"
+    }
+  ],
+  "signature": "sig_gh-76_c77755017c",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-76-c77755017c-28c671c_f1fda97384"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T21:36:13.791Z"
+}
