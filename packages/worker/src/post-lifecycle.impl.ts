@@ -76,7 +76,7 @@ const GRACEFUL_LIFECYCLE_ABORTS = new Set<PostInvariantError['kind']>([
 ]);
 
 function lifecycleAbort(kind: PostInvariantError['kind'], message?: string): PostLifecycleAbort {
-  return new PostLifecycleAbort(new PostInvariantError(kind, message));
+  return new PostLifecycleAbort(new PostInvariantError(kind, message ?? kind));
 }
 
 function postInvariantToLifecycleAbort(err: PostInvariantError): PostLifecycleAbort {
