@@ -281,7 +281,9 @@ changed_source_paths() {
   local path
   local seen_path
   local already_seen
+  local index
   local -a seen_paths=()
+  local seen_paths_count=0
 
   while IFS= read -r -d '' path; do
     if ! include_stage_path "$path"; then
@@ -289,7 +291,8 @@ changed_source_paths() {
     fi
 
     already_seen=0
-    for seen_path in "${seen_paths[@]}"; do
+    for ((index = 0; index < seen_paths_count; index += 1)); do
+      seen_path="${seen_paths[$index]}"
       if [[ "$seen_path" == "$path" ]]; then
         already_seen=1
         break
@@ -300,7 +303,8 @@ changed_source_paths() {
       continue
     fi
 
-    seen_paths+=("$path")
+    seen_paths[$seen_paths_count]="$path"
+    seen_paths_count=$((seen_paths_count + 1))
     printf '%s\0' "$path"
   done < <(
     git diff --name-only -z
