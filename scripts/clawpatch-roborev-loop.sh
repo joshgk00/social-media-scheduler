@@ -340,7 +340,11 @@ handle_finding_failure() {
     exit 6
   fi
 
-  stash_failed_work "$finding_id"
+  if ! stash_failed_work "$finding_id"; then
+    echo "failed to stash failed work for $finding_id; stopping to avoid a contaminated worktree" >&2
+    exit 6
+  fi
+
   return 0
 }
 
@@ -366,6 +370,7 @@ wait_for_review_or_repair() {
 
     if [[ "$review_status" -eq 124 ]]; then
       echo "RoboRev review timed out for $review_sha after ${REVIEW_TIMEOUT_SECONDS}s" >&2
+      return 8
     fi
 
     echo "RoboRev found issues for $review_sha" >&2
