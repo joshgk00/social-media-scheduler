@@ -16,6 +16,11 @@ interface FacebookPostFieldsProps {
   onRemoveMedia: (id: string) => void;
   onReorderMedia: (ids: string[]) => void;
   onRetryTranscode: (id: string) => void;
+  onMediaStatusUpdate?: (
+    id: string,
+    status: MediaItem['transcodeStatus'],
+    error: string | null,
+  ) => void;
   disabled?: boolean;
 }
 
@@ -36,6 +41,7 @@ export function FacebookPostFields({
   onRemoveMedia,
   onReorderMedia,
   onRetryTranscode,
+  onMediaStatusUpdate,
   disabled,
 }: FacebookPostFieldsProps) {
   return (
@@ -80,6 +86,7 @@ export function FacebookPostFields({
             onRemove={onRemoveMedia}
             onReorder={onReorderMedia}
             onRetryTranscode={onRetryTranscode}
+            onStatusUpdate={onMediaStatusUpdate}
             readOnly={false}
           />
         )}

@@ -24,6 +24,11 @@ interface TwitterPostFieldsProps {
   onRemoveMedia: (id: string) => void;
   onReorderMedia: (ids: string[]) => void;
   onRetryTranscode: (id: string) => void;
+  onMediaStatusUpdate?: (
+    id: string,
+    status: MediaItem['transcodeStatus'],
+    error: string | null,
+  ) => void;
   disabled?: boolean;
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
 }
@@ -50,6 +55,7 @@ export function TwitterPostFields({
   onRemoveMedia,
   onReorderMedia,
   onRetryTranscode,
+  onMediaStatusUpdate,
   disabled,
   textareaRef,
 }: TwitterPostFieldsProps) {
@@ -102,6 +108,7 @@ export function TwitterPostFields({
           onRemove={onRemoveMedia}
           onReorder={onReorderMedia}
           onRetryTranscode={onRetryTranscode}
+          onStatusUpdate={onMediaStatusUpdate}
           readOnly={false}
         />
       )}
