@@ -1,5 +1,5 @@
 import { eq, and, sql, inArray, gte, lte, ne, count as drizzleCount, isNull, type SQL } from 'drizzle-orm';
-import { AppError, EDITABLE_STATES, DELETABLE_STATES, transitionPost } from '@sms/shared';
+import { AppError, DELETABLE_STATES, PostInvariantError, planUpdate } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
@@ -71,6 +71,38 @@ export class PostServiceError extends AppError {
     this.name = 'PostServiceError';
     this.code = code;
   }
+}
+
+const postInvariantHttpStatus: Record<PostInvariantError['kind'], number> = {
+  platform_mismatch: 400,
+  platform_immutable: 409,
+  not_editable: 409,
+  invalid_transition: 409,
+  version_mismatch: 409,
+  scheduled_at_required: 400,
+  scheduled_at_must_be_future: 400,
+  not_deletable: 409,
+  tag_not_found: 400,
+  thread_unsupported: 400,
+  media_pending: 409,
+  budget_exhausted: 409,
+  rate_limit_exhausted: 429,
+  token_unhealthy: 409,
+  already_published: 409,
+  not_scheduled: 409,
+};
+
+const postInvariantErrorCode: Partial<Record<PostInvariantError['kind'], string>> = {
+  platform_mismatch: 'PLATFORM_MISMATCH',
+  platform_immutable: 'PLATFORM_IMMUTABLE',
+};
+
+function toPostServiceError(err: PostInvariantError): PostServiceError {
+  return new PostServiceError(
+    err.message,
+    postInvariantHttpStatus[err.kind],
+    postInvariantErrorCode[err.kind],
+  );
 }
 
 export async function createPost(db: Db, userId: string, input: CreatePostInput) {
@@ -164,25 +196,6 @@ export async function updatePost(
   postId: string,
   input: UpdatePostInput,
 ) {
-  const updateFields: Record<string, unknown> = {
-    postVersion: sql`${posts.postVersion} + 1`,
-    updatedAt: new Date(),
-  };
-
-  if (input.text !== undefined) updateFields.text = input.text;
-  if (input.isThread !== undefined) updateFields.isThread = input.isThread;
-  if (input.status !== undefined) updateFields.status = input.status;
-  if (input.scheduledAt !== undefined) {
-    updateFields.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
-  }
-  if (input.hasSpinnableText !== undefined) updateFields.hasSpinnableText = input.hasSpinnableText;
-  if (input.autoDestructAfter !== undefined) updateFields.autoDestructAfter = input.autoDestructAfter;
-  if (input.notes !== undefined) updateFields.notes = input.notes;
-  // Phase 8: per-platform optional fields. Only persisted when the caller
-  // explicitly passed a value — undefined means "leave existing alone".
-  if (input.visibility !== undefined) updateFields.visibility = input.visibility;
-  if (input.linkUrl !== undefined) updateFields.linkUrl = input.linkUrl;
-
   await db.transaction(async (tx) => {
     const existingRows = await tx
       .select({
@@ -201,66 +214,43 @@ export async function updatePost(
 
     const existingPost = existingRows[0];
 
-    // T-DATA-01 invariant 2: posts.platform is immutable. Reject any update
-    // payload whose platform differs from the persisted value. (When the
-    // caller omits platform — e.g. legacy code paths — we leave the existing
-    // value alone.)
-    if (input.platform && input.platform !== existingPost.platform) {
-      throw new PostServiceError(
-        `Cannot change post platform from '${existingPost.platform}' to '${input.platform}'.`,
-        409,
-        'PLATFORM_IMMUTABLE',
+    let plannedPatch: ReturnType<typeof planUpdate>;
+    try {
+      plannedPatch = planUpdate(
+        {
+          status: existingPost.status as PostStatus,
+          postVersion: existingPost.postVersion,
+          scheduledAt: existingPost.scheduledAt,
+          platform: existingPost.platform as Platform,
+        },
+        input,
+        input.postVersion,
       );
-    }
-
-    if (!EDITABLE_STATES.includes(existingPost.status as PostStatus)) {
-      throw new PostServiceError(
-        'This post is currently being published and cannot be edited.',
-        409,
-      );
-    }
-
-    if (existingPost.postVersion !== input.postVersion) {
-      throw new PostServiceError(
-        'This post was modified elsewhere. Refresh to see the latest version.',
-        409,
-      );
-    }
-
-    if (input.status && input.status !== existingPost.status) {
-      try {
-        transitionPost(existingPost.status as PostStatus, input.status);
-      } catch {
-        throw new PostServiceError(
-          `Invalid state transition from '${existingPost.status}' to '${input.status}'.`,
-          409,
-        );
+    } catch (err) {
+      if (err instanceof PostInvariantError) {
+        throw toPostServiceError(err);
       }
+      throw err;
     }
 
-    const effectiveStatus = input.status ?? existingPost.status;
-    if (effectiveStatus === 'scheduled') {
-      const effectiveScheduledAt = input.scheduledAt !== undefined
-        ? input.scheduledAt
-        : (existingPost.scheduledAt?.toISOString() ?? null);
+    const updateFields: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
 
-      if (!effectiveScheduledAt) {
-        throw new PostServiceError('scheduledAt is required for scheduled posts.', 400);
-      }
-
-      // Only enforce future-date when the user is actively (re)scheduling.
-      // Editing a typo on a soon-to-publish post must not be blocked just because
-      // the existing scheduledAt drifted into the past between request submission
-      // and handling.
-      const scheduledAtChanged = input.scheduledAt !== undefined;
-      const statusChangedToScheduled = input.status === 'scheduled' && existingPost.status !== 'scheduled';
-
-      if (scheduledAtChanged || statusChangedToScheduled) {
-        if (new Date(effectiveScheduledAt) < new Date()) {
-          throw new PostServiceError('scheduledAt must be in the future.', 400);
-        }
-      }
+    if (plannedPatch.bumpVersion) {
+      updateFields.postVersion = sql`${posts.postVersion} + 1`;
     }
+    if (plannedPatch.text !== undefined) updateFields.text = plannedPatch.text;
+    if (plannedPatch.isThread !== undefined) updateFields.isThread = plannedPatch.isThread;
+    if (plannedPatch.status !== undefined) updateFields.status = plannedPatch.status;
+    if (plannedPatch.scheduledAt !== undefined) updateFields.scheduledAt = plannedPatch.scheduledAt;
+    if (plannedPatch.hasSpinnableText !== undefined) updateFields.hasSpinnableText = plannedPatch.hasSpinnableText;
+    if (plannedPatch.autoDestructAfter !== undefined) updateFields.autoDestructAfter = plannedPatch.autoDestructAfter;
+    if (plannedPatch.notes !== undefined) updateFields.notes = plannedPatch.notes;
+    // Phase 8: per-platform optional fields. Only persisted when the caller
+    // explicitly passed a value — undefined means "leave existing alone".
+    if (plannedPatch.visibility !== undefined) updateFields.visibility = plannedPatch.visibility;
+    if (plannedPatch.linkUrl !== undefined) updateFields.linkUrl = plannedPatch.linkUrl;
 
     // Atomic optimistic lock: include post_version in the WHERE clause so a
     // concurrent writer that bumped the version between our SELECT and UPDATE
