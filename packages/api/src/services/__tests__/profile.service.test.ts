@@ -7,21 +7,36 @@ import {
   getProfiles,
   updateProfileMetadata,
   getDeletePreview,
-  ProfileServiceError,
 } from '../profile.service.js';
 import { OAuthServiceError } from '../oauth.service.js';
+import type { TokenVault } from '../token-vault.service.js';
 
-const VALID_KEY = 'a'.repeat(64);
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 const PROFILE_ID = '22222222-2222-2222-2222-222222222222';
 
+function encrypted(label: string) {
+  return {
+    ciphertext: `${label}-ciphertext`,
+    iv: `${label}-iv`,
+    authTag: `${label}-auth-tag`,
+    version: 1,
+  };
+}
+
+const mockVault = {
+  sealTwitterCredentials: vi.fn(),
+  sealOAuth2AccessToken: vi.fn((token: string) => encrypted(`access-${token}`)),
+  sealOAuth2RefreshToken: vi.fn((token: string) => encrypted(`refresh-${token}`)),
+} satisfies TokenVault;
+
 describe('profile.service OAuth flows', () => {
   beforeEach(() => {
-    process.env.ENCRYPTION_KEY = VALID_KEY;
+    mockVault.sealTwitterCredentials.mockClear();
+    mockVault.sealOAuth2AccessToken.mockClear();
+    mockVault.sealOAuth2RefreshToken.mockClear();
   });
 
   afterEach(() => {
-    delete process.env.ENCRYPTION_KEY;
     vi.restoreAllMocks();
   });
 
@@ -50,7 +65,7 @@ describe('profile.service OAuth flows', () => {
         refreshToken: 'plain-refresh',
         tokenExpiresAt: new Date('2026-08-01T00:00:00Z'),
         refreshTokenExpiresAt: new Date('2027-04-01T00:00:00Z'),
-      });
+      }, mockVault);
 
       expect(result.profileId).toBe(PROFILE_ID);
       const payload = db._insertPayload as Record<string, unknown>;
@@ -89,7 +104,7 @@ describe('profile.service OAuth flows', () => {
         refreshToken: null,
         tokenExpiresAt: null,
         refreshTokenExpiresAt: null,
-      });
+      }, mockVault);
 
       const payload = db._insertPayload as Record<string, unknown>;
       expect(payload.oauth2RefreshTokenCiphertext).toBeNull();
@@ -121,30 +136,42 @@ describe('profile.service OAuth flows', () => {
           refreshToken: 'b',
           tokenExpiresAt: null,
           refreshTokenExpiresAt: null,
-        }),
+        }, mockVault),
       ).rejects.toMatchObject({
         statusCode: 409,
       });
     });
 
-    it('throws 500 when ENCRYPTION_KEY is missing', async () => {
-      delete process.env.ENCRYPTION_KEY;
+    it('propagates vault failures before inserting a row', async () => {
       const db = createMockDb();
+      db.insert = vi.fn();
+      const failingVault = {
+        sealTwitterCredentials: vi.fn(),
+        sealOAuth2AccessToken: vi.fn(() => {
+          throw new Error('token vault is misconfigured');
+        }),
+        sealOAuth2RefreshToken: vi.fn(),
+      } satisfies TokenVault;
+
       await expect(
         createProfileFromOAuth(db, {
           userId: USER_ID,
           platform: 'linkedin',
-          platformUserId: 'p',
-          platformAccountId: 'a',
-          displayName: 'n',
-          handle: 'h',
+          platformUserId: 'urn:li:person:abc',
+          platformAccountId: 'urn:li:organization:42',
+          displayName: 'Jane',
+          handle: 'jane',
           avatarUrl: null,
           accessToken: 'a',
-          refreshToken: null,
+          refreshToken: 'b',
           tokenExpiresAt: null,
           refreshTokenExpiresAt: null,
-        }),
-      ).rejects.toBeInstanceOf(ProfileServiceError);
+        }, failingVault),
+      ).rejects.toThrow('token vault is misconfigured');
+
+      expect(failingVault.sealOAuth2AccessToken).toHaveBeenCalledWith('a');
+      expect(failingVault.sealOAuth2RefreshToken).not.toHaveBeenCalled();
+      expect(db.insert).not.toHaveBeenCalled();
     });
   });
 
@@ -198,7 +225,7 @@ describe('profile.service OAuth flows', () => {
         tokenExpiresAt: new Date('2026-08-01T00:00:00Z'),
         refreshTokenExpiresAt: new Date('2027-04-01T00:00:00Z'),
         incomingHandle: 'jane-doe',
-      });
+      }, mockVault);
 
       expect(result.profileId).toBe(PROFILE_ID);
       expect(result.existingHandle).toBe('existing-handle');
@@ -232,7 +259,7 @@ describe('profile.service OAuth flows', () => {
           tokenExpiresAt: null,
           refreshTokenExpiresAt: null,
           incomingHandle: 'jane-doe',
-        }),
+        }, mockVault),
       ).rejects.toMatchObject({
         statusCode: 409,
         code: 'mismatched_account',
@@ -262,7 +289,7 @@ describe('profile.service OAuth flows', () => {
           tokenExpiresAt: null,
           refreshTokenExpiresAt: null,
           incomingHandle: 'jane-doe',
-        }),
+        }, mockVault),
       ).rejects.toMatchObject({
         statusCode: 409,
         code: 'mismatched_account',
@@ -290,7 +317,7 @@ describe('profile.service OAuth flows', () => {
           tokenExpiresAt: null,
           refreshTokenExpiresAt: null,
           incomingHandle: 'NEW-HANDLE',
-        });
+        }, mockVault);
         throw new Error('expected to throw');
       } catch (err) {
         expect(err).toBeInstanceOf(OAuthServiceError);
@@ -313,7 +340,7 @@ describe('profile.service OAuth flows', () => {
           tokenExpiresAt: null,
           refreshTokenExpiresAt: null,
           incomingHandle: 'h',
-        }),
+        }, mockVault),
       ).rejects.toMatchObject({ statusCode: 404 });
     });
 
@@ -352,7 +379,7 @@ describe('profile.service OAuth flows', () => {
         tokenExpiresAt: null,
         refreshTokenExpiresAt: null,
         incomingHandle: 'h',
-      });
+      }, mockVault);
 
       // set payload should NOT contain oauth2RefreshToken* keys when incoming is null
       expect(setPayload.oauth2RefreshTokenCiphertext).toBeUndefined();
@@ -360,31 +387,6 @@ describe('profile.service OAuth flows', () => {
       expect(setPayload.oauth2RefreshTokenAuthTag).toBeUndefined();
     });
 
-    it('throws 500 when ENCRYPTION_KEY is missing', async () => {
-      delete process.env.ENCRYPTION_KEY;
-      const db = setupSelect({
-        id: PROFILE_ID,
-        platform: 'linkedin',
-        handle: 'existing',
-        platformUserId: 'urn:li:person:abc',
-        platformAccountId: 'urn:li:organization:42',
-      });
-
-      await expect(
-        reconnectProfile(db, {
-          userId: USER_ID,
-          profileId: PROFILE_ID,
-          platform: 'linkedin',
-          incomingPlatformUserId: 'urn:li:person:abc',
-          incomingPlatformAccountId: 'urn:li:organization:42',
-          accessToken: 'a',
-          refreshToken: null,
-          tokenExpiresAt: null,
-          refreshTokenExpiresAt: null,
-          incomingHandle: 'h',
-        }),
-      ).rejects.toMatchObject({ statusCode: 500 });
-    });
   });
 });
 
@@ -429,10 +431,6 @@ function buildRawProfileRow(overrides: Record<string, unknown> = {}) {
 }
 
 describe('getProfiles (Phase 7 — extended columns + nextScheduledAt)', () => {
-  beforeEach(() => {
-    process.env.ENCRYPTION_KEY = VALID_KEY;
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -489,10 +487,6 @@ describe('getProfiles (Phase 7 — extended columns + nextScheduledAt)', () => {
 });
 
 describe('updateProfileMetadata', () => {
-  beforeEach(() => {
-    process.env.ENCRYPTION_KEY = VALID_KEY;
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -617,10 +611,6 @@ describe('updateProfileMetadata', () => {
 });
 
 describe('getDeletePreview', () => {
-  beforeEach(() => {
-    process.env.ENCRYPTION_KEY = VALID_KEY;
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });

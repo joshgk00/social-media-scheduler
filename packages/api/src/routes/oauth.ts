@@ -41,6 +41,7 @@ import {
   reconnectProfile,
   ProfileServiceError,
 } from '../services/profile.service.js';
+import type { TokenVault } from '../services/token-vault.service.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 
 const logger = createLogger('oauth-router');
@@ -55,6 +56,7 @@ const FACEBOOK_SCOPE = 'pages_show_list,pages_read_engagement,pages_manage_posts
 interface OAuthRouterDependencies {
   db: Db;
   redis: Redis;
+  getTokenVault: () => TokenVault;
 }
 
 type Platform = 'linkedin' | 'facebook';
@@ -78,7 +80,7 @@ function errorRedirect(res: import('express').Response, returnTo: string, code: 
   res.redirect(`${url.pathname}${url.search}${url.hash}`);
 }
 
-export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Router {
+export function createOAuthRouter({ db, redis, getTokenVault }: OAuthRouterDependencies): Router {
   const router = Router();
 
   // ------------------------------------------------------------------
@@ -454,7 +456,7 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
           tokenExpiresAt,
           refreshTokenExpiresAt,
           incomingHandle: payload.handle || selected.name,
-        });
+        }, getTokenVault());
         profileId = result.profileId;
       } else {
         const result = await createProfileFromOAuth(db, {
@@ -469,7 +471,7 @@ export function createOAuthRouter({ db, redis }: OAuthRouterDependencies): Route
           refreshToken: payload.refreshToken ?? null,
           tokenExpiresAt,
           refreshTokenExpiresAt,
-        });
+        }, getTokenVault());
         profileId = result.profileId;
       }
 

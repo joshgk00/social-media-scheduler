@@ -1,1 +1,137 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-66-e266c49f37_7047a81f13","featureId":"feat_gh-66_8546640dd3","title":"gh#66: R3.1 — Add @sms/shared/tokens (TokenVault, Credentials)","category":"maintainability","severity":"critical","confidence":"high","triage":"risk","evidence":[{"path":"packages/shared/src/tokens/types.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/tokens/vault.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/index.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/tokens/__fixtures__/","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/tokens/{types,vault}.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/66.\nBacklog section: Candidate 3 — TokenVault.\n\n## Context\n\nFirst PR in Candidate 3 (TokenVault deepening). Closes the cipher-field-leakage boundary identified during the Publisher seam refactor (ADR-0002 is the staged-deferral note that gets superseded by this candidate).\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 3.\n\n## Scope\n\n- Add `packages/shared/src/tokens/types.ts`:\n  - `type Credentials = { kind: 'twitter'; ... } | { kind: 'oauth2'; accessToken: string }`\n  - `interface SafeProfile` — platform, platformAccountId, linkedinAccountType (NO cipher fields)\n  - `interface EncryptedTwitterFields` — 12 cipher fields (4 × ciphertext/iv/authTag)\n  - `interface EncryptedOAuth2Field` — { ciphertext, iv, authTag }\n- Add `packages/shared/src/tokens/vault.ts`:\n  - `interface TokenVault` with six methods (see grilling notes)\n  - `createTokenVault(encryptionKey: Buffer): TokenVault` factory\n  - Internally dispatches on `profile.platform`; absorbs the duplicated `asHexString` Buffer-vs-string normalizer currently in linkedin-publish / facebook-publish\n- Re-export from `@sms/shared/src/index.ts`\n- Unit tests covering:\n  - `unsealForProfile` dispatches correctly per platform\n  - Throws on missing cipher fields\n  - Twitter unseal returns all 4 expected plaintext fields\n  - OAuth 2.0 unseal returns access token\n  - Hex-vs-Buffer cipher field normalization\n  - Round-trip seal/unseal for both Twitter and OAuth 2.0\n- Add `createFakeTokenVault({ twitter?, oauth2? })` test helper in `packages/shared/src/tokens/__fixtures__/`\n\n## Out of scope\n\n- Switching any callers (R3.2 onward)\n- Removing direct `encrypt`/`decrypt` re-exports from index (R3.6 sweep)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- 100% branch coverage on `vault.ts` (security-critical per shared CLAUDE.md standards)\n- No existing callers changed\n\n## References\n\n- Supersedes ADR-0002 (deferred TokenVault note) — will mark superseded when R3.5 ships\n- Depends on: nothing (first in Candidate 3 series)","reproduction":"First PR in Candidate 3 (TokenVault deepening). Closes the cipher-field-leakage boundary identified during the Publisher seam refactor (ADR-0002 is the staged-deferral note that gets superseded by this candidate).\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 3.","recommendation":"- Add `packages/shared/src/tokens/types.ts`:\n  - `type Credentials = { kind: 'twitter'; ... } | { kind: 'oauth2'; accessToken: string }`\n  - `interface SafeProfile` — platform, platformAccountId, linkedinAccountType (NO cipher fields)\n  - `interface EncryptedTwitterFields` — 12 cipher fields (4 × ciphertext/iv/authTag)\n  - `interface EncryptedOAuth2Field` — { ciphertext, iv, authTag }\n- Add `packages/shared/src/tokens/vault.ts`:\n  - `interface TokenVault` with six methods (see grilling notes)\n  - `createTokenVault(encryptionKey: Buffer): TokenVault` factory\n  - Internally dispatches on `profile.platform`; absorbs the duplicated `asHexString` Buffer-vs-string normalizer currently in linkedin-publish / facebook-publish\n- Re-export from `@sms/shared/src/index.ts`\n- Unit tests covering:\n  - `unsealForProfile` dispatches correctly per platform\n  - Throws on missing cipher fields\n  - Twitter unseal returns all 4 expected plaintext fields\n  - OAuth 2.0 unseal returns access token\n  - Hex-vs-Buffer cipher field normalization\n  - Round-trip seal/unseal for both Twitter and OAuth 2.0\n- Add `createFakeTokenVault({ twitter?, oauth2? })` test helper in `packages/shared/src/tokens/__fixtures__/`","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/shared build` and test pass\n- 100% branch coverage on `vault.ts` (security-critical per shared CLAUDE.md standards)\n- No existing callers changed","minimumFixScope":"packages/shared/src/tokens/types.ts, packages/shared/src/tokens/vault.ts, packages/shared/src/index.ts, packages/shared/src/tokens/__fixtures__/, packages/shared/src/tokens/{types,vault}.ts","status":"open","history":[],"signature":"sig_gh-66_e266c49f37","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-66-e266c49f37_7047a81f13",
+  "featureId": "feat_gh-66_8546640dd3",
+  "title": "gh#66: R3.1 — Add @sms/shared/tokens (TokenVault, Credentials)",
+  "category": "maintainability",
+  "severity": "critical",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/shared/src/tokens/types.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/tokens/vault.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/tokens/__fixtures__/",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/tokens/{types,vault}.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/66.\nBacklog section: Candidate 3 — TokenVault.\n\n## Context\n\nFirst PR in Candidate 3 (TokenVault deepening). Closes the cipher-field-leakage boundary identified during the Publisher seam refactor (ADR-0002 is the staged-deferral note that gets superseded by this candidate).\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 3.\n\n## Scope\n\n- Add `packages/shared/src/tokens/types.ts`:\n  - `type Credentials = { kind: 'twitter'; ... } | { kind: 'oauth2'; accessToken: string }`\n  - `interface SafeProfile` — platform, platformAccountId, linkedinAccountType (NO cipher fields)\n  - `interface EncryptedTwitterFields` — 12 cipher fields (4 × ciphertext/iv/authTag)\n  - `interface EncryptedOAuth2Field` — { ciphertext, iv, authTag }\n- Add `packages/shared/src/tokens/vault.ts`:\n  - `interface TokenVault` with six methods (see grilling notes)\n  - `createTokenVault(encryptionKey: Buffer): TokenVault` factory\n  - Internally dispatches on `profile.platform`; absorbs the duplicated `asHexString` Buffer-vs-string normalizer currently in linkedin-publish / facebook-publish\n- Re-export from `@sms/shared/src/index.ts`\n- Unit tests covering:\n  - `unsealForProfile` dispatches correctly per platform\n  - Throws on missing cipher fields\n  - Twitter unseal returns all 4 expected plaintext fields\n  - OAuth 2.0 unseal returns access token\n  - Hex-vs-Buffer cipher field normalization\n  - Round-trip seal/unseal for both Twitter and OAuth 2.0\n- Add `createFakeTokenVault({ twitter?, oauth2? })` test helper in `packages/shared/src/tokens/__fixtures__/`\n\n## Out of scope\n\n- Switching any callers (R3.2 onward)\n- Removing direct `encrypt`/`decrypt` re-exports from index (R3.6 sweep)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- 100% branch coverage on `vault.ts` (security-critical per shared CLAUDE.md standards)\n- No existing callers changed\n\n## References\n\n- Supersedes ADR-0002 (deferred TokenVault note) — will mark superseded when R3.5 ships\n- Depends on: nothing (first in Candidate 3 series)",
+  "reproduction": "First PR in Candidate 3 (TokenVault deepening). Closes the cipher-field-leakage boundary identified during the Publisher seam refactor (ADR-0002 is the staged-deferral note that gets superseded by this candidate).\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 3.",
+  "recommendation": "- Add `packages/shared/src/tokens/types.ts`:\n  - `type Credentials = { kind: 'twitter'; ... } | { kind: 'oauth2'; accessToken: string }`\n  - `interface SafeProfile` — platform, platformAccountId, linkedinAccountType (NO cipher fields)\n  - `interface EncryptedTwitterFields` — 12 cipher fields (4 × ciphertext/iv/authTag)\n  - `interface EncryptedOAuth2Field` — { ciphertext, iv, authTag }\n- Add `packages/shared/src/tokens/vault.ts`:\n  - `interface TokenVault` with six methods (see grilling notes)\n  - `createTokenVault(encryptionKey: Buffer): TokenVault` factory\n  - Internally dispatches on `profile.platform`; absorbs the duplicated `asHexString` Buffer-vs-string normalizer currently in linkedin-publish / facebook-publish\n- Re-export from `@sms/shared/src/index.ts`\n- Unit tests covering:\n  - `unsealForProfile` dispatches correctly per platform\n  - Throws on missing cipher fields\n  - Twitter unseal returns all 4 expected plaintext fields\n  - OAuth 2.0 unseal returns access token\n  - Hex-vs-Buffer cipher field normalization\n  - Round-trip seal/unseal for both Twitter and OAuth 2.0\n- Add `createFakeTokenVault({ twitter?, oauth2? })` test helper in `packages/shared/src/tokens/__fixtures__/`",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/shared build` and test pass\n- 100% branch coverage on `vault.ts` (security-critical per shared CLAUDE.md standards)\n- No existing callers changed",
+  "minimumFixScope": "packages/shared/src/tokens/types.ts, packages/shared/src/tokens/vault.ts, packages/shared/src/index.ts, packages/shared/src/tokens/__fixtures__/, packages/shared/src/tokens/{types,vault}.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T191351-45858b",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original token-vault evidence paths are still absent in the current tree: packages/shared/src/tokens/types.ts, packages/shared/src/tokens/vault.ts, and packages/shared/src/tokens/__fixtures__/ do not exist, and packages/shared/src/index.ts has no tokens export. A repository-wide search finds TokenVault/createTokenVault/Credentials/SafeProfile only in BACKLOG.md and ADR docs, not implementation. BACKLOG.md still has R3.1 unchecked. Current code still performs direct credential decryption and duplicate asHexString normalization in packages/worker/src/publishers/twitter.ts, linkedin.ts, and facebook.ts, so the issue is still open elsewhere rather than fixed or stale. pnpm --filter @sms/shared typecheck passes; pnpm --filter @sms/shared test --run and build could not complete because the read-only sandbox prevented Vitest/Vite temp-file writes and tsc dist writes, respectively.",
+      "commands": [
+        "find packages/shared/src -maxdepth 4 -type f | sort",
+        "sed -n '1,140p' packages/shared/src/index.ts",
+        "sed -n '1,220p' packages/shared/package.json",
+        "sed -n '1,220p' packages/shared/vitest.config.ts",
+        "sed -n '1,260p' packages/worker/src/publishers/linkedin.ts",
+        "sed -n '1,260p' packages/worker/src/publishers/facebook.ts",
+        "sed -n '1,300p' packages/worker/src/publishers/twitter.ts",
+        "sed -n '1,220p' packages/shared/src/encryption.ts",
+        "test -e packages/shared/src/tokens/types.ts; echo types.ts:$?; test -e packages/shared/src/tokens/vault.ts; echo vault.ts:$?; test -d packages/shared/src/tokens/__fixtures__; echo fixtures:$?",
+        "find packages/shared/src -path '*tokens*' -o -path '*vault*' | sort",
+        "rg -n \"function asHexString|decrypt\\(|validateEncryptionKey|oauth2AccessTokenCiphertext|consumerKeyCiphertext|accessTokenSecretCiphertext\" packages/worker/src/publishers packages/shared/src packages/api/src packages/db/src 2>/dev/null",
+        "rg -n \"TokenVault|createTokenVault|Credentials|SafeProfile|EncryptedTwitterFields|EncryptedOAuth2Field|createFakeTokenVault|unsealForProfile|sealTwitter|sealOAuth\" . --glob '!node_modules/**' --glob '!dist/**'",
+        "sed -n '60,80p' BACKLOG.md",
+        "sed -n '1,28p' docs/adr/0002-publisher-receives-raw-profile-row.md",
+        "sed -n '1,30p' docs/adr/0005-tokenvault-typed-credentials-bag-dispatcher-unseals.md",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/shared test --run",
+        "pnpm --filter @sms/shared build"
+      ],
+      "createdAt": "2026-05-20T19:15:19.524Z"
+    },
+    {
+      "runId": "20260520T192226-756c23",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths now exist in the current repository: packages/shared/src/tokens/types.ts, packages/shared/src/tokens/vault.ts, packages/shared/src/tokens/__fixtures__/index.ts, and packages/shared/src/index.ts. Current code defines Credentials, SafeProfile without cipher fields, EncryptedTwitterFields with 12 cipher fields, EncryptedOAuth2Field, TokenVault with six methods, createTokenVault, platform dispatch in unsealForProfile, Buffer-vs-string hex normalization, and createFakeTokenVault. packages/shared/src/tokens/index.ts exports the token API and package.json exposes @sms/shared/tokens; the root shared index exports token types. Focused tests exist in packages/shared/src/__tests__/tokens-vault.test.ts for dispatch, missing fields, Twitter/OAuth2 round trips, Buffer normalization, SafeProfile projection, unsupported platform errors, and the fake vault helper. pnpm --filter @sms/shared typecheck passed. Vitest and build could not complete in this read-only sandbox because Vite/tsc attempted temp/dist writes and hit EPERM, but an existing dist smoke test for the token vault passed. The remaining unchecked BACKLOG line appears stale relative to the implemented code, not evidence that the finding is still open.",
+      "commands": [
+        "pwd && rg --files packages/shared/src | sort",
+        "test -f packages/shared/src/tokens/types.ts; printf 'types.ts:%s\\n' $?; test -f packages/shared/src/tokens/vault.ts; printf 'vault.ts:%s\\n' $?; test -d packages/shared/src/tokens/__fixtures__; printf 'fixtures:%s\\n' $?; test -f packages/shared/src/index.ts; printf 'index.ts:%s\\n' $?",
+        "rg -n \"TokenVault|createTokenVault|Credentials|SafeProfile|EncryptedTwitterFields|EncryptedOAuth2Field|createFakeTokenVault|unsealForProfile|sealTwitter|sealOAuth|tokens\" packages/shared/src packages/worker/src packages/api/src packages/db/src BACKLOG.md docs --glob '!node_modules/**' --glob '!dist/**'",
+        "sed -n '1,240p' packages/shared/src/tokens/types.ts",
+        "sed -n '1,260p' packages/shared/src/tokens/vault.ts",
+        "sed -n '1,120p' packages/shared/src/tokens/index.ts && sed -n '1,80p' packages/shared/src/index.ts",
+        "sed -n '1,320p' packages/shared/src/__tests__/tokens-vault.test.ts && sed -n '1,140p' packages/shared/src/tokens/__fixtures__/index.ts",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/shared test --run packages/shared/src/__tests__/tokens-vault.test.ts",
+        "pnpm --filter @sms/shared build",
+        "pnpm --filter @sms/shared exec vitest --run src/__tests__/tokens-vault.test.ts --configLoader runner",
+        "node -e \"import('./packages/shared/dist/tokens/index.js').then(({createTokenVault})=>{const {randomBytes}=require('node:crypto'); const vault=createTokenVault(randomBytes(32)); const tw=vault.sealTwitter({kind:'twitter',consumerKey:'ck',consumerSecret:'cs',accessToken:'at',accessTokenSecret:'ats'}); const twOut=vault.unsealForProfile({platform:'twitter',platformAccountId:null,linkedinAccountType:'person',...tw}); if(twOut.kind!=='twitter'||twOut.accessTokenSecret!=='ats') throw new Error('twitter failed'); const o=vault.sealOAuth2({kind:'oauth2',accessToken:'oa'}); const out=vault.unsealForProfile({platform:'facebook',platformAccountId:'acct',linkedinAccountType:'person',oauth2AccessTokenCiphertext:Buffer.from(o.ciphertext,'hex'),oauth2AccessTokenIv:Buffer.from(o.iv,'hex'),oauth2AccessTokenAuthTag:Buffer.from(o.authTag,'hex')}); if(out.kind!=='oauth2'||out.accessToken!=='oa') throw new Error('oauth2 failed'); console.log('dist token-vault smoke ok')})\""
+      ],
+      "createdAt": "2026-05-20T19:24:19.638Z"
+    },
+    {
+      "runId": "20260520T200516-75e361",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths now exist in the current repository: packages/shared/src/tokens/types.ts, packages/shared/src/tokens/vault.ts, packages/shared/src/tokens/__fixtures__/index.ts, and packages/shared/src/index.ts. Current code defines Credentials, SafeProfile without cipher fields, EncryptedTwitterFields with 12 cipher fields, EncryptedOAuth2Field, TokenVault with six methods, createTokenVault, platform dispatch in unsealForProfile, Buffer/string hex normalization, and createFakeTokenVault. packages/shared/src/tokens/index.ts exports the token API and package.json exposes @sms/shared/tokens; the root shared index exports token types. Focused tests exist in packages/shared/src/__tests__/tokens-vault.test.ts for dispatch, missing fields, Twitter/OAuth2 round trips, Buffer normalization, SafeProfile projection, unsupported platform errors, and fake vault behavior. pnpm --filter @sms/shared typecheck passed. Vitest and build could not complete in this read-only sandbox because Vite/tsc attempted temp/dist writes and hit EPERM, but an existing dist smoke test for the token vault passed. The unchecked BACKLOG R3.1 line is stale relative to implemented code.",
+      "commands": [
+        "pwd && rg --files packages/shared/src | sort",
+        "test -f packages/shared/src/tokens/types.ts; printf 'types.ts:%s\\n' $?; test -f packages/shared/src/tokens/vault.ts; printf 'vault.ts:%s\\n' $?; test -d packages/shared/src/tokens/__fixtures__; printf 'fixtures:%s\\n' $?; test -f packages/shared/src/index.ts; printf 'index.ts:%s\\n' $?",
+        "rg -n \"TokenVault|createTokenVault|Credentials|SafeProfile|EncryptedTwitterFields|EncryptedOAuth2Field|createFakeTokenVault|unsealForProfile|sealTwitter|sealOAuth|from './tokens|from \\\"./tokens|tokens\" packages/shared/src packages/worker/src packages/api/src packages/db/src BACKLOG.md docs --glob '!node_modules/**' --glob '!dist/**'",
+        "sed -n '1,240p' packages/shared/src/tokens/types.ts",
+        "sed -n '1,260p' packages/shared/src/tokens/vault.ts",
+        "sed -n '1,100p' packages/shared/src/tokens/index.ts && sed -n '1,80p' packages/shared/src/index.ts && sed -n '1,160p' packages/shared/package.json",
+        "sed -n '1,320p' packages/shared/src/__tests__/tokens-vault.test.ts",
+        "sed -n '1,180p' packages/shared/src/tokens/__fixtures__/index.ts",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/shared test --run packages/shared/src/__tests__/tokens-vault.test.ts",
+        "pnpm --filter @sms/shared build",
+        "pnpm --filter @sms/shared exec vitest --run src/__tests__/tokens-vault.test.ts --configLoader runner",
+        "find packages/shared/dist/tokens -maxdepth 3 -type f | sort 2>/dev/null && node -e \"import('./packages/shared/dist/tokens/index.js').then(({createTokenVault})=>{const {randomBytes}=require('node:crypto'); const vault=createTokenVault(randomBytes(32)); const tw=vault.sealTwitter({kind:'twitter',consumerKey:'ck',consumerSecret:'cs',accessToken:'at',accessTokenSecret:'ats'}); const twOut=vault.unsealForProfile({platform:'twitter',platformAccountId:null,linkedinAccountType:'person',...tw}); if(twOut.kind!=='twitter'||twOut.accessTokenSecret!=='ats') throw new Error('twitter failed'); const o=vault.sealOAuth2({kind:'oauth2',accessToken:'oa'}); const out=vault.unsealForProfile({platform:'facebook',platformAccountId:'acct',linkedinAccountType:'person',oauth2AccessTokenCiphertext:Buffer.from(o.ciphertext,'hex'),oauth2AccessTokenIv:Buffer.from(o.iv,'hex'),oauth2AccessTokenAuthTag:Buffer.from(o.authTag,'hex')}); if(out.kind!=='oauth2'||out.accessToken!=='oa') throw new Error('oauth2 failed'); console.log('dist token-vault smoke ok')})\"",
+        "sed -n '60,78p' BACKLOG.md && sed -n '1,30p' docs/adr/0002-publisher-receives-raw-profile-row.md && sed -n '1,35p' docs/adr/0005-tokenvault-typed-credentials-bag-dispatcher-unseals.md"
+      ],
+      "createdAt": "2026-05-20T20:06:41.478Z"
+    }
+  ],
+  "signature": "sig_gh-66_e266c49f37",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-66-e266c49f37-7047a81_93a2edc325"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T20:06:41.478Z"
+}

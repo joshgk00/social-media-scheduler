@@ -16,10 +16,11 @@ import { logger } from './middleware/logger.js';
 import { createApp } from './app.js';
 import { createPublishQueueService } from './services/publish-queue.service.js';
 import { createBulkOpsQueueService } from './services/bulk-ops-queue.service.js';
+import { createTokenVault } from './services/token-vault.service.js';
 
 const DATABASE_URL = requireEnv('DATABASE_URL');
 const REDIS_URL = requireEnv('REDIS_URL');
-requireEnv('ENCRYPTION_KEY');
+const ENCRYPTION_KEY = requireEnv('ENCRYPTION_KEY');
 requireEnv('CSRF_SECRET');
 const SESSION_SECRET = requireEnv('SESSION_SECRET');
 
@@ -35,6 +36,7 @@ async function main() {
 
   const publishQueueService = createPublishQueueService(redis);
   const bulkOpsQueueService = createBulkOpsQueueService(redis);
+  const tokenVault = createTokenVault(ENCRYPTION_KEY);
   const notificationQueue = new Queue(QUEUE_NAMES.notification, {
     connection: redis,
     defaultJobOptions: {
@@ -63,6 +65,7 @@ async function main() {
     notificationQueue,
     storage,
     transcodeQueue,
+    tokenVault,
   });
   const port = parseInt(process.env.PORT || '3000', 10);
 
