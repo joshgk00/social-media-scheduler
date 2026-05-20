@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-96-8858823d13_f140d51e3c",
+  "featureId": "feat_gh-96_a79f3c8574",
+  "title": "gh#96: CSV import failures return 500 and hidden toast instead of visible validation errors",
+  "category": "bug",
+  "severity": "critical",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/web/src/pages/posts/BulkImportPage.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/hooks/use-bulk-ops.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/routes/bulk-import.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/services/bulk-import.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/schemas/bulk-import.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/96.\nBacklog section: P0 — Production blockers.\n\n## Problem\nWhen a user uploads a CSV that has formatting/schema issues on the Import Posts page, the import can fail with a generic `Internal server error`. The error is shown only in a bottom-left toast that can be clipped/off-screen, so the user cannot see or act on the failure.\n\nThis is especially painful when combined with #95, because users cannot download a known-good template and then get no usable feedback when their attempted CSV does not match the importer's expectations.\n\n## User impact\nFrom the user perspective, uploading `queue_cmw_promotions.csv` appears to fail without a visible explanation. They do not know whether the file is missing required columns, has invalid values, targets the wrong import mode, or hit a server bug.\n\n## Reproduction\n1. Open **Import Posts**.\n2. Select **Queue** as the target.\n3. Select a connected profile, e.g. `@clicksmortarweb`.\n4. Select an existing queue, e.g. `CMW Promotions`.\n5. Upload a CSV with issues, e.g. `queue_cmw_promotions.csv`.\n6. Click **Import**.\n\n## Expected behavior\n- Invalid CSV content should return a 4xx validation response, not a generic 500.\n- The response should explain what the user can fix, ideally with row/column-level details when possible.\n- The Import Posts page should render the failure inline near the file/import controls, not only as a toast.\n- The user should be able to see the error without scrolling to a clipped toast area.\n\n## Actual behavior\n- The import fails with `Internal server error`.\n- The message appears in a bottom-left toast that is partially off-screen/clipped in the viewport.\n- The Import Posts page does not show an inline actionable error, so it looks like the import is broken with no useful guidance.\n\n## Implementation notes\nLikely areas to inspect:\n\n- Frontend page: `packages/web/src/pages/posts/BulkImportPage.tsx`\n- Frontend mutation/error path: `packages/web/src/hooks/use-bulk-ops.ts` (`useBulkImport` currently uses `showBulkOperationError`, which announces and calls `toast.error`)\n- API route: `packages/api/src/routes/bulk-import.ts`\n- CSV parsing/validation: `packages/api/src/services/bulk-import.service.ts` and `packages/shared/src/schemas/bulk-import.ts`\n\nThe page already has an inline alert pattern for Twitter budget errors. CSV validation/import startup errors should get a similarly visible inline surface.\n\n## Acceptance criteria\n- Malformed or schema-invalid CSV uploads return a non-500 response with an actionable error body.\n- Import Posts displays CSV import errors inline near the file/import section.\n- Inline error copy includes enough detail for the user to correct the CSV, such as missing headers, invalid row count, invalid dates, or row/column details when available.\n- The toast-only path is not the sole visible error surface for `useBulkImport` failures.\n- Regression coverage verifies that a rejected CSV import response is rendered inline on the Import Posts page.\n- API coverage verifies invalid CSV input is handled as validation/user input failure rather than an uncaught 500.\n\n## References\nRelated: #95\nDepends on: nothing",
+  "reproduction": "When a user uploads a CSV that has formatting/schema issues on the Import Posts page, the import can fail with a generic `Internal server error`. The error is shown only in a bottom-left toast that can be clipped/off-screen, so the user cannot see or act on the failure.\n\nThis is especially painful when combined with #95, because users cannot download a known-good template and then get no usable feedback when their attempted CSV does not match the importer's expectations.",
+  "recommendation": "Implement the fix described by GitHub issue gh#96 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/pages/posts/BulkImportPage.tsx, packages/web/src/hooks/use-bulk-ops.ts, packages/api/src/routes/bulk-import.ts, packages/api/src/services/bulk-import.service.ts, packages/shared/src/schemas/bulk-import.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-96_8858823d13",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260520T120814-2f872c",
+  "createdAt": "2026-05-20T12:08:14.295Z",
+  "updatedAt": "2026-05-20T12:08:14.295Z"
+}

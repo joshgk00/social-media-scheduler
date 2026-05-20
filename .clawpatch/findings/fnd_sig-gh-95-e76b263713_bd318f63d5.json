@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-95-e76b263713_bd318f63d5",
+  "featureId": "feat_gh-95_0bb007b559",
+  "title": "gh#95: Import Posts template download links do not provide CSV templates",
+  "category": "bug",
+  "severity": "critical",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/web/src/hooks/use-csv-templates.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/95.\nBacklog section: P0 — Production blockers.\n\n## Problem\nUsers cannot download the CSV template from the Import Posts page, which leaves them without a reliable way to compare their CSV document against the expected import format before uploading.\n\n## User impact\nWhen importing posts into a queue, the user sees `Download Scheduled Template` and `Download Queue Template`, but the template download does not work. From the user perspective, there is no way to confirm whether a file such as `queue_cmw_promotions.csv` has the right columns and formatting before attempting the import.\n\n## Reproduction\n1. Open the app and go to **Import Posts**.\n2. Select **Queue** as the import target.\n3. Select a connected profile, e.g. `@clicksmortarweb`.\n4. Select an existing queue, e.g. `CMW Promotions`.\n5. Scroll to **Need a template?**.\n6. Click **Download Queue Template** or **Download Scheduled Template**.\n\n## Expected behavior\nThe app downloads a CSV template matching the selected import target:\n- Scheduled-post import template should show the columns required for rows with explicit publish times.\n- Queue import template should show the columns required for rows appended to an existing queue.\n\nThe downloaded file should be usable as a source of truth for users to compare their own CSV before importing.\n\n## Actual behavior\nThe template download does not produce a usable CSV template. The Import Posts page exposes links, but the CSV files appear to be missing or unreachable.\n\n## Implementation notes\nThe web page currently links to:\n\n- `/templates/scheduled-posts.csv`\n- `/templates/queue-posts.csv`\n\nvia `packages/web/src/hooks/use-csv-templates.ts`, but there are no matching template CSV files visible under `packages/web`.\n\n## Acceptance criteria\n- `Download Scheduled Template` downloads a valid scheduled-post CSV template.\n- `Download Queue Template` downloads a valid queue CSV template.\n- The templates include headers and at least one example row or clear placeholder row for the expected import schema.\n- Missing template assets are covered by a regression test or static asset check.\n- The user can download the template without first uploading a CSV.\n\n## References\nDepends on: nothing",
+  "reproduction": "Users cannot download the CSV template from the Import Posts page, which leaves them without a reliable way to compare their CSV document against the expected import format before uploading.",
+  "recommendation": "Implement the fix described by GitHub issue gh#95 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/hooks/use-csv-templates.ts, packages/web",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-95_e76b263713",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260520T120814-2f872c",
+  "createdAt": "2026-05-20T12:08:14.295Z",
+  "updatedAt": "2026-05-20T12:08:14.295Z"
+}
