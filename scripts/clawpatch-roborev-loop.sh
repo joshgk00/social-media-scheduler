@@ -280,36 +280,33 @@ include_stage_path() {
 changed_source_paths() {
   local path
   local seen_path
+  local already_seen
   local -a seen_paths=()
 
-  emit_path() {
-    local candidate="$1"
-
-    if ! include_stage_path "$candidate"; then
-      return 0
+  while IFS= read -r -d '' path; do
+    if ! include_stage_path "$path"; then
+      continue
     fi
 
+    already_seen=0
     for seen_path in "${seen_paths[@]}"; do
-      if [[ "$seen_path" == "$candidate" ]]; then
-        return 0
+      if [[ "$seen_path" == "$path" ]]; then
+        already_seen=1
+        break
       fi
     done
 
-    seen_paths+=("$candidate")
-    printf '%s\0' "$candidate"
-  }
+    if [[ "$already_seen" -eq 1 ]]; then
+      continue
+    fi
 
-  while IFS= read -r -d '' path; do
-    emit_path "$path"
-  done < <(git diff --name-only -z)
-
-  while IFS= read -r -d '' path; do
-    emit_path "$path"
-  done < <(git diff --cached --name-only -z)
-
-  while IFS= read -r -d '' path; do
-    emit_path "$path"
-  done < <(git ls-files --others --exclude-standard -z)
+    seen_paths+=("$path")
+    printf '%s\0' "$path"
+  done < <(
+    git diff --name-only -z
+    git diff --cached --name-only -z
+    git ls-files --others --exclude-standard -z
+  )
 }
 
 stage_changed_files() {
