@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useQueue, useCreateQueue, useUpdateQueue, type QueueConfig } from '../../hooks/use-queues';
@@ -14,6 +14,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { Skeleton } from '../../components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -62,6 +63,61 @@ const DEFAULT_VALUES: QueueFormValues = {
   notes: undefined,
 };
 
+type ApiValidationIssue = {
+  path?: Array<string | number>;
+  message?: string;
+};
+
+type ApiError = Error & {
+  body?: {
+    error?: unknown;
+    details?: unknown;
+  };
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  name: 'Queue name',
+  profileId: 'Social profile',
+  intervalType: 'Interval type',
+  intervalValue: 'Interval',
+  intervalUnit: 'Interval unit',
+  daysOfWeek: 'Days of week',
+  hourSlots: 'Hour windows',
+  startDate: 'Start date',
+  seasonalStart: 'Seasonal start',
+  seasonalEnd: 'Seasonal end',
+  seasonalRepeat: 'Seasonal repeat',
+  isRecycling: 'Recycle posts',
+  notes: 'Internal notes',
+};
+
+function isApiValidationIssue(value: unknown): value is ApiValidationIssue {
+  return value !== null && typeof value === 'object';
+}
+
+export function formatQueueSaveError(error: unknown): string {
+  const apiError = error as ApiError;
+  const details = apiError.body?.details;
+
+  if (Array.isArray(details) && details.length > 0) {
+    return details
+      .filter(isApiValidationIssue)
+      .slice(0, 3)
+      .map((issue) => {
+        const fieldName = issue.path?.[0];
+        const label =
+          typeof fieldName === 'string'
+            ? FIELD_LABELS[fieldName] ?? fieldName
+            : 'Queue settings';
+        return `${label}: ${issue.message ?? 'Invalid value'}`;
+      })
+      .join(' ');
+  }
+
+  if (error instanceof Error && error.message) return error.message;
+  return "Couldn't save queue. Try again.";
+}
+
 export default function QueueDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -72,6 +128,7 @@ export default function QueueDetailPage() {
   const { data: profiles } = useProfiles();
   const createQueueMutation = useCreateQueue();
   const updateQueueMutation = useUpdateQueue();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const copiedConfig = (location.state as { copiedConfig?: QueueConfig } | null)?.copiedConfig;
 
@@ -121,6 +178,7 @@ export default function QueueDetailPage() {
   const isSaving = createQueueMutation.isPending || updateQueueMutation.isPending;
 
   function onSubmit(values: QueueFormValues) {
+    setSaveError(null);
     const payload = {
       ...values,
       seasonalStart: values.seasonalStart || undefined,
@@ -133,22 +191,24 @@ export default function QueueDetailPage() {
         { id, input: payload },
         {
           onSuccess: () => {
+            setSaveError(null);
             toast.success('Queue updated.');
             navigate(`/queues/${id}/posts`);
           },
-          onError: () => {
-            toast.error("Couldn't save queue. Try again.");
+          onError: (error) => {
+            setSaveError(formatQueueSaveError(error));
           },
         },
       );
     } else {
       createQueueMutation.mutate(payload, {
         onSuccess: (createdQueue) => {
+          setSaveError(null);
           toast.success('Queue created.');
           navigate(`/queues/${createdQueue.id}/posts`);
         },
-        onError: () => {
-          toast.error("Couldn't save queue. Try again.");
+        onError: (error) => {
+          setSaveError(formatQueueSaveError(error));
         },
       });
     }
@@ -240,6 +300,14 @@ export default function QueueDetailPage() {
               </FormItem>
             )}
           />
+
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" aria-hidden="true" />
+              <AlertTitle>Queue was not saved</AlertTitle>
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
 
           {/* Buttons */}
           <div className="flex gap-3">
