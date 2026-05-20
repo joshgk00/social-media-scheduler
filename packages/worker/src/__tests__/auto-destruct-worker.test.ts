@@ -16,6 +16,28 @@ vi.mock('@sms/shared/logger', () => ({
   }),
 }));
 
+const capturedListeners: Record<string, Array<(...args: unknown[]) => Promise<unknown> | unknown>> = {};
+
+vi.mock('bullmq', () => {
+  class UnrecoverableError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'UnrecoverableError';
+    }
+  }
+
+  return {
+    UnrecoverableError,
+    Worker: class MockWorker {
+      on(evt: string, cb: (...args: unknown[]) => Promise<unknown> | unknown) {
+        capturedListeners[evt] = capturedListeners[evt] ?? [];
+        capturedListeners[evt]!.push(cb);
+        return this;
+      }
+    },
+  };
+});
+
 const deleteTweetMock = vi.fn().mockResolvedValue({ data: { deleted: true } });
 
 class MockApiResponseError extends Error {
@@ -91,6 +113,9 @@ function createFakeVault(
 describe('Auto-Destruct System', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const key of Object.keys(capturedListeners)) {
+      delete capturedListeners[key];
+    }
   });
 
   describe('deleteTweet', () => {
@@ -337,6 +362,62 @@ describe('Auto-Destruct System', () => {
       // This is a smoke test - just verify it creates without throwing
       // In a real test we'd need a Redis connection, so we just verify the export exists
       expect(typeof createAutoDestructWorker).toBe('function');
+    });
+
+    it('enqueues a schema-valid auto-destruct failed notification after final failure', async () => {
+      const { createAutoDestructWorker } = await import('../auto-destruct-worker.js');
+      const { JOB_NAMES, autoDestructFailedNotificationSchema } = await import('@sms/shared');
+
+      const postId = '00000000-0000-4000-8000-000000000101';
+      const profileId = '00000000-0000-4000-8000-000000000102';
+      const correlationId = 'corr-auto-destruct-failed';
+      const add = vi.fn().mockResolvedValue(undefined);
+
+      const limit = vi.fn().mockResolvedValue([{ profileId }]);
+      const where = vi.fn().mockReturnValue({ limit });
+      const from = vi.fn().mockReturnValue({ where });
+      const db = {
+        select: vi.fn().mockReturnValue({ from }),
+      } as unknown as WorkerDb;
+
+      createAutoDestructWorker({
+        redis: {} as never,
+        db,
+        notificationQueue: { add } as unknown as Queue,
+        vault: createFakeVault().vault,
+      });
+
+      const failedListener = capturedListeners.failed?.[0];
+      expect(failedListener).toBeTypeOf('function');
+
+      await failedListener!(
+        {
+          data: {
+            postId,
+            platformPostId: 'tweet-123',
+            correlationId,
+          },
+          opts: { attempts: 4 },
+          attemptsMade: 4,
+        } as unknown as Job,
+        new Error('Twitter delete failed'),
+      );
+
+      expect(add).toHaveBeenCalledOnce();
+      expect(add).toHaveBeenCalledWith(JOB_NAMES.autoDestructFailedNotification, {
+        postId,
+        profileId,
+        errorMessage: 'Twitter delete failed',
+        correlationId,
+        occurredAt: expect.any(String),
+      });
+
+      const payload = add.mock.calls[0]![1];
+      expect(autoDestructFailedNotificationSchema.safeParse(payload).success).toBe(true);
+      expect(payload).not.toHaveProperty('kind');
+      expect(payload).not.toHaveProperty('platformPostId');
+      expect(payload).not.toHaveProperty('reason');
+      expect(payload).not.toHaveProperty('at');
     });
   });
 });
