@@ -1,5 +1,6 @@
 import { eq, and, sql, count as drizzleCount, max, lt, gt, desc, asc, type SQL } from 'drizzle-orm';
 import type { InferInsertModel } from 'drizzle-orm';
+import { DateTime } from 'luxon';
 import { AppError, transitionPost, calculateNextRunAt } from '@sms/shared';
 import type { PostStatus, CreateQueueInput, UpdateQueueInput, QueueQueryInput } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -17,6 +18,26 @@ export class QueueServiceError extends AppError {
   }
 }
 
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export function parseQueueStartDate(startDate: string | null | undefined, timezone: string): Date | null {
+  if (!startDate) return null;
+
+  if (DATE_ONLY_PATTERN.test(startDate)) {
+    const localStart = DateTime.fromISO(startDate, { zone: timezone }).startOf('day');
+    if (!localStart.isValid) {
+      throw new QueueServiceError('Invalid start date', 400);
+    }
+    return localStart.toJSDate();
+  }
+
+  const parsedStartDate = new Date(startDate);
+  if (Number.isNaN(parsedStartDate.getTime())) {
+    throw new QueueServiceError('Invalid start date', 400);
+  }
+  return parsedStartDate;
+}
+
 export async function createQueue(db: Db, userId: string, input: CreateQueueInput) {
   const [ownedProfile] = await db
     .select({ id: socialProfiles.id })
@@ -32,6 +53,7 @@ export async function createQueue(db: Db, userId: string, input: CreateQueueInpu
     .from(users)
     .where(eq(users.id, userId));
   const userTimezone = userRow?.timezone ?? 'UTC';
+  const startDate = parseQueueStartDate(input.startDate, userTimezone);
 
   const nextRunAt = calculateNextRunAt(
     {
@@ -41,7 +63,7 @@ export async function createQueue(db: Db, userId: string, input: CreateQueueInpu
       hourSlots: input.hourSlots,
       daysOfWeek: input.daysOfWeek,
       lastPublishedAt: null,
-      startDate: input.startDate ? new Date(input.startDate) : null,
+      startDate,
     },
     userTimezone,
   );
@@ -55,7 +77,7 @@ export async function createQueue(db: Db, userId: string, input: CreateQueueInpu
     intervalUnit: input.intervalUnit,
     daysOfWeek: input.daysOfWeek,
     hourSlots: input.hourSlots,
-    startDate: input.startDate ? new Date(input.startDate) : null,
+    startDate,
     seasonalStart: input.seasonalStart ?? null,
     seasonalEnd: input.seasonalEnd ?? null,
     seasonalRepeat: input.seasonalRepeat ?? false,
@@ -86,6 +108,15 @@ export async function updateQueue(
 
   const existingQueue = existingRows[0];
 
+  const [userRow] = await db
+    .select({ timezone: users.timezone })
+    .from(users)
+    .where(eq(users.id, userId));
+  const userTimezone = userRow?.timezone ?? 'UTC';
+  const parsedStartDate = input.startDate !== undefined
+    ? parseQueueStartDate(input.startDate, userTimezone)
+    : undefined;
+
   const queuePatch: Partial<QueueInsert> = { updatedAt: new Date() };
 
   if (input.name !== undefined) queuePatch.name = input.name;
@@ -95,7 +126,7 @@ export async function updateQueue(
   if (input.intervalUnit !== undefined) queuePatch.intervalUnit = input.intervalUnit;
   if (input.daysOfWeek !== undefined) queuePatch.daysOfWeek = input.daysOfWeek;
   if (input.hourSlots !== undefined) queuePatch.hourSlots = input.hourSlots;
-  if (input.startDate !== undefined) queuePatch.startDate = input.startDate ? new Date(input.startDate) : null;
+  if (input.startDate !== undefined) queuePatch.startDate = parsedStartDate ?? null;
   if (input.seasonalStart !== undefined) queuePatch.seasonalStart = input.seasonalStart;
   if (input.seasonalEnd !== undefined) queuePatch.seasonalEnd = input.seasonalEnd;
   if (input.seasonalRepeat !== undefined) queuePatch.seasonalRepeat = input.seasonalRepeat;
@@ -108,14 +139,8 @@ export async function updateQueue(
   const effectiveHourSlots = (input.hourSlots ?? existingQueue.hourSlots) as number[];
   const effectiveDaysOfWeek = (input.daysOfWeek ?? existingQueue.daysOfWeek) as number[];
   const effectiveStartDate = input.startDate !== undefined
-    ? (input.startDate ? new Date(input.startDate) : null)
+    ? parsedStartDate ?? null
     : existingQueue.startDate;
-
-  const [userRow] = await db
-    .select({ timezone: users.timezone })
-    .from(users)
-    .where(eq(users.id, userId));
-  const userTimezone = userRow?.timezone ?? 'UTC';
 
   const nextRunAt = calculateNextRunAt(
     {
