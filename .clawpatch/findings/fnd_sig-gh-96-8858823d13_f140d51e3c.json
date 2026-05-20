@@ -50,11 +50,71 @@
   "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
   "suggestedRegressionTest": null,
   "minimumFixScope": "packages/web/src/pages/posts/BulkImportPage.tsx, packages/web/src/hooks/use-bulk-ops.ts, packages/api/src/routes/bulk-import.ts, packages/api/src/services/bulk-import.service.ts, packages/shared/src/schemas/bulk-import.ts",
-  "status": "open",
-  "history": [],
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T121702-0e3def",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence files still exist. Current code still does not satisfy the finding: BulkImportPage only stores/renders an inline Alert for twitter_budget_exceeded; other import failures fall through to toast.error at packages/web/src/pages/posts/BulkImportPage.tsx:42-53, while useBulkImport also has onError: showBulkOperationError, which announces and toast.error's the same failure at packages/web/src/hooks/use-bulk-ops.ts:30-33 and :89-91. On the API side, parseCsvBuffer collects schema validation failures into parsedCsv.errors at packages/api/src/services/bulk-import.service.ts:40-50, and the route still inserts/enqueues the bulk operation and returns 202 with errorCount at packages/api/src/routes/bulk-import.ts:152-205 instead of returning a 4xx actionable validation body for invalid CSV rows. The route test file is still only it.todo coverage for bulk import behavior, so the acceptance criteria regression coverage is absent. Existing focused tests could not be executed in this read-only environment because Vitest attempted to write packages/api/node_modules/.vite-temp and failed with EPERM.",
+      "commands": [
+        "rg -n \"bulk import|BulkImport|useBulkImport|showBulkOperationError|csv|CSV|validation|toast|inline|Alert\" packages/web/src/pages/posts/BulkImportPage.tsx packages/web/src/hooks/use-bulk-ops.ts packages/api/src/routes/bulk-import.ts packages/api/src/services/bulk-import.service.ts packages/shared/src/schemas/bulk-import.ts",
+        "rg --files | rg \"bulk-import|BulkImport|use-bulk-ops\"",
+        "sed -n '1,260p' packages/api/src/routes/bulk-import.ts",
+        "sed -n '1,220p' packages/api/src/services/bulk-import.service.ts",
+        "sed -n '1,260p' packages/web/src/pages/posts/BulkImportPage.tsx",
+        "sed -n '1,140p' packages/web/src/hooks/use-bulk-ops.ts",
+        "sed -n '1,260p' packages/api/src/__tests__/routes/bulk-import.test.ts",
+        "sed -n '1,240p' packages/api/src/__tests__/services/bulk-import.test.ts",
+        "rg -n \"BulkImportPage|Import Posts|twitter_budget_exceeded|CSV|csv|bulk import|validation failed|queue_name_mismatch|errorCount\" packages/web/src packages/api/src packages/shared/src",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/services/bulk-import.test.ts",
+        "nl -ba packages/web/src/pages/posts/BulkImportPage.tsx | sed -n '18,155p'",
+        "nl -ba packages/web/src/hooks/use-bulk-ops.ts | sed -n '25,100p'",
+        "nl -ba packages/api/src/routes/bulk-import.ts | sed -n '38,225p'",
+        "nl -ba packages/api/src/services/bulk-import.service.ts | sed -n '20,55p'",
+        "nl -ba packages/api/src/__tests__/routes/bulk-import.test.ts | sed -n '1,40p' && nl -ba packages/api/src/__tests__/services/bulk-import.test.ts | sed -n '1,60p'"
+      ],
+      "createdAt": "2026-05-20T12:18:17.526Z"
+    },
+    {
+      "runId": "20260520T122904-ac9354",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current API code now rejects invalid parsed CSV before creating/enqueuing a bulk operation: packages/api/src/routes/bulk-import.ts builds a csv_validation_failed body with row details and rejectInvalidCsv returns HTTP 400 for row errors or empty CSV; CsvParseError is mapped to HTTP 400 with code csv_parse_failed. The frontend now formats csv_validation_failed/csv_parse_failed responses and renders an inline destructive Alert beside the file/import controls in packages/web/src/pages/posts/BulkImportPage.tsx, so the toast path in useBulkImport is no longer the only visible error surface. Regression coverage exists in packages/web/src/pages/posts/__tests__/BulkImportPage.test.tsx for inline CSV details and packages/api/src/__tests__/routes/bulk-import.test.ts plus packages/api/src/__tests__/services/bulk-import.test.ts for validation details/row errors. API typecheck passed and web typecheck passed when run without build-mode tsbuildinfo writes. Vitest execution could not complete in this read-only sandbox because Vite/Vitest attempted to create temp/cache directories and failed with EPERM, but the current code satisfies the finding acceptance criteria.",
+      "commands": [
+        "rg --files | rg \"(BulkImportPage|use-bulk-ops|bulk-import|bulk-import\\.test)\"",
+        "rg -n \"useBulkImport|showBulkOperationError|toast\\.error|setInlineError|inlineError|twitter_budget_exceeded|Alert|validation|CSV|csv|errorCount|parsedCsv\\.errors|BulkImport\" packages/web/src/pages/posts/BulkImportPage.tsx packages/web/src/hooks/use-bulk-ops.ts packages/api/src/routes/bulk-import.ts packages/api/src/services/bulk-import.service.ts packages/shared/src/schemas/bulk-import.ts packages/api/src/__tests__ packages/web/src --glob '!**/node_modules/**'",
+        "git status --short",
+        "nl -ba packages/web/src/pages/posts/BulkImportPage.tsx | sed -n '1,240p'",
+        "nl -ba packages/web/src/hooks/use-bulk-ops.ts | sed -n '1,120p'",
+        "nl -ba packages/api/src/routes/bulk-import.ts | sed -n '1,310p'",
+        "nl -ba packages/api/src/services/bulk-import.service.ts | sed -n '1,180p'",
+        "nl -ba packages/shared/src/schemas/bulk-import.ts | sed -n '1,180p'",
+        "nl -ba packages/web/src/pages/posts/__tests__/BulkImportPage.test.tsx | sed -n '1,180p'",
+        "nl -ba packages/api/src/__tests__/routes/bulk-import.test.ts | sed -n '1,260p'",
+        "nl -ba packages/api/src/__tests__/services/bulk-import.test.ts | sed -n '1,160p'",
+        "rg -n \"csv_validation_failed|CSV import needs changes|renders rejected CSV|invalid CSV|buildCsvValidationFailure|CSV parse failed|errorCount\" packages/api/src/__tests__ packages/web/src/pages/posts/__tests__ packages/web/src --glob '!**/node_modules/**'",
+        "node -p \"require('./packages/api/package.json').dependencies?.express || require('./package.json').dependencies?.express\"",
+        "nl -ba packages/web/src/lib/api-client.ts | sed -n '1,220p'",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/routes/bulk-import.test.ts packages/api/src/__tests__/services/bulk-import.test.ts",
+        "pnpm --filter @sms/web test -- --run packages/web/src/pages/posts/__tests__/BulkImportPage.test.tsx",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/web typecheck",
+        "pnpm --filter @sms/web exec tsc --noEmit --incremental false -p tsconfig.app.json",
+        "pnpm --filter @sms/web exec tsc --noEmit --incremental false -p tsconfig.node.json",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/routes/bulk-import.test.ts src/__tests__/services/bulk-import.test.ts --configLoader runner",
+        "pnpm --filter @sms/web exec vitest run src/pages/posts/__tests__/BulkImportPage.test.tsx --configLoader runner"
+      ],
+      "createdAt": "2026-05-20T12:31:03.658Z"
+    }
+  ],
   "signature": "sig_gh-96_8858823d13",
-  "linkedPatchAttemptIds": [],
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-96-8858823d13-f140d51_09cc799598"
+  ],
   "createdByRunId": "20260520T120814-2f872c",
   "createdAt": "2026-05-20T12:08:14.295Z",
-  "updatedAt": "2026-05-20T12:08:14.295Z"
+  "updatedAt": "2026-05-20T12:31:03.658Z"
 }
