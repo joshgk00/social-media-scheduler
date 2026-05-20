@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-96_a79f3c8574",
+  "title": "gh#96: CSV import failures return 500 and hidden toast instead of visible validation errors",
+  "summary": "Imported from GitHub issue gh#96 in BACKLOG.md section \"P0 — Production blockers\".",
+  "kind": "route",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/pages/posts/BulkImportPage.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/web/src/hooks/use-bulk-ops.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/api/src/routes/bulk-import.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/pages/posts/BulkImportPage.tsx",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/web/src/hooks/use-bulk-ops.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/api/src/routes/bulk-import.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/api/src/services/bulk-import.service.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/schemas/bulk-import.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#96"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#96",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/96",
+    "backlog-order:0002",
+    "backlog-section:p0-production-blockers",
+    "label:bug"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem",
+    "database",
+    "concurrency",
+    "external-api"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-96-8858823d13_f140d51e3c"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260520T120814-2f872c",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#96",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-20T12:08:14.295Z"
+    }
+  ],
+  "createdAt": "2026-05-20T12:08:14.295Z",
+  "updatedAt": "2026-05-20T12:31:03.706Z"
+}

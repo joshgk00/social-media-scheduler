@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-95-e76b263713_bd318f63d5",
+  "featureId": "feat_gh-95_0bb007b559",
+  "title": "gh#95: Import Posts template download links do not provide CSV templates",
+  "category": "bug",
+  "severity": "critical",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/web/src/hooks/use-csv-templates.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/95.\nBacklog section: P0 — Production blockers.\n\n## Problem\nUsers cannot download the CSV template from the Import Posts page, which leaves them without a reliable way to compare their CSV document against the expected import format before uploading.\n\n## User impact\nWhen importing posts into a queue, the user sees `Download Scheduled Template` and `Download Queue Template`, but the template download does not work. From the user perspective, there is no way to confirm whether a file such as `queue_cmw_promotions.csv` has the right columns and formatting before attempting the import.\n\n## Reproduction\n1. Open the app and go to **Import Posts**.\n2. Select **Queue** as the import target.\n3. Select a connected profile, e.g. `@clicksmortarweb`.\n4. Select an existing queue, e.g. `CMW Promotions`.\n5. Scroll to **Need a template?**.\n6. Click **Download Queue Template** or **Download Scheduled Template**.\n\n## Expected behavior\nThe app downloads a CSV template matching the selected import target:\n- Scheduled-post import template should show the columns required for rows with explicit publish times.\n- Queue import template should show the columns required for rows appended to an existing queue.\n\nThe downloaded file should be usable as a source of truth for users to compare their own CSV before importing.\n\n## Actual behavior\nThe template download does not produce a usable CSV template. The Import Posts page exposes links, but the CSV files appear to be missing or unreachable.\n\n## Implementation notes\nThe web page currently links to:\n\n- `/templates/scheduled-posts.csv`\n- `/templates/queue-posts.csv`\n\nvia `packages/web/src/hooks/use-csv-templates.ts`, but there are no matching template CSV files visible under `packages/web`.\n\n## Acceptance criteria\n- `Download Scheduled Template` downloads a valid scheduled-post CSV template.\n- `Download Queue Template` downloads a valid queue CSV template.\n- The templates include headers and at least one example row or clear placeholder row for the expected import schema.\n- Missing template assets are covered by a regression test or static asset check.\n- The user can download the template without first uploading a CSV.\n\n## References\nDepends on: nothing",
+  "reproduction": "Users cannot download the CSV template from the Import Posts page, which leaves them without a reliable way to compare their CSV document against the expected import format before uploading.",
+  "recommendation": "Implement the fix described by GitHub issue gh#95 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/hooks/use-csv-templates.ts, packages/web",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T120838-cd0acb",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists. packages/web/src/hooks/use-csv-templates.ts still returns /templates/scheduled-posts.csv and /templates/queue-posts.csv, and packages/web/src/pages/posts/BulkImportPage.tsx still uses those functions for the Download Scheduled Template and Download Queue Template anchors. Current repository checks found no matching scheduled-posts.csv or queue-posts.csv under packages/web, including the Vite-served public/templates path and existing dist/templates path. A web test run could not start because the read-only sandbox prevented Vitest/Vite from writing its temporary config file, so there is no passing regression evidence that this is fixed. The current code and static asset checks indicate the download links still point to missing CSV assets.",
+      "commands": [
+        "sed -n '1,80p' packages/web/src/hooks/use-csv-templates.ts",
+        "sed -n '1,180p' packages/web/src/pages/posts/BulkImportPage.tsx",
+        "rg -n \"scheduled-posts|queue-posts|Download Scheduled Template|Download Queue Template|useCsvTemplates|use-csv-templates|Need a template\" packages/web",
+        "find packages/web -type f \\( -name 'scheduled-posts.csv' -o -name 'queue-posts.csv' \\) -print",
+        "node -e \"const fs=require('fs'); for (const p of ['packages/web/public/templates/scheduled-posts.csv','packages/web/public/templates/queue-posts.csv','packages/web/dist/templates/scheduled-posts.csv','packages/web/dist/templates/queue-posts.csv']) console.log(p, fs.existsSync(p) ? 'exists' : 'missing')\"",
+        "nl -ba packages/web/src/hooks/use-csv-templates.ts",
+        "nl -ba packages/web/src/pages/posts/BulkImportPage.tsx | sed -n '112,126p'",
+        "pnpm --filter @sms/web test -- --run"
+      ],
+      "createdAt": "2026-05-20T12:10:14.448Z"
+    },
+    {
+      "runId": "20260520T121441-5e3ba5",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists and still returns /templates/scheduled-posts.csv and /templates/queue-posts.csv. BulkImportPage still uses those URLs for the Download Scheduled Template and Download Queue Template links. Unlike the prior validation, matching CSV assets now exist at packages/web/public/templates/scheduled-posts.csv and packages/web/public/templates/queue-posts.csv, with headers plus one sample row each; matching built copies also exist under packages/web/dist/templates. A focused regression test now exists at packages/web/src/hooks/__tests__/use-csv-templates.test.ts and asserts the URLs resolve to raw CSV content with the expected headers/sample rows. I could not execute Vitest in this read-only sandbox because Vite/Vitest tried to write temporary config files under packages/web/node_modules/.vite-temp, and the runner workaround failed because the config uses __dirname. Static code and asset checks indicate the missing-template issue is fixed in the current worktree.",
+      "commands": [
+        "sed -n '1,120p' packages/web/src/hooks/use-csv-templates.ts",
+        "rg -n \"scheduled-posts|queue-posts|Download Scheduled Template|Download Queue Template|useCsvTemplates|use-csv-templates|Need a template\" packages/web",
+        "find packages/web -type f \\( -name 'scheduled-posts.csv' -o -name 'queue-posts.csv' \\) -print",
+        "rg -n \"csv template|templates/|scheduled-posts.csv|queue-posts.csv|Download.*Template\" packages/web/src packages/web/tests packages/web/public package.json packages/web/package.json",
+        "sed -n '1,220p' packages/web/src/hooks/__tests__/use-csv-templates.test.ts",
+        "nl -ba packages/web/src/pages/posts/BulkImportPage.tsx | sed -n '108,128p'",
+        "nl -ba packages/web/public/templates/scheduled-posts.csv",
+        "nl -ba packages/web/public/templates/queue-posts.csv",
+        "cat packages/web/package.json",
+        "pnpm --filter @sms/web test -- --run packages/web/src/hooks/__tests__/use-csv-templates.test.ts",
+        "pnpm --dir packages/web exec vitest --run src/hooks/__tests__/use-csv-templates.test.ts --configLoader runner",
+        "sed -n '1,120p' packages/web/vitest.config.ts",
+        "node -e \"const fs=require('fs'); const paths=['packages/web/public/templates/scheduled-posts.csv','packages/web/public/templates/queue-posts.csv','packages/web/dist/templates/scheduled-posts.csv','packages/web/dist/templates/queue-posts.csv']; for (const p of paths) { const s=fs.existsSync(p)?fs.readFileSync(p,'utf8').trim().split(/\\r?\\n/):null; console.log(p, s ? JSON.stringify({exists:true, rows:s.length, header:s[0], sample:s[1]}) : JSON.stringify({exists:false})); }\"",
+        "git status --short"
+      ],
+      "createdAt": "2026-05-20T12:15:49.001Z"
+    }
+  ],
+  "signature": "sig_gh-95_e76b263713",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-95-e76b263713-bd318f6_8d2c85cf96"
+  ],
+  "createdByRunId": "20260520T120814-2f872c",
+  "createdAt": "2026-05-20T12:08:14.295Z",
+  "updatedAt": "2026-05-20T12:15:49.001Z"
+}

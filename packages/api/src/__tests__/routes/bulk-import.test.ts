@@ -1,5 +1,5 @@
-// Wave 0 stub -- implementation lands in Plan 03. Replace it.todo with real assertions during the GREEN phase.
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { buildCsvValidationFailure } from '../../routes/bulk-import.js';
 
 describe('bulk import route', () => {
   it.todo('parses streaming CSV rows with csv-parse v6 and bom:true');
@@ -9,4 +9,24 @@ describe('bulk import route', () => {
   it.todo('rejects non-CSV MIME uploads before parsing');
   it.todo('requires an authenticated session and applies bulkOperationsLimiter');
   it.todo('enforces CSRF token on multipart upload');
+
+  it('builds a 400 body with row details for schema-invalid CSV rows', () => {
+    expect(
+      buildCsvValidationFailure({
+        rows: [],
+        errors: [
+          {
+            rowNumber: 2,
+            reason: 'scheduled_at: Invalid datetime',
+            row: { text: 'hello', scheduled_at: 'not-a-date' },
+          },
+        ],
+      }),
+    ).toEqual({
+      error: 'CSV validation failed',
+      code: 'csv_validation_failed',
+      errorCount: 1,
+      details: [{ rowNumber: 2, reason: 'scheduled_at: Invalid datetime' }],
+    });
+  });
 });
