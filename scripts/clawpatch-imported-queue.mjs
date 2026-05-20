@@ -41,6 +41,7 @@ async function main() {
     .filter(
       ({ finding }) => args.status === "any" || finding.status === args.status,
     )
+    .filter(({ finding }) => !args.exclude.has(finding.findingId))
     .sort(compareQueueItems);
 
   if (args.command === "next") {
@@ -129,6 +130,7 @@ function parseArgs(argv) {
   const parsed = {
     command: "list",
     help: false,
+    exclude: new Set(),
     plain: false,
     status: "open",
   };
@@ -139,6 +141,10 @@ function parseArgs(argv) {
     else if (arg === "list" || arg === "next") parsed.command = arg;
     else if (arg === "--help" || arg === "-h") parsed.help = true;
     else if (arg === "--plain") parsed.plain = true;
+    else if (arg === "--exclude")
+      parsed.exclude.add(requireValue(argv, ++index, arg));
+    else if (arg.startsWith("--exclude="))
+      parsed.exclude.add(arg.slice("--exclude=".length));
     else if (arg === "--status")
       parsed.status = requireValue(argv, ++index, arg);
     else if (arg.startsWith("--status="))
@@ -163,6 +169,7 @@ Lists or selects Clawpatch findings imported from GitHub issues.
 
 Flags:
   --status <status|any>  Default: open
+  --exclude <finding>    Omit a finding id from the queue; repeatable
   --plain               Print tabular output for list, finding id for next
 `);
 }

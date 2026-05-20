@@ -14,6 +14,9 @@
     "clawpatch:queue-gh": "node scripts/clawpatch-imported-queue.mjs",
     "clawpatch:fix-gh": "scripts/clawpatch-fix-imported-github-issues.sh",
     "clawpatch:overnight": "scripts/clawpatch-overnight-loop.sh",
+    "clawpatch:roborev-one": "scripts/clawpatch-roborev-loop.sh --max 1",
+    "clawpatch:roborev-batch": "scripts/clawpatch-roborev-loop.sh --max 3",
+    "clawpatch:roborev-overnight": "scripts/clawpatch-roborev-loop.sh --max 10 --interval-seconds 1800",
     "db:generate": "pnpm --filter @sms/db exec drizzle-kit generate",
     "db:migrate": "pnpm --filter @sms/db exec drizzle-kit migrate"
   },
