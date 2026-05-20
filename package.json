@@ -10,6 +10,10 @@
     "typecheck": "pnpm -r typecheck",
     "pretest": "pnpm -r build",
     "test": "pnpm -r test -- --run",
+    "clawpatch:import-gh": "node scripts/import-github-issues-to-clawpatch.mjs",
+    "clawpatch:queue-gh": "node scripts/clawpatch-imported-queue.mjs",
+    "clawpatch:fix-gh": "scripts/clawpatch-fix-imported-github-issues.sh",
+    "clawpatch:overnight": "scripts/clawpatch-overnight-loop.sh",
     "db:generate": "pnpm --filter @sms/db exec drizzle-kit generate",
     "db:migrate": "pnpm --filter @sms/db exec drizzle-kit migrate"
   },
