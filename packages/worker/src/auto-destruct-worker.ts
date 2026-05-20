@@ -13,6 +13,7 @@ import { Worker, type Job, type Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { QUEUE_NAMES, JOB_NAMES } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
+import type { TokenVault } from '@sms/shared/tokens';
 import type { WorkerDb } from './db.js';
 import { autoDestructPost } from './auto-destruct-lifecycle.service.js';
 import { deleteTweet } from './twitter-delete.service.js';
@@ -28,6 +29,7 @@ export interface AutoDestructWorkerDeps {
   redis: Redis;
   db: WorkerDb;
   notificationQueue: Queue;
+  vault: TokenVault;
 }
 
 const AUTO_DESTRUCT_CONFIG = {
@@ -65,6 +67,7 @@ export function createAutoDestructWorker(
             profile,
             platformPostId,
             correlationId: job.data.correlationId,
+            vault: deps.vault,
           });
         },
       });

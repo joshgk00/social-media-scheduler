@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UnrecoverableError, type Queue, type Job } from 'bullmq';
+import type { TokenVault, TwitterCredentials } from '@sms/shared/tokens';
 import type { WorkerDb } from '../db.js';
 
 vi.mock('@sms/shared/logger', () => ({
@@ -13,11 +14,6 @@ vi.mock('@sms/shared/logger', () => ({
       error: vi.fn(),
     }),
   }),
-}));
-
-vi.mock('@sms/shared/encryption', () => ({
-  decrypt: vi.fn().mockReturnValue('decrypted-value'),
-  validateEncryptionKey: vi.fn().mockReturnValue(Buffer.alloc(32)),
 }));
 
 const deleteTweetMock = vi.fn().mockResolvedValue({ data: { deleted: true } });
@@ -68,29 +64,57 @@ function createMockProfile(): Record<string, unknown> {
   };
 }
 
+function createFakeVault(
+  credentials: TwitterCredentials = {
+    kind: 'twitter',
+    consumerKey: 'consumer-key',
+    consumerSecret: 'consumer-secret',
+    accessToken: 'access-token',
+    accessTokenSecret: 'access-token-secret',
+  },
+): { vault: TokenVault; unsealForProfile: ReturnType<typeof vi.fn> } {
+  const unsealForProfile = vi.fn().mockReturnValue(credentials);
+
+  return {
+    vault: {
+      sealTwitter: vi.fn(),
+      unsealTwitter: vi.fn(),
+      sealOAuth2: vi.fn(),
+      unsealOAuth2: vi.fn(),
+      unsealForProfile,
+      toSafeProfile: vi.fn((profile) => profile),
+    } as unknown as TokenVault,
+    unsealForProfile,
+  };
+}
+
 describe('Auto-Destruct System', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ENCRYPTION_KEY = 'a'.repeat(64);
   });
 
   describe('deleteTweet', () => {
-    it('calls Twitter v2.deleteTweet with platformPostId', async () => {
+    it('unseals credentials through TokenVault and calls Twitter v2.deleteTweet with platformPostId', async () => {
       const { deleteTweet } = await import('../twitter-delete.service.js');
       const profile = createMockProfile();
+      const { vault, unsealForProfile } = createFakeVault();
 
       const result = await deleteTweet({
         profile: profile as never,
         platformPostId: 'tweet-123',
         correlationId: 'corr-1',
+        vault,
       });
 
       expect(result.deleted).toBe(true);
+      expect(unsealForProfile).toHaveBeenCalledWith(profile);
+      expect(deleteTweetMock).toHaveBeenCalledWith('tweet-123');
     });
 
     it('returns deleted:true on 404 response (D-13: post already gone)', async () => {
       const { deleteTweet } = await import('../twitter-delete.service.js');
       const profile = createMockProfile();
+      const { vault } = createFakeVault();
 
       // Make deleteTweet throw a 404 ApiResponseError
       deleteTweetMock.mockRejectedValueOnce(
@@ -101,6 +125,7 @@ describe('Auto-Destruct System', () => {
         profile: profile as never,
         platformPostId: 'tweet-gone',
         correlationId: 'corr-2',
+        vault,
       });
 
       expect(result.deleted).toBe(true);

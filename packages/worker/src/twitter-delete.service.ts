@@ -10,14 +10,15 @@
 // commits the post to 'destroyed' status.
 
 import { TwitterApi, ApiResponseError } from 'twitter-api-v2';
-import { decrypt, validateEncryptionKey } from '@sms/shared/encryption';
 import { createLogger } from '@sms/shared/logger';
+import type { ProfileWithEncryptedTokens, TokenVault } from '@sms/shared/tokens';
 import type { socialProfiles } from '@sms/db';
 
 export interface DeleteTweetArgs {
   profile: typeof socialProfiles.$inferSelect;
   platformPostId: string;
   correlationId: string;
+  vault: TokenVault;
 }
 
 export interface DeleteTweetResult {
@@ -34,65 +35,20 @@ export class TwitterDeleteCredentialError extends Error {
 const logger = createLogger('twitter-delete');
 
 export async function deleteTweet(args: DeleteTweetArgs): Promise<DeleteTweetResult> {
-  const { profile, platformPostId, correlationId } = args;
+  const { profile, platformPostId, correlationId, vault } = args;
 
-  const rawKey = process.env.ENCRYPTION_KEY;
-  if (!rawKey) {
+  const credentials = vault.unsealForProfile(profile as ProfileWithEncryptedTokens);
+  if (credentials.kind !== 'twitter') {
     throw new TwitterDeleteCredentialError(
-      'ENCRYPTION_KEY env var is not set -- cannot decrypt Twitter credentials',
+      `Profile ${profile.id} is not a Twitter credential profile`,
     );
   }
-  const encryptionKey = validateEncryptionKey(rawKey);
-
-  if (
-    !profile.consumerKeyCiphertext ||
-    !profile.consumerKeyIv ||
-    !profile.consumerKeyAuthTag ||
-    !profile.consumerSecretCiphertext ||
-    !profile.consumerSecretIv ||
-    !profile.consumerSecretAuthTag ||
-    !profile.accessTokenCiphertext ||
-    !profile.accessTokenIv ||
-    !profile.accessTokenAuthTag ||
-    !profile.accessTokenSecretCiphertext ||
-    !profile.accessTokenSecretIv ||
-    !profile.accessTokenSecretAuthTag
-  ) {
-    throw new TwitterDeleteCredentialError(
-      `Profile ${profile.id} is missing one or more encrypted Twitter credential fields`,
-    );
-  }
-
-  const consumerKey = decrypt(
-    profile.consumerKeyCiphertext,
-    profile.consumerKeyIv,
-    profile.consumerKeyAuthTag,
-    encryptionKey,
-  );
-  const consumerSecret = decrypt(
-    profile.consumerSecretCiphertext,
-    profile.consumerSecretIv,
-    profile.consumerSecretAuthTag,
-    encryptionKey,
-  );
-  const accessToken = decrypt(
-    profile.accessTokenCiphertext,
-    profile.accessTokenIv,
-    profile.accessTokenAuthTag,
-    encryptionKey,
-  );
-  const accessSecret = decrypt(
-    profile.accessTokenSecretCiphertext,
-    profile.accessTokenSecretIv,
-    profile.accessTokenSecretAuthTag,
-    encryptionKey,
-  );
 
   const client = new TwitterApi({
-    appKey: consumerKey,
-    appSecret: consumerSecret,
-    accessToken,
-    accessSecret,
+    appKey: credentials.consumerKey,
+    appSecret: credentials.consumerSecret,
+    accessToken: credentials.accessToken,
+    accessSecret: credentials.accessTokenSecret,
   });
 
   logger.info(
