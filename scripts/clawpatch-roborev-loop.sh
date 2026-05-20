@@ -279,23 +279,36 @@ include_stage_path() {
 
 changed_source_paths() {
   local path
+  local seen_path
+  local -a seen_paths=()
+
+  emit_path() {
+    local candidate="$1"
+
+    if ! include_stage_path "$candidate"; then
+      return 0
+    fi
+
+    for seen_path in "${seen_paths[@]}"; do
+      if [[ "$seen_path" == "$candidate" ]]; then
+        return 0
+      fi
+    done
+
+    seen_paths+=("$candidate")
+    printf '%s\0' "$candidate"
+  }
 
   while IFS= read -r -d '' path; do
-    if include_stage_path "$path"; then
-      printf '%s\0' "$path"
-    fi
+    emit_path "$path"
   done < <(git diff --name-only -z)
 
   while IFS= read -r -d '' path; do
-    if include_stage_path "$path"; then
-      printf '%s\0' "$path"
-    fi
+    emit_path "$path"
   done < <(git diff --cached --name-only -z)
 
   while IFS= read -r -d '' path; do
-    if include_stage_path "$path"; then
-      printf '%s\0' "$path"
-    fi
+    emit_path "$path"
   done < <(git ls-files --others --exclude-standard -z)
 }
 
