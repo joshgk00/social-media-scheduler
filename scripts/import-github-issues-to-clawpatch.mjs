@@ -38,7 +38,7 @@ async function main() {
   const importedFindingIds = [];
   const skipped = [];
 
-  for (const [index, backlogItem] of selectedItems.entries()) {
+  for (const backlogItem of selectedItems) {
     const issue = fetchIssue(backlogItem.number);
     if (issue.state !== "OPEN" && !args.includeClosed) {
       skipped.push({
@@ -117,7 +117,7 @@ async function main() {
         "github-issue",
         `gh#${issue.number}`,
         `github-url:${issue.url}`,
-        `backlog-order:${String(index + 1).padStart(4, "0")}`,
+        `backlog-order:${String(backlogItem.backlogOrder).padStart(4, "0")}`,
         `backlog-section:${slug(backlogItem.section)}`,
         ...issue.labels.map((label) => `label:${slug(label.name)}`),
       ]),
@@ -233,6 +233,7 @@ async function readBacklogItems() {
     if (!match?.groups) continue;
     const issueNumber = match.groups.directNumber ?? match.groups.linkedNumber;
     items.push({
+      backlogOrder: items.length + 1,
       status: match.groups.status,
       number: Number(issueNumber),
       title: match.groups.title.replace(/\s+\*\(.+?\)\*$/, "").trim(),
