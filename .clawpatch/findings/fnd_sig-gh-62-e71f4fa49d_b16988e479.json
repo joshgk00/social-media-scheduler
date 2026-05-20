@@ -1,1 +1,87 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-62-e71f4fa49d_b16988e479","featureId":"feat_gh-62_8ae174df20","title":"gh#62: R2.2 — Add planDelete; switch api/post.service.deletePost","category":"data-loss","severity":"high","confidence":"high","triage":"confirmed-bug","evidence":[{"path":"packages/shared/src/post/aggregate.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/api/src/services/post.service.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/62.\nBacklog section: Candidate 2 — Post Lifecycle aggregate.\n\n## Context\n\nSecond PR in Candidate 2. Migrates `deletePost` to the aggregate.\n\n## Scope\n\n- Add `planDelete(currentRow: PostState): void` to `packages/shared/src/post/aggregate.ts`\n  - Throws `PostInvariantError({ kind: 'not_deletable' })` if status is not in `DELETABLE_STATES`\n  - Returns `void` (no patch — deletion is a row removal, handled by the repo)\n- Update `packages/api/src/services/post.service.ts` → `deletePost`:\n  - Call `planDelete(loadedRow)` inside the transaction before the actual DELETE\n  - Soft-delete of media still happens in the service (out of aggregate scope per ADR-0003)\n- Unit tests for `planDelete`: each `DELETABLE_STATES` value passes; each non-deletable state throws with correct `kind`\n\n## Out of scope\n\n- `planTransitionToPublishing` (R2.3)\n- `planRecordSuccess` / `planRecordFailure` (R2.4)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- Existing `deletePost` tests pass\n\n## References\n\n- ADRs: [0003](../blob/main/docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md), [0004](../blob/main/docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md)\n- Depends on: #61","reproduction":"Second PR in Candidate 2. Migrates `deletePost` to the aggregate.","recommendation":"- Add `planDelete(currentRow: PostState): void` to `packages/shared/src/post/aggregate.ts`\n  - Throws `PostInvariantError({ kind: 'not_deletable' })` if status is not in `DELETABLE_STATES`\n  - Returns `void` (no patch — deletion is a row removal, handled by the repo)\n- Update `packages/api/src/services/post.service.ts` → `deletePost`:\n  - Call `planDelete(loadedRow)` inside the transaction before the actual DELETE\n  - Soft-delete of media still happens in the service (out of aggregate scope per ADR-0003)\n- Unit tests for `planDelete`: each `DELETABLE_STATES` value passes; each non-deletable state throws with correct `kind`","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- Existing `deletePost` tests pass","minimumFixScope":"packages/shared/src/post/aggregate.ts, packages/api/src/services/post.service.ts","status":"open","history":[],"signature":"sig_gh-62_e71f4fa49d","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-62-e71f4fa49d_b16988e479",
+  "featureId": "feat_gh-62_8ae174df20",
+  "title": "gh#62: R2.2 — Add planDelete; switch api/post.service.deletePost",
+  "category": "data-loss",
+  "severity": "high",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/shared/src/post/aggregate.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/services/post.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/62.\nBacklog section: Candidate 2 — Post Lifecycle aggregate.\n\n## Context\n\nSecond PR in Candidate 2. Migrates `deletePost` to the aggregate.\n\n## Scope\n\n- Add `planDelete(currentRow: PostState): void` to `packages/shared/src/post/aggregate.ts`\n  - Throws `PostInvariantError({ kind: 'not_deletable' })` if status is not in `DELETABLE_STATES`\n  - Returns `void` (no patch — deletion is a row removal, handled by the repo)\n- Update `packages/api/src/services/post.service.ts` → `deletePost`:\n  - Call `planDelete(loadedRow)` inside the transaction before the actual DELETE\n  - Soft-delete of media still happens in the service (out of aggregate scope per ADR-0003)\n- Unit tests for `planDelete`: each `DELETABLE_STATES` value passes; each non-deletable state throws with correct `kind`\n\n## Out of scope\n\n- `planTransitionToPublishing` (R2.3)\n- `planRecordSuccess` / `planRecordFailure` (R2.4)\n\n## Acceptance\n\n- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- Existing `deletePost` tests pass\n\n## References\n\n- ADRs: [0003](../blob/main/docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md), [0004](../blob/main/docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md)\n- Depends on: #61",
+  "reproduction": "Second PR in Candidate 2. Migrates `deletePost` to the aggregate.",
+  "recommendation": "- Add `planDelete(currentRow: PostState): void` to `packages/shared/src/post/aggregate.ts`\n  - Throws `PostInvariantError({ kind: 'not_deletable' })` if status is not in `DELETABLE_STATES`\n  - Returns `void` (no patch — deletion is a row removal, handled by the repo)\n- Update `packages/api/src/services/post.service.ts` → `deletePost`:\n  - Call `planDelete(loadedRow)` inside the transaction before the actual DELETE\n  - Soft-delete of media still happens in the service (out of aggregate scope per ADR-0003)\n- Unit tests for `planDelete`: each `DELETABLE_STATES` value passes; each non-deletable state throws with correct `kind`",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/shared build` and test pass\n- `pnpm --filter @sms/api build` and test pass\n- Existing `deletePost` tests pass",
+  "minimumFixScope": "packages/shared/src/post/aggregate.ts, packages/api/src/services/post.service.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T170721-c029fb",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current packages/shared/src/post/aggregate.ts contains only planUpdate and deriveEffectiveScheduledAt (lines 1-99) and no planDelete; rg found no planDelete symbol anywhere in the repo. packages/api/src/services/post.service.ts still imports DELETABLE_STATES directly from @sms/shared and deletePost still enforces deletability inline in the DELETE WHERE clause with inArray(posts.status, [...DELETABLE_STATES]) at lines 316-324, with no loaded row passed to an aggregate planner. packages/shared/src/__tests__/post-aggregate.test.ts imports/tests planUpdate only and has no planDelete coverage. A targeted vitest run could not execute because the read-only sandbox blocked Vitest from writing packages/shared/node_modules/.vite-temp, but the current code and test sources show the requested migration and regression tests are still absent.",
+      "commands": [
+        "git status --short && rg -n \"planDelete|deletePost|DELETABLE_STATES|not_deletable\" packages/shared/src/post packages/api/src/services packages -g '*.{ts,tsx}'",
+        "sed -n '1,260p' packages/shared/src/post/aggregate.ts",
+        "sed -n '1,320p' packages/api/src/services/post.service.ts",
+        "sed -n '320,420p' packages/api/src/services/post.service.ts && rg -n \"planUpdate|planDelete|PostInvariantError|not_deletable|DELETABLE_STATES|deletePost\" packages/shared/src packages/shared/src/__tests__ packages/api/src/__tests__/services/post.test.ts packages/api/src/__tests__/services/post-state-machine.test.ts",
+        "nl -ba packages/shared/src/post/aggregate.ts | sed -n '1,140p'",
+        "nl -ba packages/api/src/services/post.service.ts | sed -n '1,30p;300,345p'",
+        "nl -ba packages/shared/src/__tests__/post-aggregate.test.ts | sed -n '1,130p'",
+        "nl -ba packages/shared/src/index.ts | sed -n '1,80p'",
+        "pnpm --filter @sms/shared test -- post-aggregate"
+      ],
+      "createdAt": "2026-05-20T17:08:10.004Z"
+    },
+    {
+      "runId": "20260520T171137-5b3599",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist, and the current code now implements the requested migration. packages/shared/src/post/aggregate.ts defines planDelete(currentRow: PostState): void at lines 10-17, checks DELETABLE_STATES, throws PostInvariantError with kind 'not_deletable', and returns no patch. packages/shared/src/post/errors.ts includes the not_deletable kind, and packages/shared/src/index.ts re-exports the aggregate. packages/api/src/services/post.service.ts now imports planDelete, loads the current post row inside deletePost's transaction, calls planDelete before soft-deleting media and before the DELETE, maps PostInvariantError to PostServiceError, and no longer uses the previous direct DELETABLE_STATES DELETE predicate. packages/shared/src/__tests__/post-aggregate.test.ts has focused planDelete tests for every DELETABLE_STATES value and every non-deletable POST_STATUSES value. I could not run the normal build/test commands because this revalidation environment is read-only and Vitest/tsc tried to write cache/dist files, but no-emit TypeScript checks passed for both @sms/shared and @sms/api.",
+      "commands": [
+        "git status --short",
+        "rg -n \"planDelete|deletePost|DELETABLE_STATES|not_deletable|PostInvariantError\" packages/shared/src packages/api/src -g '*.{ts,tsx}'",
+        "nl -ba packages/shared/src/post/aggregate.ts | sed -n '1,220p'",
+        "nl -ba packages/api/src/services/post.service.ts | sed -n '1,80p;280,360p'",
+        "nl -ba packages/api/src/services/post.service.ts | sed -n '76,105p;348,390p'",
+        "nl -ba packages/shared/src/__tests__/post-aggregate.test.ts | sed -n '1,90p'",
+        "nl -ba packages/shared/src/index.ts | sed -n '1,70p'",
+        "nl -ba packages/shared/src/post/types.ts | sed -n '1,120p'",
+        "pnpm --filter @sms/shared test -- post-aggregate",
+        "pnpm --filter @sms/api test -- post.test.ts -t deletePost",
+        "pnpm --filter @sms/shared build",
+        "pnpm --filter @sms/api build",
+        "pnpm --filter @sms/shared exec tsc --noEmit",
+        "pnpm --filter @sms/api exec tsc --noEmit",
+        "nl -ba packages/api/src/__tests__/services/post.test.ts | sed -n '40,90p;720,775p;995,1025p'",
+        "nl -ba packages/shared/src/post/errors.ts | sed -n '1,45p'"
+      ],
+      "createdAt": "2026-05-20T17:12:44.982Z"
+    }
+  ],
+  "signature": "sig_gh-62_e71f4fa49d",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-62-e71f4fa49d-b16988e_3fdc841be4"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T17:12:44.982Z"
+}

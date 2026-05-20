@@ -1,1 +1,82 @@
-{"schemaVersion":1,"featureId":"feat_gh-63_1367a348dd","title":"gh#63: R2.3 — Add planTransitionToPublishing + TransitionDecision","summary":"Imported from GitHub issue gh#63 in BACKLOG.md section \"Candidate 2 — Post Lifecycle aggregate\".","kind":"job","source":"github-issue-import","confidence":"high","entrypoints":[{"path":"packages/shared/src/post/aggregate.ts","symbol":null,"route":null,"command":null},{"path":"packages/worker/src/post-lifecycle.service.ts","symbol":null,"route":null,"command":null}],"ownedFiles":[{"path":"packages/shared/src/post/aggregate.ts","reason":"mentioned by issue body"},{"path":"packages/worker/src/post-lifecycle.service.ts","reason":"mentioned by issue body"}],"contextFiles":[{"path":"docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md","reason":"mentioned by issue body"},{"path":"docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md","reason":"mentioned by issue body"},{"path":"BACKLOG.md","reason":"backlog queue item for gh#63"}],"tests":[],"tags":["github-issue","gh#63","github-url:https://github.com/joshgk00/social-media-scheduler/issues/63","backlog-order:0008","backlog-section:candidate-2-post-lifecycle-aggregate","label:enhancement"],"trustBoundaries":["network","filesystem","secrets","database","concurrency","external-api"],"status":"needs-fix","lock":null,"findingIds":["fnd_sig-gh-63-f14639dd59_41e418dfe3"],"patchAttemptIds":[],"analysisHistory":[{"runId":"20260519T201935-c24f6a","kind":"github-issue-import","summary":"Imported GitHub issue gh#63","provider":"gh","model":null,"createdAt":"2026-05-19T20:19:35.980Z"}],"createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-63_1367a348dd",
+  "title": "gh#63: R2.3 — Add planTransitionToPublishing + TransitionDecision",
+  "summary": "Imported from GitHub issue gh#63 in BACKLOG.md section \"Candidate 2 — Post Lifecycle aggregate\".",
+  "kind": "job",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/shared/src/post/aggregate.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/worker/src/post-lifecycle.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/shared/src/post/aggregate.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/post-lifecycle.service.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "docs/adr/0003-post-lifecycle-is-pure-functions-not-shared-repository.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "docs/adr/0004-publish-cycle-orchestration-stays-in-the-worker.md",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#63"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#63",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/63",
+    "backlog-order:0008",
+    "backlog-section:candidate-2-post-lifecycle-aggregate",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem",
+    "secrets",
+    "database",
+    "concurrency",
+    "external-api"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-63-f14639dd59_41e418dfe3"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#63",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T18:41:37.946Z"
+}

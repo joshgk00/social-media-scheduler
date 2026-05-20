@@ -64,7 +64,7 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
 
       await expect(
         publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-      ).rejects.toMatchObject({ reason: 'token_unhealthy' });
+      ).rejects.toMatchObject({ invariant: { kind: 'token_unhealthy' } });
 
       expect(ctx.publish).not.toHaveBeenCalled();
     },
@@ -76,7 +76,7 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'token_unhealthy' });
+    ).rejects.toMatchObject({ invariant: { kind: 'token_unhealthy' } });
 
     const cancelledAttempt = db.__insertedRows.find(
       (row) => (row as { outcome?: string }).outcome === 'cancelled',
@@ -98,7 +98,7 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'token_unhealthy' });
+    ).rejects.toMatchObject({ invariant: { kind: 'token_unhealthy' } });
 
     const publishingUpdate = db.__updates.find(
       (u) => (u.set as { status?: string }).status === 'publishing',
@@ -116,7 +116,7 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'token_unhealthy' });
+    ).rejects.toMatchObject({ invariant: { kind: 'token_unhealthy' } });
 
     expect(ctx.publish).not.toHaveBeenCalled();
     // Only a single insert (the cancelled attempt). No additional writes
@@ -131,7 +131,7 @@ describe('publishPost token_unhealthy pre-flight (TOKEN-05)', () => {
 
     await expect(
       publishPost(db as unknown as Parameters<typeof publishPost>[0], ctx),
-    ).rejects.toMatchObject({ reason: 'token_unhealthy' });
+    ).rejects.toMatchObject({ invariant: { kind: 'token_unhealthy' } });
 
     // Profile load happens after budget/media checks in the current code path;
     // once the profile row is in hand the pre-flight fires and we never

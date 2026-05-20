@@ -133,11 +133,13 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
     });
 
     try {
+      const attemptsCap = job.opts.attempts ?? 1;
       const result = await runPublish(deps.db, {
         postId: job.data.postId,
         expectedVersion: job.data.postVersion,
         correlationId: job.data.correlationId,
         currentAttemptNum: job.attemptsMade + 1,
+        isFinalAttempt: job.attemptsMade + 1 >= attemptsCap,
         publish: async (profile, publishablePost, publishCtx) => {
           return publishers[publishablePost.platform].publish(
             profile,
@@ -203,31 +205,32 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
       return { platformPostId: result.platformPostId };
     } catch (err) {
       if (err instanceof PostLifecycleAbort) {
+        const abortKind = err.invariant.kind;
         // Graceful aborts never throw to BullMQ — they resolve cleanly so
         // the job does not consume retry budget. The scanner's next pass
         // re-enqueues the post if it is still due.
-        if (err.reason === 'already_published') {
+        if (abortKind === 'already_published') {
           logger.info('Idempotent skip — post already published');
-          return { skipped: true, skipReason: err.reason };
+          return { skipped: true, skipReason: abortKind };
         }
         if (
-          err.reason === 'version_mismatch' ||
-          err.reason === 'budget_exhausted' ||
-          err.reason === 'not_scheduled' ||
-          err.reason === 'thread_unsupported' ||
-          err.reason === 'media_pending' ||
-          err.reason === 'token_unhealthy' ||
-          err.reason === 'rate_limit_exhausted'
+          abortKind === 'version_mismatch' ||
+          abortKind === 'budget_exhausted' ||
+          abortKind === 'not_scheduled' ||
+          abortKind === 'thread_unsupported' ||
+          abortKind === 'media_pending' ||
+          abortKind === 'token_unhealthy' ||
+          abortKind === 'rate_limit_exhausted'
         ) {
           // Phase 07-04 (TOKEN-05) / Phase 8 (LIMIT-06/LIMIT-07):
           // rate_limit_exhausted mirrors budget_exhausted / token_unhealthy —
           // post stays in `scheduled`, no retry budget consumed. The scanner
           // re-enqueues once the platform window resets.
           logger.info(
-            { reason: err.reason },
+            { reason: abortKind },
             'Graceful abort — scanner will re-evaluate',
           );
-          return { skipped: true, skipReason: err.reason };
+          return { skipped: true, skipReason: abortKind };
         }
       }
 
@@ -282,7 +285,7 @@ export function createPublishWorker({
   worker.on('failed', async (job, err) => {
     if (!job) return;
 
-    const attemptsCap = job.opts.attempts ?? DEFAULT_MAX_ATTEMPTS;
+    const attemptsCap = job.opts.attempts ?? 1;
     const isFinalFailure =
       err.name === 'UnrecoverableError' || job.attemptsMade >= attemptsCap;
     if (!isFinalFailure) return;
