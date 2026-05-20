@@ -44,11 +44,7 @@ import {
   type TokenNotificationEvent,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
-import {
-  decrypt,
-  encrypt,
-  validateEncryptionKey,
-} from '@sms/shared/encryption';
+import type { ProfileWithEncryptedTokens, TokenVault } from '@sms/shared/tokens';
 import type { WorkerDb } from './db.js';
 import { tokenRefreshBackoffStrategy } from './backoff.js';
 
@@ -84,6 +80,7 @@ export interface TokenRefreshWorkerDeps {
   redis: Redis;
   db: WorkerDb;
   notificationQueue: Pick<Queue, 'add'>;
+  vault: TokenVault;
 }
 
 // Internal chainable shape used by the helpers — tests pass a stub typed
@@ -125,9 +122,9 @@ export function createTokenRefreshWorker(
 
       const platform = profile.platform as string;
       if (platform === 'linkedin') {
-        await handleLinkedInRefresh(deps.db, profile);
+        await handleLinkedInRefresh(deps.db, deps.vault, profile);
       } else if (platform === 'facebook') {
-        await handleFacebookPing(deps.db, profile);
+        await handleFacebookPing(deps.db, deps.vault, profile);
       } else {
         jobLogger.warn({ platform }, 'Unsupported platform for token refresh');
       }
@@ -255,6 +252,7 @@ async function loadProfile(
 
 async function handleLinkedInRefresh(
   db: DbLike,
+  vault: TokenVault,
   profile: Record<string, unknown>,
 ): Promise<void> {
   const refreshCt = profile.oauth2RefreshTokenCiphertext as string | null;
@@ -265,8 +263,9 @@ async function handleLinkedInRefresh(
     throw new UnrecoverableError('no_refresh_token');
   }
 
-  const encryptionKey = validateEncryptionKey(process.env.ENCRYPTION_KEY ?? '');
-  const refreshToken = decrypt(refreshCt, refreshIv, refreshTag, encryptionKey);
+  const refreshToken = vault.unsealOAuth2RefreshToken(
+    profile as unknown as ProfileWithEncryptedTokens,
+  );
 
   // Fail fast on missing provider config. Empty-string fallbacks would have
   // produced a 4xx from LinkedIn that the failed listener interpreted as a
@@ -286,7 +285,7 @@ async function handleLinkedInRefresh(
 
   // Re-encrypt new access token. Refresh token ciphertext remains UNCHANGED
   // (Pitfall 3 — LinkedIn does not rotate refresh tokens).
-  const newAccessEnc = encrypt(response.access_token, encryptionKey);
+  const newAccessEnc = vault.sealOAuth2AccessToken(response.access_token);
   const now = new Date();
   const newExpiresAt = new Date(now.getTime() + response.expires_in * 1000);
   const newRefreshExpiresAt = response.refresh_token_expires_in
@@ -314,6 +313,7 @@ async function handleLinkedInRefresh(
 
 async function handleFacebookPing(
   db: DbLike,
+  vault: TokenVault,
   profile: Record<string, unknown>,
 ): Promise<void> {
   const accessCt = profile.oauth2AccessTokenCiphertext as string | null;
@@ -324,8 +324,13 @@ async function handleFacebookPing(
     throw new UnrecoverableError('no_access_token');
   }
 
-  const encryptionKey = validateEncryptionKey(process.env.ENCRYPTION_KEY ?? '');
-  const accessToken = decrypt(accessCt, accessIv, accessTag, encryptionKey);
+  const credentials = vault.unsealForProfile(
+    profile as unknown as ProfileWithEncryptedTokens,
+  );
+  if (credentials.kind !== 'oauth2') {
+    throw new UnrecoverableError('profile_not_oauth2');
+  }
+  const accessToken = credentials.accessToken;
 
   const graphVersion = process.env.FACEBOOK_GRAPH_VERSION ?? 'v25.0';
   const result = await callFacebookPing({ pageToken: accessToken, graphVersion });
@@ -386,7 +391,7 @@ async function callLinkedInRefresh(args: {
     const payload = (await res.json()) as Partial<LinkedInTokenResponse>;
     // WR-03: a partial 200 (proxy rewrite, malformed upstream) would otherwise
     // yield undefined fields — downstream `expires_in * 1000` becomes `NaN`,
-    // and `encrypt(undefined)` fails obscurely after the existing refresh
+    // and downstream sealing fails obscurely after the existing refresh
     // token ciphertext was already decrypted. Throw as UnrecoverableError so
     // BullMQ doesn't burn retries on a structural mismatch.
     if (

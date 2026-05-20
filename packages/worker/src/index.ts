@@ -98,6 +98,7 @@ async function main() {
     redis,
     db,
     notificationQueue,
+    vault: tokenVault,
   });
 
   const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:5173';

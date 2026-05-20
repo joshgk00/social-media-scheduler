@@ -29,12 +29,16 @@ function twitterProfile(fields: EncryptedTwitterFields): ProfileWithEncryptedTok
 function oauth2Profile(
   platform: 'linkedin' | 'facebook',
   field: EncryptedOAuth2Field,
+  refreshField?: EncryptedOAuth2Field,
 ): ProfileWithEncryptedTokens {
   return {
     ...baseProfile(platform),
     oauth2AccessTokenCiphertext: field.ciphertext,
     oauth2AccessTokenIv: field.iv,
     oauth2AccessTokenAuthTag: field.authTag,
+    oauth2RefreshTokenCiphertext: refreshField?.ciphertext,
+    oauth2RefreshTokenIv: refreshField?.iv,
+    oauth2RefreshTokenAuthTag: refreshField?.authTag,
   };
 }
 
@@ -69,6 +73,20 @@ describe('TokenVault', () => {
       kind: 'oauth2',
       accessToken: 'oauth2-access-token',
     });
+  });
+
+  it('round-trips OAuth 2.0 access and refresh token convenience fields', () => {
+    const vault = createTokenVault(encryptionKey);
+    const access = vault.sealOAuth2AccessToken('oauth2-access-token');
+    const refresh = vault.sealOAuth2RefreshToken('oauth2-refresh-token');
+
+    expect(vault.unsealForProfile(oauth2Profile('linkedin', access))).toEqual({
+      kind: 'oauth2',
+      accessToken: 'oauth2-access-token',
+    });
+    expect(vault.unsealOAuth2RefreshToken(oauth2Profile('linkedin', access, refresh))).toBe(
+      'oauth2-refresh-token',
+    );
   });
 
   it('dispatches unsealForProfile by platform', () => {
@@ -248,6 +266,17 @@ describe('createFakeTokenVault', () => {
       iv: '11',
       authTag: '22',
     });
+    expect(vault.sealOAuth2AccessToken('ignored')).toEqual({
+      ciphertext: '00',
+      iv: '11',
+      authTag: '22',
+    });
+    expect(vault.sealOAuth2RefreshToken('ignored')).toEqual({
+      ciphertext: '00',
+      iv: '11',
+      authTag: '22',
+    });
+    expect(vault.unsealOAuth2RefreshToken(baseProfile('linkedin'))).toBe('fake-oauth2');
     expect(vault.toSafeProfile(baseProfile('linkedin'))).toEqual({
       platform: 'linkedin',
       platformAccountId: 'acct-1',
