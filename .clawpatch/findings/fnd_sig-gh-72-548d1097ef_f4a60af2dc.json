@@ -1,1 +1,86 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-72-548d1097ef_f4a60af2dc","featureId":"feat_gh-72_f902aece26","title":"gh#72: R4.1 — Single OAuth error-to-HTTP mapping table at route boundary","category":"security","severity":"high","confidence":"high","triage":"confirmed-bug","evidence":[{"path":"packages/api/src/routes/oauth.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/72.\nBacklog section: Candidate 4 — OAuth route error-mapping.\n\n## Context\n\nCandidate 4 was originally pitched as a `ConnectAttempt` sealed-object refactor. On closer inspection, the OAuth service's existing functions do real work (atomic `GET+DEL` consume, secure nonce generation, fingerprint-only logging) and the friction is much smaller than first identified — only the route's error-shape decoding is shallow.\n\n**This PR scope is intentionally narrow.** The full sealed-object refactor is recorded as rejected in ADR-0006.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 4.\n\n## Scope\n\n- Add an `oauthErrorToHttpResponse(err): { status, body }` table in `packages/api/src/routes/oauth.ts` (or a small helper module) that maps every `OAuthServiceError.code` + `MismatchedAccountError` to its HTTP status + response shape\n- Replace the inline `if (err instanceof OAuthServiceError) { switch (err.code) ... }` blocks in the OAuth routes with single calls to the mapping helper\n- Same pattern as the `PostInvariantError` → HTTP mapping introduced in Candidate 2 (R2.1)\n- Verify with existing OAuth integration tests — no behavior change\n\n## Out of scope\n\n- `ConnectAttempt` sealed-object pattern (rejected per ADR-0006)\n- Grouping `createOAuthState` / `createPendingSelection` into a unified `oauthStore` (rejected per ADR-0006)\n- Any change to `atomicConsume<T>` or nonce logic\n\n## Acceptance\n\n- `pnpm --filter @sms/api build` and test pass\n- All existing OAuth integration tests pass with no modification\n- Mapping table is exhaustive — every `OAuthServiceError.code` value has a row\n\n## References\n\n- ADRs: [0006](../blob/main/docs/adr/0006-oauth-stays-procedural-no-sealed-connectattempt.md)\n- Same pattern as: #61 (PostInvariantError → HTTP mapping)","reproduction":"Candidate 4 was originally pitched as a `ConnectAttempt` sealed-object refactor. On closer inspection, the OAuth service's existing functions do real work (atomic `GET+DEL` consume, secure nonce generation, fingerprint-only logging) and the friction is much smaller than first identified — only the route's error-shape decoding is shallow.\n\n**This PR scope is intentionally narrow.** The full sealed-object refactor is recorded as rejected in ADR-0006.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 4.","recommendation":"- Add an `oauthErrorToHttpResponse(err): { status, body }` table in `packages/api/src/routes/oauth.ts` (or a small helper module) that maps every `OAuthServiceError.code` + `MismatchedAccountError` to its HTTP status + response shape\n- Replace the inline `if (err instanceof OAuthServiceError) { switch (err.code) ... }` blocks in the OAuth routes with single calls to the mapping helper\n- Same pattern as the `PostInvariantError` → HTTP mapping introduced in Candidate 2 (R2.1)\n- Verify with existing OAuth integration tests — no behavior change","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/api build` and test pass\n- All existing OAuth integration tests pass with no modification\n- Mapping table is exhaustive — every `OAuthServiceError.code` value has a row","minimumFixScope":"packages/api/src/routes/oauth.ts","status":"open","history":[],"signature":"sig_gh-72_548d1097ef","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-72-548d1097ef_f4a60af2dc",
+  "featureId": "feat_gh-72_f902aece26",
+  "title": "gh#72: R4.1 — Single OAuth error-to-HTTP mapping table at route boundary",
+  "category": "security",
+  "severity": "high",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/api/src/routes/oauth.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/72.\nBacklog section: Candidate 4 — OAuth route error-mapping.\n\n## Context\n\nCandidate 4 was originally pitched as a `ConnectAttempt` sealed-object refactor. On closer inspection, the OAuth service's existing functions do real work (atomic `GET+DEL` consume, secure nonce generation, fingerprint-only logging) and the friction is much smaller than first identified — only the route's error-shape decoding is shallow.\n\n**This PR scope is intentionally narrow.** The full sealed-object refactor is recorded as rejected in ADR-0006.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 4.\n\n## Scope\n\n- Add an `oauthErrorToHttpResponse(err): { status, body }` table in `packages/api/src/routes/oauth.ts` (or a small helper module) that maps every `OAuthServiceError.code` + `MismatchedAccountError` to its HTTP status + response shape\n- Replace the inline `if (err instanceof OAuthServiceError) { switch (err.code) ... }` blocks in the OAuth routes with single calls to the mapping helper\n- Same pattern as the `PostInvariantError` → HTTP mapping introduced in Candidate 2 (R2.1)\n- Verify with existing OAuth integration tests — no behavior change\n\n## Out of scope\n\n- `ConnectAttempt` sealed-object pattern (rejected per ADR-0006)\n- Grouping `createOAuthState` / `createPendingSelection` into a unified `oauthStore` (rejected per ADR-0006)\n- Any change to `atomicConsume<T>` or nonce logic\n\n## Acceptance\n\n- `pnpm --filter @sms/api build` and test pass\n- All existing OAuth integration tests pass with no modification\n- Mapping table is exhaustive — every `OAuthServiceError.code` value has a row\n\n## References\n\n- ADRs: [0006](../blob/main/docs/adr/0006-oauth-stays-procedural-no-sealed-connectattempt.md)\n- Same pattern as: #61 (PostInvariantError → HTTP mapping)",
+  "reproduction": "Candidate 4 was originally pitched as a `ConnectAttempt` sealed-object refactor. On closer inspection, the OAuth service's existing functions do real work (atomic `GET+DEL` consume, secure nonce generation, fingerprint-only logging) and the friction is much smaller than first identified — only the route's error-shape decoding is shallow.\n\n**This PR scope is intentionally narrow.** The full sealed-object refactor is recorded as rejected in ADR-0006.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 4.",
+  "recommendation": "- Add an `oauthErrorToHttpResponse(err): { status, body }` table in `packages/api/src/routes/oauth.ts` (or a small helper module) that maps every `OAuthServiceError.code` + `MismatchedAccountError` to its HTTP status + response shape\n- Replace the inline `if (err instanceof OAuthServiceError) { switch (err.code) ... }` blocks in the OAuth routes with single calls to the mapping helper\n- Same pattern as the `PostInvariantError` → HTTP mapping introduced in Candidate 2 (R2.1)\n- Verify with existing OAuth integration tests — no behavior change",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/api build` and test pass\n- All existing OAuth integration tests pass with no modification\n- Mapping table is exhaustive — every `OAuthServiceError.code` value has a row",
+  "minimumFixScope": "packages/api/src/routes/oauth.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T211850-27ef43",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists at packages/api/src/routes/oauth.ts. The requested route-boundary OAuth error mapping table/helper is still absent: rg found no oauthErrorToHttpResponse or equivalent OAuth error-to-HTTP helper. Current code still maps OAuth errors inline, including OAuthServiceError handling at packages/api/src/routes/oauth.ts:142-144, MismatchedAccountError response shaping at 480-491, and ProfileServiceError/OAuthServiceError handling at 494-496. OAuthServiceError and MismatchedAccountError still exist in packages/api/src/services/oauth.service.ts, so the acceptance criterion for a single exhaustive mapping table remains unmet. Verification was limited by the read-only sandbox: the OAuth vitest run failed because Vite could not write .vite-temp, build failed because tsc could not write dist and also reported an unrelated post-crud.service type error, and typecheck failed on that same unrelated post-crud.service error.",
+      "commands": [
+        "pwd && rg -n \"oauthErrorToHttpResponse|OAuthServiceError|MismatchedAccountError|PostInvariantError\" packages/api/src/routes packages/api/src -S",
+        "git status --short && rg --files packages/api/src/routes packages/api/src | sort",
+        "nl -ba packages/api/src/routes/oauth.ts | sed -n '1,220p'",
+        "nl -ba packages/api/src/routes/oauth.ts | sed -n '220,440p'",
+        "nl -ba packages/api/src/routes/oauth.ts | sed -n '440,530p'",
+        "nl -ba packages/api/src/services/oauth.service.ts | sed -n '1,280p'",
+        "nl -ba packages/api/src/routes/__tests__/oauth.test.ts | sed -n '320,390p'",
+        "rg -n \"oauthErrorToHttpResponse|OAuthServiceError\\)|switch \\(err\\.code\\)|err\\.code|mismatched_account|invalid_return_to|oauth_not_configured|token_exchange_failed\" packages/api/src/routes/oauth.ts packages/api/src/routes/__tests__/oauth.test.ts -S",
+        "rg -n \"new OAuthServiceError|throw new OAuthServiceError|new MismatchedAccountError|code\\?: string\" packages/api/src -S",
+        "find . -maxdepth 3 -name package.json -print",
+        "sed -n '1,220p' package.json",
+        "sed -n '1,220p' packages/api/package.json",
+        "rg -n \"oauthError|toHttpResponse|Error.*Http|PostInvariantError|toPostAppError|switch \\(.*code|err instanceof OAuthServiceError|err instanceof MismatchedAccountError\" packages/api/src -S",
+        "pnpm --filter @sms/api test -- --run packages/api/src/routes/__tests__/oauth.test.ts",
+        "pnpm --filter @sms/api build",
+        "pnpm --filter @sms/api typecheck",
+        "sed -n '1,200p' packages/api/vitest.config.ts && sed -n '1,220p' packages/api/tsconfig.json"
+      ],
+      "createdAt": "2026-05-20T21:20:05.613Z"
+    },
+    {
+      "runId": "20260520T212310-8a3786",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists at packages/api/src/routes/oauth.ts, and the current file now contains the requested single route-boundary mapper: OAuthErrorCode plus OAUTH_ERROR_HTTP_RESPONSES at lines 64-107 and oauthErrorToHttpResponse at lines 113-125. The mapper covers invalid_return_to, oauth_not_configured, and mismatched_account, with TypeScript exhaustiveness via satisfies Record<OAuthErrorCode, OAuthErrorHttpMapper>. Current route catches now call oauthErrorToHttpResponse at lines 205 and 544 instead of inlining OAuthServiceError or MismatchedAccountError response shaping; rg found no remaining switch(err.code) or route-level inline OAuthServiceError catch mapping outside the helper. rg of OAuthServiceError constructors found only invalid_return_to and oauth_not_configured in oauth.service.ts/oauth.ts, while MismatchedAccountError supplies mismatched_account, so the table covers the current OAuthServiceError codes. Verification commands were partially blocked by the read-only sandbox: vitest could not write Vite temp files under packages/api/node_modules/.vite-temp, build could not write dist, and typecheck also reports an unrelated existing error in src/services/post-crud.service.ts. Those failures do not contradict the current code evidence that this specific mapping-table finding is fixed.",
+      "commands": [
+        "pwd && git status --short && rg -n \"oauthErrorToHttpResponse|OAuthServiceError|MismatchedAccountError|switch \\(err\\.code\\)|err\\.code|mismatched_account|invalid_return_to|oauth_not_configured|token_exchange_failed\" packages/api/src/routes/oauth.ts packages/api/src/services/oauth.service.ts packages/api/src/routes/__tests__/oauth.test.ts -S",
+        "nl -ba packages/api/src/routes/oauth.ts | sed -n '1,260p'",
+        "nl -ba packages/api/src/routes/oauth.ts | sed -n '260,560p'",
+        "nl -ba packages/api/src/services/oauth.service.ts | sed -n '1,260p'",
+        "sed -n '1,220p' packages/api/vitest.config.ts",
+        "sed -n '1,220p' packages/api/package.json",
+        "rg -n \"new OAuthServiceError|throw new OAuthServiceError|new MismatchedAccountError|throw new MismatchedAccountError|code: 'invalid_return_to'|code: 'oauth_not_configured'|code: 'mismatched_account'|code\\?: string\" packages/api/src -S",
+        "rg -n \"err instanceof OAuthServiceError|err instanceof MismatchedAccountError|switch \\(err\\.code\\)|oauthErrorToHttpResponse|OAUTH_ERROR_HTTP_RESPONSES|satisfies Record<OAuthErrorCode\" packages/api/src/routes/oauth.ts -S",
+        "pnpm --filter @sms/api test -- --run packages/api/src/routes/__tests__/oauth.test.ts",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/api build",
+        "git diff -- packages/api/src/routes/oauth.ts | sed -n '1,260p'",
+        "git diff -- .clawpatch/findings/fnd_sig-gh-72-548d1097ef_f4a60af2dc.json | sed -n '1,220p'",
+        "nl -ba packages/api/src/routes/__tests__/oauth.test.ts | sed -n '340,390p'"
+      ],
+      "createdAt": "2026-05-20T21:24:26.230Z"
+    }
+  ],
+  "signature": "sig_gh-72_548d1097ef",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-72-548d1097ef-f4a60af_449bb5e93b"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T21:24:26.230Z"
+}
