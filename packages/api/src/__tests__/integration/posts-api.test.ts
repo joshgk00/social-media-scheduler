@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
+import { AppError } from '@sms/shared';
 import { createApp } from '../../app.js';
 import { createMockRedis } from '../helpers/mock-redis.js';
 import type { RequestHandler } from 'express';
@@ -375,9 +376,8 @@ describe('posts API integration', () => {
     });
 
     it('returns 409 for version mismatch with specific message', async () => {
-      const { PostServiceError } = await import('../../services/post.service.js');
       mockUpdatePost.mockRejectedValueOnce(
-        new PostServiceError('This post was modified elsewhere. Refresh to see the latest version.', 409),
+        new AppError('This post was modified elsewhere. Refresh to see the latest version.', 409),
       );
       const agent = await authenticatedAgent();
 
@@ -390,9 +390,8 @@ describe('posts API integration', () => {
     });
 
     it('returns 409 for non-editable state', async () => {
-      const { PostServiceError } = await import('../../services/post.service.js');
       mockUpdatePost.mockRejectedValueOnce(
-        new PostServiceError('This post is currently being published and cannot be edited.', 409),
+        new AppError('This post is currently being published and cannot be edited.', 409),
       );
       const agent = await authenticatedAgent();
 
@@ -425,9 +424,8 @@ describe('posts API integration', () => {
     });
 
     it('publishing state blocks edits with 409', async () => {
-      const { PostServiceError } = await import('../../services/post.service.js');
       mockUpdatePost.mockRejectedValueOnce(
-        new PostServiceError('This post is currently being published and cannot be edited.', 409),
+        new AppError('This post is currently being published and cannot be edited.', 409),
       );
       const agent = await authenticatedAgent();
 

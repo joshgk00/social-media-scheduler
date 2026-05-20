@@ -32,8 +32,7 @@ import {
   isWithinSeasonalWindow,
   resolveSpinnableText,
   calculateNextRunAt,
-  transitionPost,
-  type PostStatus,
+  planMoveToQueue,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import { DateTime } from 'luxon';
@@ -192,12 +191,13 @@ export async function evaluateQueues(
 
         // If no queued post found and recycling is ON: transition published->queued, wrap cursor
         if (!candidate && queue.isRecycling) {
-          // Validate the transition is legal before bulk update (will throw if not)
-          transitionPost('published', 'queued');
+          const recyclePatch = planMoveToQueue({
+            status: 'published',
+          });
 
           const recycled = await tx
             .update(posts)
-            .set({ status: 'queued', updatedAt: new Date() })
+            .set({ status: recyclePatch.status, updatedAt: new Date() })
             .where(
               and(
                 eq(posts.queueId, queue.id),

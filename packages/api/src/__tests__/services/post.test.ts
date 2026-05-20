@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { PostStatus } from '@sms/shared';
+import { AppError, type PostStatus } from '@sms/shared';
 
 function makeColumnStub(name: string) {
   return { name, fieldAlias: name };
@@ -226,10 +226,24 @@ function createPostCreateMockDb(options: {
 
 function createDeleteMockDb(options: {
   deleteResult?: unknown[];
-  existingPost?: { id: string; status: string } | null;
+  existingPost?: {
+    id: string;
+    status: string;
+    postVersion?: number;
+    scheduledAt?: Date | string | null;
+    platform?: string | null;
+  } | null;
 }) {
   const deleteResult = options.deleteResult ?? [];
-  const existingPost = options.existingPost;
+  const existingPost = options.existingPost === undefined
+    ? {
+        id: 'post-1',
+        status: 'draft',
+        postVersion: 1,
+        scheduledAt: null,
+        platform: 'twitter',
+      }
+    : options.existingPost;
 
   const deleteChain: Record<string, any> = {};
   deleteChain.where = vi.fn().mockReturnValue(deleteChain);
@@ -407,7 +421,7 @@ describe('post.service', () => {
         });
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
+        expect(err).toBeInstanceOf(AppError);
         expect(err.statusCode).toBe(400);
         expect(err.message).toContain('scheduledAt is required');
       }
@@ -426,7 +440,7 @@ describe('post.service', () => {
         });
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
+        expect(err).toBeInstanceOf(AppError);
         expect(err.statusCode).toBe(400);
         expect(err.message).toContain('future');
       }
@@ -538,6 +552,7 @@ describe('post.service', () => {
         await updatePost(db, 'user-1', 'post-1', { text: 'updated', postVersion: 1 });
         expect.unreachable('should have thrown');
       } catch (err: any) {
+        expect(err).toBeInstanceOf(AppError);
         expect(err.message).toContain('currently being published');
         expect(err.statusCode).toBe(409);
       }
@@ -553,6 +568,7 @@ describe('post.service', () => {
         await updatePost(db, 'user-1', 'post-1', { text: 'stale update', postVersion: 3 });
         expect.unreachable('should have thrown');
       } catch (err: any) {
+        expect(err).toBeInstanceOf(AppError);
         expect(err.message).toContain('modified elsewhere');
         expect(err.statusCode).toBe(409);
       }
@@ -601,7 +617,7 @@ describe('post.service', () => {
         await updatePost(db, 'user-1', 'post-1', { status: 'failed' as any, postVersion: 1 });
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
+        expect(err).toBeInstanceOf(AppError);
         expect(err.statusCode).toBe(409);
       }
     });
@@ -616,6 +632,7 @@ describe('post.service', () => {
         await updatePost(db, 'user-1', 'post-1', { text: 'too late', postVersion: 1 });
         expect.unreachable('should have thrown');
       } catch (err: any) {
+        expect(err).toBeInstanceOf(AppError);
         expect(err.statusCode).toBe(409);
       }
     });
@@ -715,13 +732,26 @@ describe('post.service', () => {
     it('deletes posts in deletable states', async () => {
       const db = createDeleteMockDb({
         deleteResult: [{ id: 'post-1' }],
-        existingPost: null,
       });
 
       const result = await deletePost(db, 'user-1', 'post-1');
 
       expect(result).toBe(true);
       expect(db.delete).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 404 when post is not found', async () => {
+      const db = createDeleteMockDb({
+        existingPost: null,
+      });
+
+      try {
+        await deletePost(db, 'user-1', 'post-1');
+        expect.unreachable('should have thrown');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(AppError);
+        expect(err.statusCode).toBe(404);
+      }
     });
 
     it('rejects deletion of posts in publishing state', async () => {
@@ -734,7 +764,7 @@ describe('post.service', () => {
         await deletePost(db, 'user-1', 'post-1');
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
+        expect(err).toBeInstanceOf(AppError);
         expect(err.statusCode).toBe(409);
         expect(err.message).toContain('cannot be deleted');
       }
@@ -750,7 +780,7 @@ describe('post.service', () => {
         await deletePost(db, 'user-1', 'post-1');
         expect.unreachable('should have thrown');
       } catch (err: any) {
-        expect(err).toBeInstanceOf(PostServiceError);
+        expect(err).toBeInstanceOf(AppError);
         expect(err.statusCode).toBe(409);
       }
     });

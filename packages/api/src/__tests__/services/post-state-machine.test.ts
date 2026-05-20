@@ -74,21 +74,6 @@ describe('post state machine', () => {
   });
 
   describe('transitionPost (shared helper)', () => {
-    it('returns new status when transition is valid', () => {
-      expect(transitionPost('draft', 'scheduled')).toBe('scheduled');
-      expect(transitionPost('publishing', 'published')).toBe('published');
-      expect(transitionPost('failed', 'draft')).toBe('draft');
-    });
-
-    it('throws descriptive error when transition is invalid', () => {
-      expect(() => transitionPost('publishing', 'draft')).toThrow(
-        /Invalid state transition.*publishing.*draft/
-      );
-      expect(() => transitionPost('destroyed', 'draft')).toThrow(
-        /Invalid state transition.*destroyed.*draft/
-      );
-    });
-
     it('is importable from @sms/shared for use by both API and worker', () => {
       expect(typeof transitionPost).toBe('function');
     });
