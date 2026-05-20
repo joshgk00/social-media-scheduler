@@ -1,8 +1,14 @@
 node_modules
 dist
 .git
+.clawpatch
+.agent
+.agents
 .env
 *.md
 .planning
 .claude
 docs
+scripts
+skills-lock.json
+packages/web/.vite
