@@ -131,11 +131,31 @@ export function createTokenVault(encryptionKey: Buffer): TokenVault {
     return sealField(credentials.accessToken, encryptionKey);
   }
 
+  function sealOAuth2AccessToken(token: string): EncryptedOAuth2Field {
+    return sealField(token, encryptionKey);
+  }
+
+  function sealOAuth2RefreshToken(token: string): EncryptedOAuth2Field {
+    return sealField(token, encryptionKey);
+  }
+
   function unsealOAuth2(field: NullableEncryptedOAuth2Field): OAuth2Credentials {
     return {
       kind: 'oauth2',
       accessToken: unsealField(field, encryptionKey, 'oauth2AccessToken'),
     };
+  }
+
+  function unsealOAuth2RefreshToken(profile: ProfileWithEncryptedTokens): string {
+    return unsealField(
+      {
+        ciphertext: profile.oauth2RefreshTokenCiphertext,
+        iv: profile.oauth2RefreshTokenIv,
+        authTag: profile.oauth2RefreshTokenAuthTag,
+      },
+      encryptionKey,
+      'oauth2RefreshToken',
+    );
   }
 
   function unsealForProfile(profile: ProfileWithEncryptedTokens): Credentials {
@@ -164,7 +184,10 @@ export function createTokenVault(encryptionKey: Buffer): TokenVault {
     sealTwitter,
     unsealTwitter,
     sealOAuth2,
+    sealOAuth2AccessToken,
+    sealOAuth2RefreshToken,
     unsealOAuth2,
+    unsealOAuth2RefreshToken,
     unsealForProfile,
     toSafeProfile,
   };

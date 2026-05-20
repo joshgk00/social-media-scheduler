@@ -55,7 +55,10 @@ export function createFakeTokenVault(
     sealTwitter: () => fakeEncryptedTwitterFields,
     unsealTwitter: () => twitter,
     sealOAuth2: () => fakeEncryptedOAuth2Field,
+    sealOAuth2AccessToken: () => fakeEncryptedOAuth2Field,
+    sealOAuth2RefreshToken: () => fakeEncryptedOAuth2Field,
     unsealOAuth2: () => oauth2,
+    unsealOAuth2RefreshToken: () => oauth2.accessToken,
     unsealForProfile: (profile) => {
       if (profile.platform === 'twitter') return twitter;
       if (profile.platform === 'linkedin' || profile.platform === 'facebook') return oauth2;

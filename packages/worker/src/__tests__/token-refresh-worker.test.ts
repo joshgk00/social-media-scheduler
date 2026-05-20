@@ -25,17 +25,6 @@ vi.mock('@sms/shared/logger', () => ({
   },
 }));
 
-vi.mock('@sms/shared/encryption', () => ({
-  decrypt: vi.fn().mockImplementation((ct: string) => `plain-${ct}`),
-  encrypt: vi.fn().mockImplementation((plaintext: string) => ({
-    ciphertext: `enc-${plaintext}`,
-    iv: 'iv-new',
-    authTag: 'tag-new',
-    version: 1,
-  })),
-  validateEncryptionKey: vi.fn().mockReturnValue(Buffer.alloc(32)),
-}));
-
 vi.mock('@sms/db', () => ({
   socialProfiles: {
     id: 'col_id',
@@ -98,6 +87,7 @@ import {
 } from '../token-refresh-worker.js';
 import { tokenRefreshBackoffStrategy as exportedBackoff } from '../backoff.js';
 import { JOB_NAMES } from '@sms/shared';
+import type { TokenVault } from '@sms/shared/tokens';
 
 /**
  * Build a mock db that tracks select / update chains:
@@ -194,6 +184,50 @@ function fakeJob(data: Record<string, unknown>, attemptsMade = 0) {
   } as const;
 }
 
+function createTestVault(overrides: Partial<TokenVault> = {}): TokenVault {
+  return {
+    sealTwitter: vi.fn(),
+    unsealTwitter: vi.fn(),
+    sealOAuth2: vi.fn((credentials) => ({
+      ciphertext: `enc-${credentials.accessToken}`,
+      iv: 'iv-new',
+      authTag: 'tag-new',
+    })),
+    sealOAuth2AccessToken: vi.fn((token: string) => ({
+      ciphertext: `enc-${token}`,
+      iv: 'iv-new',
+      authTag: 'tag-new',
+    })),
+    sealOAuth2RefreshToken: vi.fn((token: string) => ({
+      ciphertext: `enc-${token}`,
+      iv: 'iv-new',
+      authTag: 'tag-new',
+    })),
+    unsealOAuth2: vi.fn(() => ({ kind: 'oauth2', accessToken: 'plain-at-ct' })),
+    unsealOAuth2RefreshToken: vi.fn(() => 'plain-rt-ct'),
+    unsealForProfile: vi.fn(() => ({ kind: 'oauth2', accessToken: 'plain-fb-ct' })),
+    toSafeProfile: vi.fn((profile) => ({
+      platform: profile.platform,
+      platformAccountId: profile.platformAccountId,
+      linkedinAccountType: profile.linkedinAccountType,
+    })),
+    ...overrides,
+  };
+}
+
+function workerDeps(
+  db: never,
+  notificationQueue: Pick<{ add: ReturnType<typeof vi.fn> }, 'add'>,
+  vault: TokenVault = createTestVault(),
+) {
+  return {
+    redis: {} as never,
+    db,
+    notificationQueue: notificationQueue as never,
+    vault,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   capturedHandler = null;
@@ -202,7 +236,6 @@ beforeEach(() => {
     delete capturedListeners[k];
   }
   logCalls.length = 0;
-  process.env.ENCRYPTION_KEY = 'a'.repeat(64);
   process.env.LINKEDIN_CLIENT_ID = 'test-li-client';
   process.env.LINKEDIN_CLIENT_SECRET = 'test-li-secret';
   process.env.FACEBOOK_GRAPH_VERSION = 'v25.0';
@@ -214,11 +247,7 @@ describe('createTokenRefreshWorker — config', () => {
     const { db } = createMockDb();
     const tokenRefreshQueue = { add: vi.fn() } as never;
     const notificationQueue = { add: vi.fn() } as never;
-    createTokenRefreshWorker({
-      redis: {} as never,
-      db,
-      notificationQueue,
-    });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     expect(capturedWorkerConfig).toBeTruthy();
     expect(capturedWorkerConfig!.concurrency).toBe(2);
@@ -242,7 +271,8 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     pushSelectResult([makeLinkedInProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    const vault = createTestVault();
+    createTokenRefreshWorker(workerDeps(db, notificationQueue, vault));
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -266,6 +296,10 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     expect(patch.oauth2AccessTokenCiphertext).toBe('enc-new-access-token');
     expect(patch.oauth2AccessTokenIv).toBe('iv-new');
     expect(patch.oauth2AccessTokenAuthTag).toBe('tag-new');
+    expect(vault.unsealOAuth2RefreshToken).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'profile-li-1' }),
+    );
+    expect(vault.sealOAuth2AccessToken).toHaveBeenCalledWith('new-access-token');
     // Sets tokenStatus back to active (recovery path)
     expect(patch.tokenStatus).toBe('active');
     // Writes new tokenExpiresAt + tokenHealthCheckedAt
@@ -282,7 +316,7 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     pushSelectResult([makeLinkedInProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     fetchMock.mockResolvedValueOnce({
       ok: false,
@@ -301,7 +335,7 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     pushSelectResult([makeLinkedInProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     fetchMock.mockResolvedValueOnce({
       ok: false,
@@ -321,7 +355,7 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     pushSelectResult([makeLinkedInProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     const { UnrecoverableError } = await import('bullmq');
     // Catch once and assert both shapes (OAuthProviderConfigError extends
@@ -346,7 +380,7 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     pushSelectResult([makeLinkedInProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     await expect(
       capturedHandler!(fakeJob({ profileId: 'profile-li-1', correlationId: 'corr-cfg2' })),
@@ -359,7 +393,7 @@ describe('createTokenRefreshWorker — LinkedIn handler', () => {
     pushSelectResult([makeLinkedInProfile({ oauth2RefreshTokenCiphertext: null })]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     const { UnrecoverableError } = await import('bullmq');
     await expect(
@@ -374,7 +408,8 @@ describe('createTokenRefreshWorker — Facebook handler', () => {
     pushSelectResult([makeFacebookProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    const vault = createTestVault();
+    createTokenRefreshWorker(workerDeps(db, notificationQueue, vault));
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -389,6 +424,9 @@ describe('createTokenRefreshWorker — Facebook handler', () => {
     expect(updateSets.length).toBe(1);
     const patch = updateSets[0]!;
     expect(patch.tokenHealthCheckedAt).toBeInstanceOf(Date);
+    expect(vault.unsealForProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'profile-fb-1' }),
+    );
     // No token rewrites on ping
     expect(patch).not.toHaveProperty('oauth2AccessTokenCiphertext');
     expect(patch).not.toHaveProperty('tokenStatus');
@@ -399,7 +437,7 @@ describe('createTokenRefreshWorker — Facebook handler', () => {
     pushSelectResult([makeFacebookProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     fetchMock.mockResolvedValueOnce({
       ok: false,
@@ -418,7 +456,7 @@ describe('createTokenRefreshWorker — Facebook handler', () => {
     pushSelectResult([makeFacebookProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     fetchMock.mockResolvedValueOnce({
       ok: false,
@@ -439,11 +477,7 @@ describe("createTokenRefreshWorker — on('failed') listener", () => {
     notificationQueue: { add: ReturnType<typeof vi.fn> },
     opts: { job: unknown; err: Error },
   ) {
-    createTokenRefreshWorker({
-      redis: {} as never,
-      db: db.db,
-      notificationQueue: notificationQueue as never,
-    });
+    createTokenRefreshWorker(workerDeps(db.db, notificationQueue));
     // Fire the listener BullMQ would fire on retry exhaustion.
     const listener = capturedListeners.failed?.[0];
     if (!listener) throw new Error('no failed listener captured');
@@ -587,7 +621,7 @@ describe('createTokenRefreshWorker — log hygiene', () => {
     pushSelectResult([makeLinkedInProfile()]);
 
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'n1' }) } as never;
-    createTokenRefreshWorker({ redis: {} as never, db, notificationQueue });
+    createTokenRefreshWorker(workerDeps(db, notificationQueue));
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
