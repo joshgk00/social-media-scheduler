@@ -1,0 +1,27 @@
+# RoboRev reviews local commits with Codex.
+agent = "codex"
+display_name = "social-media-scheduler"
+
+# Keep successful background reviews out of the active queue.
+auto_close_passing_reviews = true
+
+# Generated/build artifacts are not useful review inputs.
+exclude_patterns = [
+  "dist/",
+  "coverage/",
+]
+
+review_guidelines = """
+This is a pnpm TypeScript monorepo for a social media scheduler.
+
+Packages:
+- packages/api: Express API, authentication/session middleware, media uploads, profile and queue services.
+- packages/worker: background queue workers for publishing, token refresh, notifications, bulk operations, media cleanup, and lifecycle handling.
+- packages/db: Drizzle schema and migrations.
+- packages/shared: cross-package env, encryption, and rate-limit helpers.
+- packages/web: frontend application.
+
+Prioritize review findings around authentication/session handling, CSRF and security headers, token encryption/refresh flows, social API error handling, rate-limit accounting, queue idempotency, background worker retries, and data consistency between API, worker, and DB packages.
+
+For tests, prefer focused Vitest coverage near changed behavior. Do not require migrations unless schema files change.
+"""
