@@ -26,12 +26,24 @@ Flags:
 EOF
 }
 
+require_flag_value() {
+  local flag="$1"
+  local value="${2:-}"
+
+  if [[ -z "$value" ]]; then
+    echo "$flag requires a value" >&2
+    usage >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --)
       shift
       ;;
     --interval-seconds)
+      require_flag_value "$1" "${2:-}"
       INTERVAL_SECONDS="${2:-}"
       shift 2
       ;;
@@ -40,6 +52,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --runs)
+      require_flag_value "$1" "${2:-}"
       RUNS="${2:-}"
       shift 2
       ;;
@@ -48,6 +61,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --max-per-run)
+      require_flag_value "$1" "${2:-}"
       MAX_PER_RUN="${2:-}"
       shift 2
       ;;
@@ -56,6 +70,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --repair-attempts)
+      require_flag_value "$1" "${2:-}"
       REPAIR_ATTEMPTS="${2:-}"
       shift 2
       ;;
@@ -64,6 +79,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --log)
+      require_flag_value "$1" "${2:-}"
       LOG_FILE="${2:-}"
       shift 2
       ;;

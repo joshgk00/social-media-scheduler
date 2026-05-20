@@ -28,12 +28,24 @@ Flags:
 EOF
 }
 
+require_flag_value() {
+  local flag="$1"
+  local value="${2:-}"
+
+  if [[ -z "$value" ]]; then
+    echo "$flag requires a value" >&2
+    usage >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --)
       shift
       ;;
     --max)
+      require_flag_value "$1" "${2:-}"
       MAX="${2:-}"
       shift 2
       ;;
@@ -50,6 +62,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --status)
+      require_flag_value "$1" "${2:-}"
       STATUS="${2:-}"
       shift 2
       ;;
@@ -58,6 +71,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --repair-attempts)
+      require_flag_value "$1" "${2:-}"
       REPAIR_ATTEMPTS="${2:-}"
       shift 2
       ;;
@@ -200,7 +214,7 @@ save_failure_artifacts() {
 
 restore_clean_worktree() {
   git reset --hard "$BASE_SHA" >/dev/null
-  git clean -fd >/dev/null
+  git clean -fd -e .clawpatch-nightly.lock >/dev/null
 }
 
 park_failed_finding() {
