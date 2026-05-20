@@ -29,11 +29,17 @@ import type { Queue } from 'bullmq';
 import { posts, postAttempts, socialProfiles, postMedia } from '@sms/db';
 import {
   JOB_NAMES,
+  PostInvariantError,
   PublishFailure,
+  planTransitionToPublishing,
   type MediaItem,
+  type PostState,
+  type PostTransitionProfile,
+  type PreflightState,
   type PublishablePost,
   type PublishCtx,
   type TokenNotificationEvent,
+  type TransitionDecision,
   type SupportedPlatform,
   type PublishFailureKind,
 } from '@sms/shared';
@@ -75,6 +81,21 @@ export class PostLifecycleAbort extends Error {
   constructor(public readonly reason: LifecycleAbortReason) {
     super(`PostLifecycleAbort: ${reason}`);
     this.name = 'PostLifecycleAbort';
+  }
+}
+
+function postInvariantToLifecycleAbort(err: PostInvariantError): PostLifecycleAbort {
+  switch (err.kind) {
+    case 'already_published':
+    case 'not_scheduled':
+    case 'thread_unsupported':
+    case 'media_pending':
+    case 'token_unhealthy':
+    case 'budget_exhausted':
+    case 'rate_limit_exhausted':
+      return new PostLifecycleAbort(err.kind);
+    default:
+      throw err;
   }
 }
 
@@ -141,6 +162,13 @@ interface LockedPostRow extends Record<string, unknown> {
   link_url: string | null;
 }
 
+const READY_PREFLIGHT: PreflightState = {
+  mediaReady: true,
+  tokenHealthy: true,
+  budgetExhausted: false,
+  rateLimitExhausted: false,
+};
+
 interface PublishableMediaRow {
   id: string;
   filePath: string;
@@ -159,6 +187,33 @@ function resolvePublishPlatform(
   if (isSupportedPlatform(post.platform)) return post.platform;
   if (isSupportedPlatform(profile.platform)) return profile.platform;
   return 'twitter';
+}
+
+function mapLockedPostRowToState(post: LockedPostRow): PostState {
+  return {
+    status: post.status as PostState['status'],
+    postVersion: post.post_version,
+    scheduledAt: null,
+    platform: isSupportedPlatform(post.platform) ? post.platform : null,
+    isThread: post.is_thread,
+    platformPostId: post.platform_post_id,
+  };
+}
+
+function mapLockedPostRowToTransitionProfile(
+  post: LockedPostRow,
+): PostTransitionProfile {
+  return {
+    platform: isSupportedPlatform(post.platform) ? post.platform : 'twitter',
+  };
+}
+
+function mapSocialProfileToTransitionProfile(
+  profile: typeof socialProfiles.$inferSelect,
+): PostTransitionProfile {
+  return {
+    platform: isSupportedPlatform(profile.platform) ? profile.platform : 'twitter',
+  };
 }
 
 function resolveVisibility(
@@ -263,49 +318,21 @@ export async function publishPost(
         throw new PostLifecycleAbort('not_scheduled');
       }
 
-      // IDEMPOTENCY (T-04-03-03 primary guard): platform_post_id is set, so
-      // the tweet exists on Twitter. There are two distinct sub-cases now
-      // (issue #17): a TRUE idempotent retry of a fully-committed publish,
-      // and a RECOVERY from a prior attempt where the pre-write of
-      // platform_post_id committed but the Phase 3 transaction rolled back.
-      //
-      //   - status='published'  → Phase 3 already committed. Skip everything.
-      //   - status='publishing' → recovery. Pre-write happened, Phase 3 did
-      //                           not. Skip Phase 2 (the tweet is already
-      //                           live), preserve the platform_post_id, and
-      //                           let the rest of the function run Phase 3
-      //                           to record the success attempt, transition
-      //                           to 'published', and bump the platform
-      //                           counter. Without this branch the post
-      //                           would be permanently stranded.
-      //   - any other status    → corrupted state (shouldn't be reachable).
-      //                           Treat as true idempotent skip — safer than
-      //                           risking a duplicate tweet by re-publishing.
-      if (post.platform_post_id) {
-        if (post.status === 'publishing') {
-          lifecycleLogger.info(
-            { platformPostId: post.platform_post_id },
-            'Recovery from prior issue-#17 pre-write — Phase 3 will resume',
-          );
-          // Do NOT throw. Skip the version check (post_version is stable
-          // across the same job's retries; recovery is by definition the
-          // same logical attempt continued) and skip the transition (status
-          // is already 'publishing'). Fall through to load the profile and
-          // return with recoveryPlatformPostId populated.
-        } else {
-          lifecycleLogger.info(
-            { platformPostId: post.platform_post_id, status: post.status },
-            'Idempotent skip — post already has platform_post_id',
-          );
-          throw new PostLifecycleAbort('already_published');
-        }
-      }
+      const currentState = mapLockedPostRowToState(post);
+      const earlyDecision = planTransitionToPublishing(
+        currentState,
+        mapLockedPostRowToTransitionProfile(post),
+        READY_PREFLIGHT,
+      );
 
-      // Skip version/state checks on the recovery path — by definition the
-      // post is already 'publishing' with a stable version from the prior
-      // attempt under the same job/lock chain.
-      const isRecovery = post.platform_post_id !== null && post.status === 'publishing';
-      if (!isRecovery) {
+      let transitionDecision: TransitionDecision = earlyDecision;
+      const isRecovery = earlyDecision.kind === 'recover';
+      if (isRecovery) {
+        lifecycleLogger.info(
+          { platformPostId: earlyDecision.recoveryPlatformPostId },
+          'Recovery from prior issue-#17 pre-write — Phase 3 will resume',
+        );
+      } else {
         if (post.post_version !== ctx.expectedVersion) {
           lifecycleLogger.info(
             { expectedVersion: ctx.expectedVersion, actualVersion: post.post_version },
@@ -314,24 +341,17 @@ export async function publishPost(
           throw new PostLifecycleAbort('version_mismatch');
         }
 
-        if (post.status !== 'scheduled') {
-          lifecycleLogger.info(
-            { actualStatus: post.status },
-            'Post no longer in scheduled state — aborting',
-          );
-          throw new PostLifecycleAbort('not_scheduled');
-        }
-      }
-
-      // Phase 4 single-tweet scope: reject thread posts inside the transaction
-      // so they stay in `scheduled` for Phase 4.5.
-      if (post.is_thread) {
-        throw new PostLifecycleAbort('thread_unsupported');
       }
 
       if (!post.profile_id) {
         throw new PostLifecycleAbort('not_scheduled');
       }
+
+      let budget: Awaited<ReturnType<PublishContext['checkBudget']>> = {
+        wouldExceed: false,
+      };
+      let isPlatformRateLimit = false;
+      let pendingMediaCount = 0;
 
       // Recovery path skips budget / media-readiness / token-health / status
       // transition — those preconditions were validated on the original
@@ -344,30 +364,10 @@ export async function publishPost(
         // returns the platform discriminator so non-twitter posts that hit
         // the per-platform window emit `rate_limit_exhausted` rather than
         // `budget_exhausted` — same graceful-skip semantics, distinct enum.
-        const budget = await ctx.checkBudget(post.profile_id);
-        const isPlatformRateLimit =
+        budget = await ctx.checkBudget(post.profile_id);
+        isPlatformRateLimit =
           (budget.platform === 'linkedin' || budget.platform === 'facebook') &&
           budget.blockThresholdHit === true;
-        if (isPlatformRateLimit) {
-          await tx.insert(postAttempts).values({
-            postId: ctx.postId,
-            attemptNum: ctx.currentAttemptNum,
-            startedAt: attemptStart,
-            finishedAt: new Date(),
-            outcome: 'cancelled',
-            errorCode: 'rate_limit_exhausted',
-            errorMessage: `${budget.platform} rate limit reached`,
-          });
-          lifecycleLogger.warn(
-            { platform: budget.platform },
-            'Rate limit exhausted at runtime — leaving post scheduled',
-          );
-          throw new PostLifecycleAbort('rate_limit_exhausted');
-        }
-        if (budget.wouldExceed) {
-          lifecycleLogger.warn('Budget exhausted at runtime — leaving post scheduled');
-          throw new PostLifecycleAbort('budget_exhausted');
-        }
 
         // MEDIA-05: Skip posts with media still being transcoded (T-06-11).
         const pendingMedia = await tx
@@ -380,14 +380,7 @@ export async function publishPost(
               inArray(postMedia.transcodeStatus, ['pending', 'processing']),
             ),
           );
-        const pendingMediaCount = parseInt(pendingMedia[0]?.count ?? '0', 10);
-        if (pendingMediaCount > 0) {
-          lifecycleLogger.info(
-            { postId: ctx.postId, pendingMediaCount },
-            'Skipping publish -- media still transcoding',
-          );
-          throw new PostLifecycleAbort('media_pending');
-        }
+        pendingMediaCount = parseInt(pendingMedia[0]?.count ?? '0', 10);
       }
 
       // Load the full profile row — the twitter publish service needs the
@@ -411,28 +404,68 @@ export async function publishPost(
         // is emitted here (RESEARCH Pitfall 6 — notifications fire at the
         // state-transition site, not for every blocked publish attempt
         // against the dead token).
-        if (profile.tokenStatus !== 'active') {
-          await tx.insert(postAttempts).values({
-            postId: ctx.postId,
-            attemptNum: ctx.currentAttemptNum,
-            startedAt: attemptStart,
-            finishedAt: new Date(),
-            outcome: 'cancelled',
-            errorCode: 'token_unhealthy',
-            errorMessage: `Profile token status: ${profile.tokenStatus}`,
-          });
-          lifecycleLogger.warn(
-            { profileId: profile.id, tokenStatus: profile.tokenStatus },
-            'Publish aborted — profile token status is not active',
+        const preflight: PreflightState = {
+          mediaReady: pendingMediaCount === 0,
+          tokenHealthy: profile.tokenStatus === 'active',
+          budgetExhausted: !isPlatformRateLimit && budget.wouldExceed,
+          rateLimitExhausted: isPlatformRateLimit,
+        };
+        try {
+          transitionDecision = planTransitionToPublishing(
+            currentState,
+            mapSocialProfileToTransitionProfile(profile),
+            preflight,
           );
-          throw new PostLifecycleAbort('token_unhealthy');
+        } catch (err) {
+          if (err instanceof PostInvariantError) {
+            if (err.kind === 'media_pending') {
+              lifecycleLogger.info(
+                { postId: ctx.postId, pendingMediaCount },
+                'Skipping publish -- media still transcoding',
+              );
+            } else if (err.kind === 'token_unhealthy') {
+              await tx.insert(postAttempts).values({
+                postId: ctx.postId,
+                attemptNum: ctx.currentAttemptNum,
+                startedAt: attemptStart,
+                finishedAt: new Date(),
+                outcome: 'cancelled',
+                errorCode: 'token_unhealthy',
+                errorMessage: `Profile token status: ${profile.tokenStatus}`,
+              });
+              lifecycleLogger.warn(
+                { profileId: profile.id, tokenStatus: profile.tokenStatus },
+                'Publish aborted — profile token status is not active',
+              );
+            } else if (err.kind === 'budget_exhausted') {
+              lifecycleLogger.warn('Budget exhausted at runtime — leaving post scheduled');
+            } else if (err.kind === 'rate_limit_exhausted') {
+              await tx.insert(postAttempts).values({
+                postId: ctx.postId,
+                attemptNum: ctx.currentAttemptNum,
+                startedAt: attemptStart,
+                finishedAt: new Date(),
+                outcome: 'cancelled',
+                errorCode: 'rate_limit_exhausted',
+                errorMessage: `${budget.platform} rate limit reached`,
+              });
+              lifecycleLogger.warn(
+                { platform: budget.platform },
+                'Rate limit exhausted at runtime — leaving post scheduled',
+              );
+            }
+          }
+          throw err;
         }
 
         // Transition scheduled → publishing, guarded by the optimistic
         // version check so a concurrent edit still loses the race cleanly.
+        if (transitionDecision.kind !== 'proceed') {
+          throw new PostLifecycleAbort('not_scheduled');
+        }
         const [updatedRow] = await tx
           .update(posts)
-          .set({ status: 'publishing', updatedAt: new Date() })
+          .set({ status: transitionDecision.patch.status, updatedAt: new Date() })
           .where(
             and(eq(posts.id, ctx.postId), eq(posts.postVersion, ctx.expectedVersion)),
           )
@@ -456,6 +489,9 @@ export async function publishPost(
     // Abort errors are expected control flow — propagate without wrapping.
     if (err instanceof PostLifecycleAbort) {
       throw err;
+    }
+    if (err instanceof PostInvariantError) {
+      throw postInvariantToLifecycleAbort(err);
     }
     lifecycleLogger.error({ err }, 'Lifecycle lock transaction failed');
     throw err;
