@@ -88,8 +88,6 @@ export async function autoDestructPost(
     if (post.status !== 'auto_destructing') {
       const startPatch = planStartAutoDestruct({
         status: post.status as PostStatus,
-        postVersion: 0,
-        scheduledAt: null,
       });
 
       await tx
@@ -146,8 +144,6 @@ export async function autoDestructPost(
   // PHASE 3: Commit -- transition to destroyed
   const successPatch = planRecordAutoDestructSuccess({
     status: 'auto_destructing',
-    postVersion: 0,
-    scheduledAt: null,
   });
 
   try {

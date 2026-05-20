@@ -348,8 +348,6 @@ export async function addPostToQueue(
     if (post.status === 'draft') {
       const queuePatch = planMoveToQueue({
         status: post.status,
-        postVersion: 0,
-        scheduledAt: null,
       });
       postPatch.status = queuePatch.status;
     }

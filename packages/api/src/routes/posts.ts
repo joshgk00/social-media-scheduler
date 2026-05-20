@@ -773,7 +773,7 @@ export function createPostsRouter({
       if (err instanceof AppError) {
         // T-DATA-01 invariant 2: PLATFORM_IMMUTABLE → 409 with the canonical
         // platform_immutable code shape so the UI can render the right toast.
-        if ((err as { code?: unknown }).code === 'PLATFORM_IMMUTABLE') {
+        if (err.code === 'PLATFORM_IMMUTABLE') {
           res.status(409).json({ code: 'platform_immutable', message: err.message });
           return;
         }
@@ -830,8 +830,6 @@ export function createPostsRouter({
 
         const retryPatch = planRetryFailedPost({
           status: existingPost.status as PostStatus,
-          postVersion: existingPost.postVersion,
-          scheduledAt: null,
         });
 
         const [updatedPostRow] = await tx

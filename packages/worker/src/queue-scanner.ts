@@ -193,8 +193,6 @@ export async function evaluateQueues(
         if (!candidate && queue.isRecycling) {
           const recyclePatch = planMoveToQueue({
             status: 'published',
-            postVersion: 0,
-            scheduledAt: null,
           });
 
           const recycled = await tx
