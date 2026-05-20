@@ -7,6 +7,8 @@ TEST_RETRIES=1
 ROBOREV_REPAIR_ATTEMPTS=1
 ROBOREV_FIX_AGENT="codex"
 INTERVAL_SECONDS=0
+REVIEW_TIMEOUT_SECONDS=1800
+STOP_ON_FAILURE=0
 
 usage() {
   cat <<'EOF'
@@ -23,6 +25,8 @@ Flags:
   --no-roborev-repair             Alias for --roborev-repair-attempts 0
   --roborev-fix-agent <agent>     Agent used to address RoboRev findings. Default: codex
   --interval-seconds <n>          Sleep between findings. Default: 0
+  --review-timeout-seconds <n>    Max seconds to wait for each RoboRev review. Default: 1800
+  --stop-on-failure               Stop instead of stashing failed work and moving on
   -h, --help                      Show this help
 
 The loop requires a clean source worktree at the start of every finding. It
@@ -88,6 +92,18 @@ while [[ $# -gt 0 ]]; do
       INTERVAL_SECONDS="${1#--interval-seconds=}"
       shift
       ;;
+    --review-timeout-seconds)
+      REVIEW_TIMEOUT_SECONDS="${2:-}"
+      shift 2
+      ;;
+    --review-timeout-seconds=*)
+      REVIEW_TIMEOUT_SECONDS="${1#--review-timeout-seconds=}"
+      shift
+      ;;
+    --stop-on-failure)
+      STOP_ON_FAILURE=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -117,6 +133,11 @@ fi
 
 if ! [[ "$INTERVAL_SECONDS" =~ ^[0-9]+$ ]]; then
   echo "--interval-seconds must be a non-negative integer" >&2
+  exit 2
+fi
+
+if ! [[ "$REVIEW_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]]; then
+  echo "--review-timeout-seconds must be a non-negative integer" >&2
   exit 2
 fi
 
@@ -162,8 +183,13 @@ process.stdin.on('end', () => {
 
 finding_title() {
   local finding_id="$1"
-  clawpatch show --finding "$finding_id" --json \
-    | json_field "parsed.finding?.title ?? parsed.title ?? '$finding_id'"
+  local title
+  title="$(clawpatch show --finding "$finding_id" --json \
+    | json_field "parsed.finding?.title ?? parsed.title")"
+  if [[ -z "$title" ]]; then
+    title="$finding_id"
+  fi
+  printf '%s\n' "$title"
 }
 
 review_job_id() {
@@ -191,6 +217,47 @@ run_with_retries() {
     attempt=$((attempt + 1))
     echo "command failed; retrying ($attempt/$max_attempts): $*"
   done
+}
+
+run_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+
+  if [[ "$timeout_seconds" -eq 0 ]]; then
+    "$@"
+    return $?
+  fi
+
+  local marker
+  marker="$(mktemp)"
+
+  "$@" &
+  local command_pid=$!
+
+  (
+    sleep "$timeout_seconds"
+    if kill -0 "$command_pid" 2>/dev/null; then
+      printf 'timeout\n' >"$marker"
+      kill "$command_pid" 2>/dev/null || true
+    fi
+  ) &
+  local timer_pid=$!
+
+  set +e
+  wait "$command_pid"
+  local command_status=$?
+  set -e
+
+  kill "$timer_pid" 2>/dev/null || true
+  wait "$timer_pid" 2>/dev/null || true
+
+  if [[ -s "$marker" ]]; then
+    rm -f "$marker"
+    return 124
+  fi
+
+  rm -f "$marker"
+  return "$command_status"
 }
 
 validate_repo() {
@@ -247,6 +314,36 @@ commit_current_changes() {
   git commit -m "$subject" -m "$body"
 }
 
+stash_failed_work() {
+  local finding_id="$1"
+
+  if [[ -z "$(source_status)" ]]; then
+    return 0
+  fi
+
+  git stash push -u -m "clawpatch-roborev failed ${finding_id}" -- \
+    . \
+    ':!/.agent' \
+    ':!/.agents' \
+    ':!/.claude' \
+    ':!/skills-lock.json' \
+    ':!packages/web/.vite'
+}
+
+handle_finding_failure() {
+  local finding_id="$1"
+  local reason="$2"
+
+  echo "finding failed: $finding_id: $reason" >&2
+
+  if [[ "$STOP_ON_FAILURE" -eq 1 ]]; then
+    exit 6
+  fi
+
+  stash_failed_work "$finding_id"
+  return 0
+}
+
 wait_for_review_or_repair() {
   local finding_id="$1"
   local issue="$2"
@@ -258,13 +355,17 @@ wait_for_review_or_repair() {
     echo "waiting for RoboRev review of $review_sha"
 
     set +e
-    roborev wait "$review_sha"
+    run_with_timeout "$REVIEW_TIMEOUT_SECONDS" roborev wait "$review_sha"
     local review_status=$?
     set -e
 
     if [[ "$review_status" -eq 0 ]]; then
       roborev show "$review_sha"
       return 0
+    fi
+
+    if [[ "$review_status" -eq 124 ]]; then
+      echo "RoboRev review timed out for $review_sha after ${REVIEW_TIMEOUT_SECONDS}s" >&2
     fi
 
     echo "RoboRev found issues for $review_sha" >&2
@@ -345,8 +446,9 @@ while [[ "$completed" -lt "$MAX" ]]; do
   fi
 
   if [[ "$pre_outcome" != "open" ]]; then
-    echo "stopping because revalidation returned '$pre_outcome' for $finding_id" >&2
-    exit 6
+    handle_finding_failure "$finding_id" "pre-fix revalidation returned '$pre_outcome'"
+    completed=$((completed + 1))
+    continue
   fi
 
   set +e
@@ -362,11 +464,16 @@ while [[ "$completed" -lt "$MAX" ]]; do
   echo "post-fix revalidate: $post_outcome"
 
   if [[ "$post_outcome" != "fixed" ]]; then
-    echo "stopping because finding did not revalidate as fixed: $finding_id => $post_outcome" >&2
-    exit 6
+    handle_finding_failure "$finding_id" "post-fix revalidation returned '$post_outcome'"
+    completed=$((completed + 1))
+    continue
   fi
 
-  validate_repo
+  if ! validate_repo; then
+    handle_finding_failure "$finding_id" "validation failed"
+    completed=$((completed + 1))
+    continue
+  fi
 
   if ! commit_current_changes \
     "Fix ${issue}: ${subject_title}" \
