@@ -373,7 +373,19 @@ handle_finding_failure() {
     exit 6
   fi
 
+  failed_findings+=("$finding_id")
   return 0
+}
+
+next_finding() {
+  local args=(next --plain --status "$STATUS")
+  local finding_id
+
+  for finding_id in "${failed_findings[@]}"; do
+    args+=(--exclude "$finding_id")
+  done
+
+  node scripts/clawpatch-imported-queue.mjs "${args[@]}"
 }
 
 wait_for_review_or_repair() {
@@ -450,11 +462,12 @@ require_command roborev
 require_clean_source_tree
 
 completed=0
+failed_findings=()
 
 while [[ "$completed" -lt "$MAX" ]]; do
   require_clean_source_tree
 
-  if ! finding_id="$(node scripts/clawpatch-imported-queue.mjs next --plain --status "$STATUS")"; then
+  if ! finding_id="$(next_finding)"; then
     echo "no imported GitHub issue findings with status '$STATUS'"
     break
   fi
