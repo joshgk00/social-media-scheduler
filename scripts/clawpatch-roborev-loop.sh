@@ -488,6 +488,7 @@ while [[ "$completed" -lt "$MAX" ]]; do
   fi
 
   if ! wait_for_review_or_repair "$finding_id" "$issue"; then
+    # The fix commit is already on the branch; stashing cannot isolate this failure.
     echo "RoboRev gate failed for $finding_id" >&2
     exit 8
   fi
