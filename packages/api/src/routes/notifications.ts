@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { notificationEventTypeSchema } from '@sms/shared';
@@ -6,6 +6,7 @@ import { users, type Db } from '@sms/db';
 import { requireAuth } from '../middleware/auth-guard.js';
 import {
   countUnread,
+  clearRead,
   listNotifications,
   markAllRead,
   markRead,
@@ -33,6 +34,7 @@ const listQuerySchema = z.object({
     }
     return parsedEventTypes;
   }),
+  type: z.enum(['all', 'error', 'warning', 'info']).default('all'),
   readStatus: z.enum(['all', 'read', 'unread']).default('all'),
 }).strict();
 
@@ -75,6 +77,7 @@ export function createNotificationsRouter({ db }: NotificationsRouterDeps): Rout
       page: parsed.data.page,
       pageSize,
       eventTypes: parsed.data.eventTypes,
+      severity: parsed.data.type,
       readStatus: parsed.data.readStatus,
     });
 
@@ -103,10 +106,19 @@ export function createNotificationsRouter({ db }: NotificationsRouterDeps): Rout
     res.json({ ok: true });
   });
 
-  router.post('/api/notifications/read-all', requireAuth, async (req, res) => {
+  async function handleMarkAllRead(req: Request, res: Response) {
     const userId = req.session.userId!;
     const updatedCount = await markAllRead(db, userId);
     res.json({ ok: true, updated: updatedCount });
+  }
+
+  router.post('/api/notifications/read-all', requireAuth, handleMarkAllRead);
+  router.post('/api/notifications/mark-all-read', requireAuth, handleMarkAllRead);
+
+  router.post('/api/notifications/clear-read', requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const deletedCount = await clearRead(db, userId);
+    res.json({ ok: true, deleted: deletedCount });
   });
 
   return router;

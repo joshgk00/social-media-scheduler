@@ -56,6 +56,7 @@ function formatBulkNotification(notification: NotificationBellRow): Notification
 
   const payload = notification.payload ?? {};
   const operation = getStringPayloadValue(payload, 'operation') ?? '';
+  if (!operation) return notification;
   const operationLabel = bulkOperationLabels[operation] ?? 'Bulk operation';
   const successCount = getNumberPayloadValue(payload, 'successCount');
   const failureCount = getNumberPayloadValue(payload, 'failureCount');
@@ -126,7 +127,7 @@ function NotificationBellView({
       <span className="sr-only" aria-live="polite">
         {ariaLabel}
       </span>
-      <DropdownMenuContent align="end" sideOffset={8} className="w-96 p-0">
+      <DropdownMenuContent align="end" sideOffset={8} className="w-[380px] p-0">
         <NotificationDropdownContent
           notifications={recentNotifications.map(toNotificationRow)}
           unreadCount={unreadCount}
@@ -141,7 +142,7 @@ function NotificationBellView({
 
 function NotificationBellContainer() {
   const unreadCountQuery = useUnreadCount();
-  const notificationsQuery = useNotifications({ page: 1, pageSize: 10 });
+  const notificationsQuery = useNotifications({ page: 1, pageSize: 4 });
   const markReadMutation = useMarkRead();
   const markAllReadMutation = useMarkAllRead();
   const [lastObservedUnreadCount, setLastObservedUnreadCount] = useState<number | null>(null);

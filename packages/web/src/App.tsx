@@ -22,6 +22,7 @@ const QueueOverviewPage = lazy(() => import("./pages/queues/QueueOverviewPage"))
 const QueuePostsPage = lazy(() => import("./pages/queues/QueuePostsPage"));
 const CalendarPage = lazy(() => import("./pages/calendar/CalendarPage"));
 const ProfilesPage = lazy(() => import("./pages/profiles/ProfilesPage"));
+const NotificationsPage = lazy(() => import("./pages/notifications/NotificationsPage"));
 
 export function App() {
   return (
@@ -80,7 +81,7 @@ export function App() {
               />
               <Route
                 path="/notifications"
-                element={<RedesignPlaceholderPage title="Notifications" />}
+                element={<NotificationsPage />}
               />
               <Route
                 path="/settings/advanced/bull-board"

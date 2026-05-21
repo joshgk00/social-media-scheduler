@@ -14,9 +14,10 @@ describe('NotificationsPage', () => {
 
     expect(screen.getByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'All' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Unread' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Read' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'All' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Unread' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Read' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Type' })).toBeInTheDocument();
     expect(screen.getAllByTestId('notification-skeleton-row')).toHaveLength(8);
   });
 
@@ -31,8 +32,13 @@ describe('NotificationsPage', () => {
     const onMarkRead = vi.fn();
     const user = userEvent.setup();
 
-    render(<NotificationsPage rows={[{ id: 'n1', title: 'Publish failed', linkPath: '/posts/1' }]} onMarkRead={onMarkRead} />);
-    await user.click(screen.getByText('Publish failed'));
+    render(
+      <NotificationsPage
+        rows={[{ id: 'n1', title: 'Publish failed', severity: 'error', linkPath: '/posts/1' }]}
+        onMarkRead={onMarkRead}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'View post' }));
 
     expect(onMarkRead).toHaveBeenCalledWith('n1');
   });

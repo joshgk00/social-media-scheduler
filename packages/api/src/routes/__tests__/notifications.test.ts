@@ -46,4 +46,11 @@ describe('notifications routes', () => {
 
     expect(response.status).toBe(200);
   });
+
+  it('clears read notifications for current user only', async () => {
+    const response = await request(createTestApp()).post('/api/notifications/clear-read').set('x-csrf-token', 'token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('deleted');
+  });
 });

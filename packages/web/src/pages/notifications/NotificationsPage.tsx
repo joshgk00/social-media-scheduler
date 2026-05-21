@@ -1,32 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { CheckCheck, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { NotificationRow } from '@/components/notifications/NotificationRow';
 import {
+  useClearRead,
+  useMarkAllRead,
   useMarkRead,
   useNotifications,
+  useUnreadCount,
   type NotificationRow as NotificationRowData,
   type NotificationsFilters,
 } from '@/hooks/use-notifications';
 import { NotificationFilterBar } from './components/NotificationFilterBar';
 
+type ReadStatus = 'all' | 'read' | 'unread';
+type TypeFilter = 'all' | 'error' | 'warning' | 'info';
 type TestNotificationRow = Partial<NotificationRowData> & Pick<NotificationRowData, 'id' | 'title'>;
 
 export interface NotificationsPageProps {
   rows?: TestNotificationRow[];
   isLoading?: boolean;
   onMarkRead?: (notificationId: string) => Promise<unknown> | unknown;
+  onMarkAllRead?: () => Promise<unknown> | unknown;
+  onClearRead?: () => Promise<unknown> | unknown;
 }
 
 function toNotificationRow(notification: TestNotificationRow): NotificationRowData {
@@ -44,47 +46,20 @@ function toNotificationRow(notification: TestNotificationRow): NotificationRowDa
 
 function NotificationSkeletonRows() {
   return (
-    <>
-      {Array.from({ length: 8 }).map((_, skeletonIndex) => (
-        <TableRow key={skeletonIndex} data-testid="notification-skeleton-row">
-          <TableCell><Skeleton className="h-5 w-full" /></TableCell>
-          <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-          <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-        </TableRow>
-      ))}
-    </>
-  );
-}
-
-function useIsNarrowViewport() {
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false,
-  );
-
-  useEffect(() => {
-    function syncViewport() {
-      setIsNarrowViewport(window.innerWidth < 768);
-    }
-
-    syncViewport();
-    window.addEventListener('resize', syncViewport);
-    return () => window.removeEventListener('resize', syncViewport);
-  }, []);
-
-  return isNarrowViewport;
-}
-
-function NotificationMobileSkeletonRows() {
-  return (
-    <div className="space-y-3">
+    <div className="divide-y divide-border">
       {Array.from({ length: 8 }).map((_, skeletonIndex) => (
         <div
           key={skeletonIndex}
-          className="rounded-md border border-border p-4"
+          className="grid grid-cols-[auto_1fr_auto_auto] items-start gap-3 px-4 py-3"
           data-testid="notification-skeleton-row"
         >
-          <Skeleton className="mb-3 h-5 w-2/3" />
-          <Skeleton className="h-4 w-full" />
+          <Skeleton className="mt-[5px] h-2 w-2 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-3 w-4/5" />
+          </div>
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-7 w-20" />
         </div>
       ))}
     </div>
@@ -95,16 +70,26 @@ function NotificationsPageView({
   rows,
   isLoading = false,
   onMarkRead,
+  onMarkAllRead,
+  onClearRead,
+  unreadCountOverride,
   readStatus,
+  type,
   onReadStatusChange,
+  onTypeChange,
   onNavigate,
   pagination,
 }: {
   rows: NotificationRowData[];
   isLoading?: boolean;
   onMarkRead?: (notificationId: string) => Promise<unknown> | unknown;
-  readStatus: 'all' | 'read' | 'unread';
-  onReadStatusChange: (readStatus: 'all' | 'read' | 'unread') => void;
+  onMarkAllRead?: () => Promise<unknown> | unknown;
+  onClearRead?: () => Promise<unknown> | unknown;
+  unreadCountOverride?: number;
+  readStatus: ReadStatus;
+  type: TypeFilter;
+  onReadStatusChange: (readStatus: ReadStatus) => void;
+  onTypeChange: (type: TypeFilter) => void;
   onNavigate: (linkPath: string) => void;
   pagination?: {
     currentPage: number;
@@ -113,92 +98,90 @@ function NotificationsPageView({
     onNextPage: () => void;
   };
 }) {
-  const isNarrowViewport = useIsNarrowViewport();
+  const pageUnreadCount = useMemo(
+    () => rows.filter((notification) => notification.readAt === null).length,
+    [rows],
+  );
+  const unreadCount = unreadCountOverride ?? pageUnreadCount;
 
-  async function handleMarkRead(notificationId: string) {
+  async function handleMarkAllRead() {
     try {
-      await onMarkRead?.(notificationId);
+      await onMarkAllRead?.();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not mark notification read');
+      toast.error(error instanceof Error ? error.message : 'Could not mark notifications read');
+    }
+  }
+
+  async function handleClearRead() {
+    try {
+      await onClearRead?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not clear read notifications');
     }
   }
 
   return (
-    <main className="space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Notifications</h1>
-      </div>
+    <main className="space-y-5">
+      <PageHeader
+        title="Notifications"
+        subtitle="Failures, token health, and queue events that need operator attention."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleMarkAllRead()}
+              disabled={unreadCount === 0}
+            >
+              <CheckCheck className="h-4 w-4" aria-hidden="true" />
+              Mark all read
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleClearRead()}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Clear read
+            </Button>
+          </div>
+        }
+      />
 
-      <NotificationFilterBar readStatus={readStatus} onReadStatusChange={onReadStatusChange} />
+      <NotificationFilterBar
+        readStatus={readStatus}
+        type={type}
+        onReadStatusChange={onReadStatusChange}
+        onTypeChange={onTypeChange}
+      />
 
-      {isNarrowViewport ? (
-        <div className="space-y-3">
-          {isLoading ? <NotificationMobileSkeletonRows /> : null}
-          {!isLoading && rows.length === 0 ? (
-            <div className="rounded-md border border-border px-4 py-12 text-center">
-              <p className="font-medium text-foreground">You're all caught up</p>
-              <p className="text-sm text-muted-foreground">We'll let you know when something needs your attention.</p>
-            </div>
-          ) : null}
-          {!isLoading
-            ? rows.map((notification) => (
-                <div key={notification.id} className="overflow-hidden rounded-md border border-border">
-                  <NotificationRow notification={notification} onMarkRead={handleMarkRead} onNavigate={onNavigate} />
-                  <div className="grid grid-cols-2 gap-3 border-t border-border px-4 py-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Severity</p>
-                      <p className="capitalize text-foreground">{notification.severity}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Created</p>
-                      <p className="text-foreground">{format(new Date(notification.createdAt), 'PPp')}</p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            : null}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Notification</TableHead>
-                <TableHead>Severity</TableHead>
-                <TableHead>Created</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? <NotificationSkeletonRows /> : null}
-              {!isLoading && rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="py-12 text-center">
-                    <p className="font-medium text-foreground">You're all caught up</p>
-                    <p className="text-sm text-muted-foreground">
-                      We'll let you know when something needs your attention.
-                    </p>
-                  </TableCell>
-                </TableRow>
-              ) : null}
-              {!isLoading
-                ? rows.map((notification) => (
-                    <TableRow key={notification.id}>
-                      <TableCell className="p-0">
-                        <NotificationRow
-                          notification={notification}
-                          onMarkRead={handleMarkRead}
-                          onNavigate={onNavigate}
-                        />
-                      </TableCell>
-                      <TableCell className="capitalize">{notification.severity}</TableCell>
-                      <TableCell>{format(new Date(notification.createdAt), 'PPp')}</TableCell>
-                    </TableRow>
-                  ))
-                : null}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <Card className="overflow-hidden">
+        {isLoading ? <NotificationSkeletonRows /> : null}
+
+        {!isLoading && rows.length === 0 ? (
+          <div className="px-4 py-12">
+            <EmptyState
+              icon={CheckCheck}
+              title="You're all caught up"
+              body="We'll let you know when something needs your attention."
+            />
+          </div>
+        ) : null}
+
+        {!isLoading && rows.length > 0 ? (
+          <div className="divide-y divide-border">
+            {rows.map((notification) => (
+              <NotificationRow
+                key={notification.id}
+                notification={notification}
+                onMarkRead={onMarkRead}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        ) : null}
+      </Card>
+
       {pagination && pagination.totalPages > 1 ? (
         <div className="flex items-center justify-end gap-2" aria-label="Notifications pagination">
           <Button
@@ -230,7 +213,10 @@ function NotificationsPageContainer() {
   const [filters, setFilters] = useState<NotificationsFilters>({ page: 1 });
   const navigate = useNavigate();
   const notificationsQuery = useNotifications(filters);
+  const unreadCountQuery = useUnreadCount();
   const markReadMutation = useMarkRead();
+  const markAllReadMutation = useMarkAllRead();
+  const clearReadMutation = useClearRead();
   const rows = notificationsQuery.data?.rows ?? [];
   const totalPages = notificationsQuery.data
     ? Math.max(1, Math.ceil(notificationsQuery.data.total / notificationsQuery.data.pageSize))
@@ -242,9 +228,16 @@ function NotificationsPageContainer() {
       rows={rows}
       isLoading={notificationsQuery.isLoading}
       onMarkRead={(notificationId) => markReadMutation.mutateAsync(notificationId)}
+      onMarkAllRead={() => markAllReadMutation.mutateAsync()}
+      onClearRead={() => clearReadMutation.mutateAsync()}
+      unreadCountOverride={unreadCountQuery.data?.count ?? 0}
       readStatus={filters.readStatus ?? 'all'}
+      type={filters.type ?? 'all'}
       onReadStatusChange={(readStatus) =>
         setFilters((previousFilters) => ({ ...previousFilters, readStatus, page: 1 }))
+      }
+      onTypeChange={(type) =>
+        setFilters((previousFilters) => ({ ...previousFilters, type, page: 1 }))
       }
       onNavigate={navigate}
       pagination={notificationsQuery.data ? {
@@ -260,15 +253,20 @@ function NotificationsPageContainer() {
 }
 
 function NotificationsPageControlled(props: NotificationsPageProps) {
-  const [readStatus, setReadStatus] = useState<'all' | 'read' | 'unread'>('all');
+  const [readStatus, setReadStatus] = useState<ReadStatus>('all');
+  const [type, setType] = useState<TypeFilter>('all');
 
   return (
     <NotificationsPageView
       rows={(props.rows ?? []).map(toNotificationRow)}
       isLoading={props.isLoading ?? false}
       onMarkRead={props.onMarkRead}
+      onMarkAllRead={props.onMarkAllRead}
+      onClearRead={props.onClearRead}
       readStatus={readStatus}
+      type={type}
       onReadStatusChange={setReadStatus}
+      onTypeChange={setType}
       onNavigate={() => undefined}
     />
   );

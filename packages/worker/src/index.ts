@@ -16,6 +16,8 @@
 
 import { Redis } from 'ioredis';
 import { Queue } from 'bullmq';
+import { and, isNotNull, lt } from 'drizzle-orm';
+import { notifications } from '@sms/db';
 import { createLogger } from '@sms/shared/logger';
 import { requireEnv } from '@sms/shared/env';
 import { QUEUE_NAMES, validateEncryptionKey } from '@sms/shared';
@@ -38,6 +40,33 @@ import { createBulkOpsWorker } from './bulk-ops-worker.js';
 const logger = createLogger('worker');
 
 const SHUTDOWN_TIMEOUT_MS = 30_000;
+const NOTIFICATION_READ_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const NOTIFICATION_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+function startNotificationPruneScheduler(db: ReturnType<typeof createWorkerDb>['db']) {
+  async function prune() {
+    const olderThan = new Date(Date.now() - NOTIFICATION_READ_RETENTION_MS);
+    const deletedRows = await db
+      .delete(notifications)
+      .where(and(
+        isNotNull(notifications.readAt),
+        lt(notifications.readAt, olderThan),
+      ))
+      .returning({ id: notifications.id });
+
+    if (deletedRows.length > 0) {
+      logger.info({ deleted: deletedRows.length }, 'Pruned read notifications older than 90 days');
+    }
+  }
+
+  const interval = setInterval(() => {
+    prune().catch((err) => logger.error({ err }, 'Notification prune failed'));
+  }, NOTIFICATION_PRUNE_INTERVAL_MS);
+
+  prune().catch((err) => logger.error({ err }, 'Initial notification prune failed'));
+  logger.info('Notification prune scheduler registered: every 24 hours');
+  return interval;
+}
 
 async function main() {
   const REDIS_URL = requireEnv('REDIS_URL');
@@ -56,6 +85,7 @@ async function main() {
   const { db, pgClient } = createWorkerDb(DATABASE_URL);
 
   const heartbeatInterval = startHeartbeat(redis);
+  const notificationPruneInterval = startNotificationPruneScheduler(db);
 
   const publishQueue = new Queue(QUEUE_NAMES.publish, { connection: redis });
   const bulkOpsQueue = new Queue(QUEUE_NAMES.bulkOps, { connection: redis });
@@ -164,6 +194,7 @@ async function main() {
 
     try {
       stopHeartbeat(heartbeatInterval);
+      clearInterval(notificationPruneInterval);
     } catch (err) {
       logger.error({ err }, 'Heartbeat stop error');
     }
