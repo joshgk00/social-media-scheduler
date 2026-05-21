@@ -1,5 +1,7 @@
 # Publisher receives the raw Social Profile row, including cipher fields
 
+**Status:** Superseded by ADR-0005 (Candidate 3 shipped).
+
 Each **Publisher** needs OAuth credentials to call its platform's API. The deepened Publisher interface accepts the raw `socialProfiles.$inferSelect` row, and each Publisher decrypts the cipher fields it cares about (Twitter: four OAuth 1.0a cipher pairs; LinkedIn and Facebook: one OAuth 2.0 cipher triple). The cipher fields remain visible to Publishers — there is no `TokenVault` abstraction yet.
 
 This is a deliberately staged refactor. A separate identified candidate — "no TokenVault; cipher fields leak through the Social Profile interface" — closes this boundary by returning either a safe DTO or a decrypted-credential capability instead of the raw row. We did not bundle the two candidates because the Publisher-seam refactor already touches the worker dispatcher, the Post Lifecycle's publish callback, and 10+ test files; folding in TokenVault would double the blast radius and delay the locality win from collapsing the parallel platform switches.

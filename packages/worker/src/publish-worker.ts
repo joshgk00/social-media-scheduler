@@ -31,6 +31,11 @@ import {
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import { createStorageBackend, type StorageBackend } from '@sms/shared/storage';
+import {
+  TokenVaultError,
+  type ProfileWithEncryptedTokens,
+  type TokenVault,
+} from '@sms/shared/tokens';
 import type { WorkerDb } from './db.js';
 import { publishPost, PostLifecycleAbort } from './post-lifecycle.service.js';
 import { createTwitterPublisher } from './publishers/twitter.js';
@@ -59,13 +64,15 @@ export interface PublishWorkerDeps {
   redis: Redis;
   db: WorkerDb;
   notificationQueue: Queue;
+  vault: TokenVault;
 }
 
 export interface PublishHandlerDeps {
   db: WorkerDb;
   notificationQueue: Queue;
+  vault: TokenVault;
   publishPostImpl?: typeof publishPost;
-  publishers?: Partial<Record<PublishPlatform, Publisher<typeof socialProfiles.$inferSelect>>>;
+  publishers?: Partial<Record<PublishPlatform, Publisher>>;
   checkBudgetImpl?: typeof checkBudgetForWorker;
   storage?: StorageBackend;
 }
@@ -97,15 +104,51 @@ function safePublishFailureMessage(err: unknown): string {
   return redactSafeMessage(message);
 }
 
-function createDefaultPublishers(): Record<
-  PublishPlatform,
-  Publisher<typeof socialProfiles.$inferSelect>
-> {
+function createDefaultPublishers(): Record<PublishPlatform, Publisher> {
   return {
     twitter: createTwitterPublisher(),
     linkedin: createLinkedInPublisher(),
     facebook: createFacebookPublisher(),
   };
+}
+
+function asVaultProfile(profile: typeof socialProfiles.$inferSelect): ProfileWithEncryptedTokens {
+  if (!isPublishPlatform(profile.platform)) {
+    throw new PublishFailure({
+      kind: 'permanent',
+      errorCode: 'unsupported_profile_platform',
+      message: `Unsupported profile platform: ${profile.platform}`,
+    });
+  }
+  return {
+    ...profile,
+    platform: profile.platform,
+    linkedinAccountType:
+      profile.linkedinAccountType === 'organization' ? 'organization' : 'person',
+  };
+}
+
+function unsealPublisherCredentials(
+  vault: TokenVault,
+  profile: typeof socialProfiles.$inferSelect,
+) {
+  const vaultProfile = asVaultProfile(profile);
+  try {
+    return {
+      safeProfile: vault.toSafeProfile(vaultProfile),
+      credentials: vault.unsealForProfile(vaultProfile),
+    };
+  } catch (err) {
+    if (err instanceof TokenVaultError) {
+      throw new PublishFailure({
+        kind: 'permanent',
+        errorCode: 'credential_error',
+        message: err.message,
+        cause: err,
+      });
+    }
+    throw err;
+  }
 }
 
 /**
@@ -141,8 +184,13 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
         currentAttemptNum: job.attemptsMade + 1,
         isFinalAttempt: job.attemptsMade + 1 >= attemptsCap,
         publish: async (profile, publishablePost, publishCtx) => {
-          return publishers[publishablePost.platform].publish(
+          const { safeProfile, credentials } = unsealPublisherCredentials(
+            deps.vault,
             profile,
+          );
+          return publishers[publishablePost.platform].publish(
+            safeProfile,
+            credentials,
             publishablePost,
             publishCtx,
           );
@@ -259,10 +307,11 @@ export function createPublishWorker({
   redis,
   db,
   notificationQueue,
+  vault,
 }: PublishWorkerDeps): Worker<PublishJobPayload, PublishJobResult> {
   const baseLogger = createLogger('publish-worker');
   const storage = createStorageBackend();
-  const handler = createPublishHandler({ db, notificationQueue, storage });
+  const handler = createPublishHandler({ db, notificationQueue, vault, storage });
 
   const worker = new Worker<PublishJobPayload, PublishJobResult>(
     QUEUE_NAMES.publish,

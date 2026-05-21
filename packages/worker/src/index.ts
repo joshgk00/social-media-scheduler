@@ -18,8 +18,7 @@ import { Redis } from 'ioredis';
 import { Queue } from 'bullmq';
 import { createLogger } from '@sms/shared/logger';
 import { requireEnv } from '@sms/shared/env';
-import { validateEncryptionKey } from '@sms/shared/encryption';
-import { QUEUE_NAMES } from '@sms/shared';
+import { QUEUE_NAMES, validateEncryptionKey } from '@sms/shared';
 import { createStorageBackend } from '@sms/shared/storage';
 import { createTokenVault } from '@sms/shared/tokens';
 import { startHeartbeat, stopHeartbeat } from './heartbeat.js';
@@ -64,7 +63,12 @@ async function main() {
     connection: redis,
   });
 
-  const publishWorker = createPublishWorker({ redis, db, notificationQueue });
+  const publishWorker = createPublishWorker({
+    redis,
+    db,
+    notificationQueue,
+    vault: tokenVault,
+  });
   const { scannerQueue, scannerWorker } = await startScanner(
     redis,
     db,

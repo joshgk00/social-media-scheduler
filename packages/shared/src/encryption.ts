@@ -1,4 +1,5 @@
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
+export { validateEncryptionKey } from './encryption-key.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
@@ -52,11 +53,4 @@ export function decrypt(
   ]);
 
   return decrypted.toString('utf8');
-}
-
-export function validateEncryptionKey(hexKey: string): Buffer {
-  if (typeof hexKey !== 'string' || !/^[0-9a-fA-F]{64}$/.test(hexKey)) {
-    throw new Error('ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)');
-  }
-  return Buffer.from(hexKey, 'hex');
 }

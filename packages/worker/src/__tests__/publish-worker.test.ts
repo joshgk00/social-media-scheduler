@@ -3,6 +3,7 @@ import type { Job, Queue } from 'bullmq';
 import { UnrecoverableError } from 'bullmq';
 import { PostInvariantError, PublishFailure } from '@sms/shared';
 import type { StorageBackend } from '@sms/shared/storage';
+import type { Credentials, SafeProfile, TokenVault } from '@sms/shared/tokens';
 import { createPublishHandler, type PublishJobPayload } from '../publish-worker.js';
 import { PostLifecycleAbort } from '../post-lifecycle.service.js';
 
@@ -35,10 +36,12 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
   const storage = {
     get: vi.fn(),
   } as unknown as StorageBackend;
+  const vault = createTestVault();
   return {
     db,
     notificationQueue,
     storage,
+    vault,
     publishPostImpl: vi.fn().mockResolvedValue({ platformPostId: 'tw_success_1' }),
     publishers: {
       twitter: {
@@ -46,6 +49,34 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
       },
     },
     checkBudgetImpl: vi.fn().mockResolvedValue({ wouldExceed: false }),
+    ...overrides,
+  };
+}
+
+function createTestVault(overrides: Partial<TokenVault> = {}): TokenVault {
+  const credentials: Credentials = {
+    kind: 'twitter',
+    consumerKey: 'ck',
+    consumerSecret: 'cs',
+    accessToken: 'at',
+    accessTokenSecret: 'ats',
+  };
+  const safeProfile: SafeProfile = {
+    platform: 'twitter',
+    platformAccountId: null,
+    linkedinAccountType: 'person',
+  };
+
+  return {
+    sealTwitter: vi.fn() as TokenVault['sealTwitter'],
+    unsealTwitter: vi.fn(() => credentials) as TokenVault['unsealTwitter'],
+    sealOAuth2: vi.fn() as TokenVault['sealOAuth2'],
+    sealOAuth2AccessToken: vi.fn() as TokenVault['sealOAuth2AccessToken'],
+    sealOAuth2RefreshToken: vi.fn() as TokenVault['sealOAuth2RefreshToken'],
+    unsealOAuth2: vi.fn() as TokenVault['unsealOAuth2'],
+    unsealOAuth2RefreshToken: vi.fn() as TokenVault['unsealOAuth2RefreshToken'],
+    unsealForProfile: vi.fn(() => credentials) as TokenVault['unsealForProfile'],
+    toSafeProfile: vi.fn(() => safeProfile) as TokenVault['toSafeProfile'],
     ...overrides,
   };
 }
@@ -98,6 +129,52 @@ describe('createPublishHandler', () => {
     const [, ctxArg] = deps.publishPostImpl.mock.calls[0];
     expect(ctxArg.currentAttemptNum).toBe(1);
     expect(ctxArg.isFinalAttempt).toBe(true);
+  });
+
+  it('unseals credentials in the dispatcher before calling the platform publisher', async () => {
+    const publishablePost = {
+      text: 'hello',
+      platform: 'twitter' as const,
+      isThread: false,
+      visibility: null,
+      linkUrl: null,
+      media: [],
+    };
+    const encryptedProfile = {
+      platform: 'twitter',
+      platformAccountId: null,
+      linkedinAccountType: 'person',
+      consumerKeyCiphertext: 'cipher',
+    };
+    deps.publishPostImpl = vi.fn(async (_db, ctx) =>
+      ctx.publish(encryptedProfile as never, publishablePost, { correlationId: 'corr_abc' }),
+    );
+
+    const handler = createPublishHandler(deps);
+    await handler(buildJob());
+
+    expect(deps.vault.toSafeProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ consumerKeyCiphertext: 'cipher' }),
+    );
+    expect(deps.vault.unsealForProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ consumerKeyCiphertext: 'cipher' }),
+    );
+    expect(deps.publishers.twitter.publish).toHaveBeenCalledWith(
+      {
+        platform: 'twitter',
+        platformAccountId: null,
+        linkedinAccountType: 'person',
+      },
+      {
+        kind: 'twitter',
+        consumerKey: 'ck',
+        consumerSecret: 'cs',
+        accessToken: 'at',
+        accessTokenSecret: 'ats',
+      },
+      publishablePost,
+      { correlationId: 'corr_abc' },
+    );
   });
 
   it('rethrows transient errors so BullMQ retries', async () => {

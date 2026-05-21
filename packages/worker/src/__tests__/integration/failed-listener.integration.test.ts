@@ -18,6 +18,7 @@ import {
   buildPublishJobId,
   publishFailedNotificationSchema,
 } from '@sms/shared';
+import type { Credentials, SafeProfile, TokenVault } from '@sms/shared/tokens';
 import { startTestEnv, type TestEnv } from '../helpers/testcontainer.js';
 import {
   createPublishHandler,
@@ -32,6 +33,33 @@ let notificationQueue: Queue;
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000011';
 const TEST_PROFILE_ID = '00000000-0000-0000-0000-000000000012';
+
+function createIntegrationVault(): TokenVault {
+  const credentials: Credentials = {
+    kind: 'twitter',
+    consumerKey: 'ck',
+    consumerSecret: 'cs',
+    accessToken: 'at',
+    accessTokenSecret: 'ats',
+  };
+  const safeProfile: SafeProfile = {
+    platform: 'twitter',
+    platformAccountId: null,
+    linkedinAccountType: 'person',
+  };
+
+  return {
+    sealTwitter: vi.fn() as TokenVault['sealTwitter'],
+    unsealTwitter: vi.fn(() => credentials) as TokenVault['unsealTwitter'],
+    sealOAuth2: vi.fn() as TokenVault['sealOAuth2'],
+    sealOAuth2AccessToken: vi.fn() as TokenVault['sealOAuth2AccessToken'],
+    sealOAuth2RefreshToken: vi.fn() as TokenVault['sealOAuth2RefreshToken'],
+    unsealOAuth2: vi.fn() as TokenVault['unsealOAuth2'],
+    unsealOAuth2RefreshToken: vi.fn() as TokenVault['unsealOAuth2RefreshToken'],
+    unsealForProfile: vi.fn(() => credentials) as TokenVault['unsealForProfile'],
+    toSafeProfile: vi.fn(() => safeProfile) as TokenVault['toSafeProfile'],
+  };
+}
 
 async function seedBaseData() {
   await env.db.insert(users).values({
@@ -122,6 +150,7 @@ describe('failed-listener integration', () => {
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
+      vault: createIntegrationVault(),
       publishers: { twitter: { publish: twitterMock } },
     });
 
