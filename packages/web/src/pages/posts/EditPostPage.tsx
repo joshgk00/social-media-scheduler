@@ -226,6 +226,25 @@ export default function EditPostPage() {
     });
   }
 
+  const handleMediaStatusUpdate = useCallback(
+    (
+      mediaId: string,
+      status: MediaItem['transcodeStatus'],
+      error: string | null,
+    ) => {
+      setMediaItems((prev) =>
+        prev.map((m) => {
+          if (m.id !== mediaId) return m;
+          if (m.transcodeStatus === status && m.transcodeError === error) {
+            return m;
+          }
+          return { ...m, transcodeStatus: status, transcodeError: error };
+        }),
+      );
+    },
+    [],
+  );
+
   function getSubmitDisabledReason(): string | null {
     if (hasTranscodingMedia) return 'Video is still transcoding.';
     if (hasFailedMedia) return 'Fix or remove failed media before submitting.';
@@ -550,6 +569,7 @@ export default function EditPostPage() {
               onRemoveMedia={handleRemoveMedia}
               onReorderMedia={handleReorderMedia}
               onRetryTranscode={handleRetryTranscode}
+              onMediaStatusUpdate={handleMediaStatusUpdate}
               disabled={updatePostMutation.isPending || isUploading}
             />
           )}
@@ -580,6 +600,7 @@ export default function EditPostPage() {
                 onRemoveMedia={handleRemoveMedia}
                 onReorderMedia={handleReorderMedia}
                 onRetryTranscode={handleRetryTranscode}
+                onMediaStatusUpdate={handleMediaStatusUpdate}
                 disabled={updatePostMutation.isPending || isUploading}
               />
             </>
@@ -616,6 +637,7 @@ export default function EditPostPage() {
                 onRemoveMedia={handleRemoveMedia}
                 onReorderMedia={handleReorderMedia}
                 onRetryTranscode={handleRetryTranscode}
+                onMediaStatusUpdate={handleMediaStatusUpdate}
                 disabled={updatePostMutation.isPending || isUploading}
               />
             </>
@@ -624,6 +646,7 @@ export default function EditPostPage() {
           {/* SHARED POST-CMN BLOCK (B-03) — every common control lives here */}
           <SharedPostFields
             mode="edit"
+            platform={formState.platform}
             userTimezone={userTimezone}
             effectiveProfileId={formState.profileId}
             excludePostId={postId}

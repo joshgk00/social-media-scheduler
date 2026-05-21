@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,6 +7,7 @@ import NewPostPage from '../NewPostPage';
 
 const navigate = vi.fn();
 const createPostMutate = vi.fn();
+const uploadMedia = vi.fn();
 
 vi.mock('react-router', async () => {
   const actual =
@@ -54,7 +55,7 @@ vi.mock('../../../hooks/use-queue-posts', () => ({
 
 vi.mock('../../../hooks/use-media-upload', () => ({
   useMediaUpload: () => ({
-    upload: vi.fn(),
+    upload: uploadMedia,
     uploadingFiles: new Map(),
     isUploading: false,
   }),
@@ -90,15 +91,40 @@ vi.mock('../../../components/posts/TwitterPostFields', () => ({
   TwitterPostFields: ({
     text,
     onTextChange,
+    mediaItems,
+    onFilesSelected,
+    onMediaStatusUpdate,
   }: {
     text: string;
     onTextChange: (value: string) => void;
+    mediaItems: Array<{ id: string }>;
+    onFilesSelected: (files: File[]) => void;
+    onMediaStatusUpdate: (
+      id: string,
+      status: 'completed',
+      error: string | null,
+    ) => void;
   }) => (
-    <textarea
-      aria-label="Tweet text"
-      value={text}
-      onChange={(event) => onTextChange(event.target.value)}
-    />
+    <div>
+      <textarea
+        aria-label="Tweet text"
+        value={text}
+        onChange={(event) => onTextChange(event.target.value)}
+      />
+      <button
+        type="button"
+        onClick={() => onFilesSelected([new File(['video'], 'video.mp4')])}
+      >
+        Add pending video
+      </button>
+      <button
+        type="button"
+        onClick={() => onMediaStatusUpdate(mediaItems[0].id, 'completed', null)}
+        disabled={mediaItems.length === 0}
+      >
+        Complete transcode
+      </button>
+    </div>
   ),
 }));
 
@@ -173,6 +199,13 @@ function renderPage() {
 describe('NewPostPage scheduling validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    uploadMedia.mockResolvedValue({
+      id: 'media-1',
+      fileName: 'video.mp4',
+      mimeType: 'video/mp4',
+      thumbnailUrl: null,
+      transcodeStatus: 'pending',
+    });
   });
 
   it('keeps the user on the form and focuses an inline schedule error when schedule time is missing', async () => {
@@ -191,5 +224,25 @@ describe('NewPostPage scheduling validation', () => {
       screen.getByText('Select a scheduled time before scheduling.'),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Schedule')).toHaveFocus();
+  });
+
+  it('reenables scheduling when media polling reports a completed transcode', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Use Twitter profile' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Add pending video' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Schedule Post' })).toBeDisabled(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Complete transcode' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Schedule Post' })).not.toBeDisabled(),
+    );
   });
 });

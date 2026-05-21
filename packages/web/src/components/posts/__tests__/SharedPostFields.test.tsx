@@ -5,6 +5,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { SharedPostFields } from '../SharedPostFields';
+import type { Platform } from '../../../hooks/use-profiles';
 
 vi.mock('../../../hooks/use-tags', () => ({
   useTags: () => ({ data: [] }),
@@ -13,6 +14,39 @@ vi.mock('../../../hooks/use-tags', () => ({
 vi.mock('../../../hooks/use-posts', () => ({
   useCheckConflicts: () => ({ data: [] }),
 }));
+
+function renderSharedPostFields(platform: Platform = 'twitter') {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 0 } },
+  });
+  const textareaRef = createRef<HTMLTextAreaElement>();
+
+  render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <SharedPostFields
+          mode="queue"
+          platform={platform}
+          userTimezone="UTC"
+          effectiveProfileId="profile-1"
+          scheduledAt={null}
+          onScheduledAtChange={vi.fn()}
+          tagIds={[]}
+          onTagIdsChange={vi.fn()}
+          onOpenTagManagement={vi.fn()}
+          notes=""
+          onNotesChange={vi.fn()}
+          hasSpinnableText={false}
+          onHasSpinnableTextChange={vi.fn()}
+          autoDestructAfter={null}
+          onAutoDestructAfterChange={vi.fn()}
+          textareaRef={textareaRef}
+          onInsertSnippet={vi.fn()}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
 
 beforeAll(() => {
   class ResizeObserverMock {
@@ -52,6 +86,7 @@ describe('SharedPostFields', () => {
             <textarea ref={textareaRef} defaultValue="Pre  Post" aria-label="Composer textarea" />
             <SharedPostFields
               mode="queue"
+              platform="twitter"
               userTimezone="UTC"
               effectiveProfileId="profile-1"
               scheduledAt={null}
@@ -83,4 +118,21 @@ describe('SharedPostFields', () => {
 
     expect(onInsertSnippet).toHaveBeenCalledWith('Pre #tag Post');
   });
+
+  it('renders auto-destruct controls for Twitter posts', () => {
+    renderSharedPostFields('twitter');
+
+    expect(screen.getByText('Auto-destruct')).toBeInTheDocument();
+    expect(screen.getByText(/Automatically delete this post from Twitter\/X/)).toBeInTheDocument();
+  });
+
+  it.each(['linkedin', 'facebook'] as const)(
+    'hides auto-destruct controls for %s posts',
+    (platform) => {
+      renderSharedPostFields(platform);
+
+      expect(screen.queryByText('Auto-destruct')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Automatically delete this post from Twitter\/X/)).not.toBeInTheDocument();
+    },
+  );
 });

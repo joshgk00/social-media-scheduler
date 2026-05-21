@@ -1,1 +1,105 @@
-{"schemaVersion":1,"findingId":"fnd_sig-feat-library-1234e9e402-f2c6_2151d4af4e","featureId":"feat_library_1234e9e402","title":"TOTP timeout can expire a fresh second 2FA challenge immediately after re-entering the TOTP step","category":"bug","severity":"medium","confidence":"high","triage":"confirmed-bug","evidence":[{"path":"packages/web/src/pages/login/LoginPage.tsx","startLine":57,"endLine":75,"symbol":"LoginPage","quote":"if (step !== 'totp') return;\n\n    setCountdown(TOTP_TIMEOUT_SECONDS);\n\n    const interval = setInterval(() => {\n      setCountdown((prev) => {\n        if (prev <= 1) {\n          clearInterval(interval);\n          setStep('credentials');"},{"path":"packages/web/src/pages/login/LoginPage.tsx","startLine":92,"endLine":94,"symbol":"onCredentialsSubmit","quote":"if (result.requiresTwoFactor) {\n        setStep('totp');\n      }"},{"path":"packages/web/src/pages/login/LoginPage.tsx","startLine":124,"endLine":128,"symbol":"handleBackToLogin","quote":"function handleBackToLogin() {\n    setStep('credentials');\n    setTotpError(null);\n    totpForm.reset();\n  }"}],"reasoning":"The countdown effect only restarts when the `step` dependency changes. When the user leaves the TOTP step, the countdown state is left at its previous value, including 0 after timeout. If the user is returned to credentials and submits credentials again before React has run the new TOTP effect's `setCountdown(300)` update, the rendered TOTP form is active with `countdown` still 0. The interval callback then treats the fresh challenge as expired and sends the user back to credentials. The same stale countdown can also be visible after using Back to login and re-entering TOTP because `handleBackToLogin` does not reset it.","reproduction":"Let the TOTP countdown reach 0 so the page returns to credentials, then immediately sign in again with credentials that require 2FA. The fresh TOTP step can render `Code expires in 0:00` and the interval path can expire it instead of giving a new 5-minute window.","recommendation":"Reset `countdown` synchronously when entering or leaving the TOTP flow, for example in `onCredentialsSubmit` before `setStep('totp')` and in `handleBackToLogin`, or model the expiry as an absolute timestamp created per challenge rather than relying on retained countdown state.","whyTestsDoNotAlreadyCoverThis":"No linked tests were provided for this feature, and the owned file has no evidence of timer or step-transition coverage.","suggestedRegressionTest":"Add a LoginPage test with fake timers: reach the TOTP step, advance the timer to expiry, submit credentials again for a 2FA-required login, and assert the TOTP page shows `Code expires in 5:00` and does not immediately navigate back to credentials.","minimumFixScope":"packages/web/src/pages/login/LoginPage.tsx","status":"open","history":[],"signature":"sig_feat-library-1234e9e402_f2c6061bf5","linkedPatchAttemptIds":[],"createdByRunId":"20260518T230011-245d4c","createdAt":"2026-05-18T23:00:31.224Z","updatedAt":"2026-05-18T23:00:31.224Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-1234e9e402-f2c6_2151d4af4e",
+  "featureId": "feat_library_1234e9e402",
+  "title": "TOTP timeout can expire a fresh second 2FA challenge immediately after re-entering the TOTP step",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/web/src/pages/login/LoginPage.tsx",
+      "startLine": 57,
+      "endLine": 75,
+      "symbol": "LoginPage",
+      "quote": "if (step !== 'totp') return;\n\n    setCountdown(TOTP_TIMEOUT_SECONDS);\n\n    const interval = setInterval(() => {\n      setCountdown((prev) => {\n        if (prev <= 1) {\n          clearInterval(interval);\n          setStep('credentials');"
+    },
+    {
+      "path": "packages/web/src/pages/login/LoginPage.tsx",
+      "startLine": 92,
+      "endLine": 94,
+      "symbol": "onCredentialsSubmit",
+      "quote": "if (result.requiresTwoFactor) {\n        setStep('totp');\n      }"
+    },
+    {
+      "path": "packages/web/src/pages/login/LoginPage.tsx",
+      "startLine": 124,
+      "endLine": 128,
+      "symbol": "handleBackToLogin",
+      "quote": "function handleBackToLogin() {\n    setStep('credentials');\n    setTotpError(null);\n    totpForm.reset();\n  }"
+    }
+  ],
+  "reasoning": "The countdown effect only restarts when the `step` dependency changes. When the user leaves the TOTP step, the countdown state is left at its previous value, including 0 after timeout. If the user is returned to credentials and submits credentials again before React has run the new TOTP effect's `setCountdown(300)` update, the rendered TOTP form is active with `countdown` still 0. The interval callback then treats the fresh challenge as expired and sends the user back to credentials. The same stale countdown can also be visible after using Back to login and re-entering TOTP because `handleBackToLogin` does not reset it.",
+  "reproduction": "Let the TOTP countdown reach 0 so the page returns to credentials, then immediately sign in again with credentials that require 2FA. The fresh TOTP step can render `Code expires in 0:00` and the interval path can expire it instead of giving a new 5-minute window.",
+  "recommendation": "Reset `countdown` synchronously when entering or leaving the TOTP flow, for example in `onCredentialsSubmit` before `setStep('totp')` and in `handleBackToLogin`, or model the expiry as an absolute timestamp created per challenge rather than relying on retained countdown state.",
+  "whyTestsDoNotAlreadyCoverThis": "No linked tests were provided for this feature, and the owned file has no evidence of timer or step-transition coverage.",
+  "suggestedRegressionTest": "Add a LoginPage test with fake timers: reach the TOTP step, advance the timer to expiry, submit credentials again for a 2FA-required login, and assert the TOTP page shows `Code expires in 5:00` and does not immediately navigate back to credentials.",
+  "minimumFixScope": "packages/web/src/pages/login/LoginPage.tsx",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T213731-eaa91d",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence still exists in packages/web/src/pages/login/LoginPage.tsx at the same effective locations: the TOTP effect resets countdown only after step becomes 'totp' (lines 60-80), onCredentialsSubmit still only calls setStep('totp') for 2FA (lines 94-100), and handleBackToLogin still leaves countdown untouched (lines 135-139). The rendered TOTP footer still reads Code expires in {formatCountdown(countdown)} (line 291), so re-entering the TOTP step can still render retained stale countdown state before the effect reset. I found no LoginPage/TOTP regression test. The normal web typecheck was blocked by read-only tsbuildinfo writes, but rerunning the app and node TypeScript projects with --incremental false passed.",
+      "commands": [
+        "sed -n '1,220p' packages/web/src/pages/login/LoginPage.tsx",
+        "rg -n \"TOTP_TIMEOUT_SECONDS|requiresTwoFactor|handleBackToLogin|Code expires|totp\" packages/web/src packages/web/tests packages/web -g '*.{ts,tsx}'",
+        "rg --files packages/web | rg '(LoginPage|login|auth).*\\.(test|spec)\\.(ts|tsx)$|test'",
+        "sed -n '220,330p' packages/web/src/pages/login/LoginPage.tsx",
+        "cat packages/web/package.json",
+        "sed -n '1,220p' packages/web/src/__tests__/setup.ts",
+        "rg -n \"vi\\.useFakeTimers|advanceTimers|react-router|MemoryRouter|QueryClientProvider|render\\(\" packages/web/src -g '*.{test,spec}.tsx'",
+        "ls",
+        "rg -n \"@sms/web|packageManager|pnpm|npm|yarn|vitest\" package.json pnpm-workspace.yaml package-lock.json pnpm-lock.yaml yarn.lock 2>/dev/null",
+        "nl -ba packages/web/src/pages/login/LoginPage.tsx | sed -n '55,145p'",
+        "pnpm --filter @sms/web typecheck",
+        "cat packages/web/tsconfig.json",
+        "cat packages/web/tsconfig.app.json",
+        "cat packages/web/tsconfig.node.json",
+        "cat package.json",
+        "pnpm --filter @sms/web exec tsc -p tsconfig.app.json --noEmit --incremental false",
+        "pnpm --filter @sms/web exec tsc -p tsconfig.node.json --noEmit --incremental false"
+      ],
+      "createdAt": "2026-05-20T21:39:05.234Z"
+    },
+    {
+      "runId": "20260520T214232-c4052f",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original file path still exists, but the relevant code has changed in the current repository. In packages/web/src/pages/login/LoginPage.tsx, onCredentialsSubmit now resets countdown to TOTP_TIMEOUT_SECONDS before setStep('totp'), handleBackToLogin now resets countdown before returning to credentials, and the session-expired TOTP error path also resets countdown. The interval expiry path now returns TOTP_TIMEOUT_SECONDS instead of leaving countdown at 0. A regression test now exists at packages/web/src/pages/login/__tests__/LoginPage.test.tsx that advances fake timers through a full TOTP expiry, submits credentials again, asserts 'Code expires in 5:00', advances one second, and asserts the TOTP screen remains with 'Code expires in 4:59'. The targeted Vitest run could not complete in this read-only sandbox because Vite/Vitest attempted to write temp files, but both web TypeScript project checks passed with --incremental false.",
+      "commands": [
+        "nl -ba packages/web/src/pages/login/LoginPage.tsx | sed -n '1,180p'",
+        "nl -ba packages/web/src/pages/login/LoginPage.tsx | sed -n '180,340p'",
+        "rg -n \"TOTP_TIMEOUT_SECONDS|requiresTwoFactor|handleBackToLogin|setCountdown|Code expires|formatCountdown|totp\" packages/web/src packages/web/tests packages/web -g '*.{ts,tsx}'",
+        "nl -ba packages/web/src/pages/login/__tests__/LoginPage.test.tsx | sed -n '1,180p'",
+        "cat packages/web/package.json",
+        "cat package.json",
+        "rg -n \"LoginPage.test|Code expires in 5:00|useFakeTimers|advanceTimers\" packages/web/src -g '*.{test,spec}.{ts,tsx}'",
+        "pnpm --filter @sms/web exec vitest run src/pages/login/__tests__/LoginPage.test.tsx",
+        "pnpm --filter @sms/web exec tsc -p tsconfig.app.json --noEmit --incremental false",
+        "pnpm --filter @sms/web exec tsc -p tsconfig.node.json --noEmit --incremental false",
+        "pnpm --filter @sms/web exec vitest --help | sed -n '1,160p'",
+        "pnpm --filter @sms/web exec vitest run src/pages/login/__tests__/LoginPage.test.tsx --configLoader runner",
+        "pnpm --filter @sms/web exec vitest run src/pages/login/__tests__/LoginPage.test.tsx --configLoader native",
+        "nl -ba packages/web/vitest.config.ts | sed -n '1,120p'",
+        "rg -n \"vite-temp|cacheDir|loadConfigFromBundledFile|VITE_.*TEMP|TEMP\" node_modules/.pnpm/vite@*/node_modules/vite/dist/node/chunks/node.js | sed -n '1,120p'",
+        "sed -n '34640,34710p' node_modules/.pnpm/vite@*/node_modules/vite/dist/node/chunks/node.js",
+        "pnpm --filter @sms/web exec vitest run --help --expand-help | rg -n \"alias|setup|environment|config\" | sed -n '1,160p'",
+        "node --input-type=module -e \"globalThis.__dirname='x'; console.log(__dirname)\"",
+        "NODE_OPTIONS=\"--import=data:text/javascript,globalThis.__dirname%3D%27%2FUsers%2Fslaughterassistant%2Fsocial-media-scheduler%2Fpackages%2Fweb%27\" pnpm --filter @sms/web exec vitest run src/pages/login/__tests__/LoginPage.test.tsx --configLoader runner"
+      ],
+      "createdAt": "2026-05-20T21:44:04.338Z"
+    }
+  ],
+  "signature": "sig_feat-library-1234e9e402_f2c6061bf5",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-feat-library-1234e9e402-_990934f096"
+  ],
+  "createdByRunId": "20260518T230011-245d4c",
+  "createdAt": "2026-05-18T23:00:31.224Z",
+  "updatedAt": "2026-05-20T21:44:04.338Z"
+}

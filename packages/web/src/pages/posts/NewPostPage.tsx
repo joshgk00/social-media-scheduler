@@ -152,6 +152,7 @@ export default function NewPostPage() {
       visibility: result.state.visibility ?? 'PUBLIC',
       linkUrl: result.state.linkUrl ?? '',
       isThread: result.state.isThread ?? false,
+      autoDestructAfter: newPlatform === 'twitter' ? prev.autoDestructAfter : null,
     }));
     if (result.state.mediaIds.length !== mediaItems.length) {
       const keepIds = new Set(result.state.mediaIds);
@@ -224,6 +225,25 @@ export default function NewPostPage() {
       },
     });
   }
+
+  const handleMediaStatusUpdate = useCallback(
+    (
+      mediaId: string,
+      status: MediaItem['transcodeStatus'],
+      error: string | null,
+    ) => {
+      setMediaItems((prev) =>
+        prev.map((m) => {
+          if (m.id !== mediaId) return m;
+          if (m.transcodeStatus === status && m.transcodeError === error) {
+            return m;
+          }
+          return { ...m, transcodeStatus: status, transcodeError: error };
+        }),
+      );
+    },
+    [],
+  );
 
   function handleThreadToggle(checked: boolean) {
     if (checked) {
@@ -474,6 +494,7 @@ export default function NewPostPage() {
               onRemoveMedia={handleRemoveMedia}
               onReorderMedia={handleReorderMedia}
               onRetryTranscode={handleRetryTranscode}
+              onMediaStatusUpdate={handleMediaStatusUpdate}
               disabled={isSubmitting}
             />
           )}
@@ -504,6 +525,7 @@ export default function NewPostPage() {
                 onRemoveMedia={handleRemoveMedia}
                 onReorderMedia={handleReorderMedia}
                 onRetryTranscode={handleRetryTranscode}
+                onMediaStatusUpdate={handleMediaStatusUpdate}
                 disabled={isSubmitting}
               />
             </>
@@ -540,6 +562,7 @@ export default function NewPostPage() {
                 onRemoveMedia={handleRemoveMedia}
                 onReorderMedia={handleReorderMedia}
                 onRetryTranscode={handleRetryTranscode}
+                onMediaStatusUpdate={handleMediaStatusUpdate}
                 disabled={isSubmitting}
               />
             </>
@@ -548,6 +571,7 @@ export default function NewPostPage() {
           {/* SHARED POST-CMN BLOCK (B-03) — every common control lives here */}
           <SharedPostFields
             mode={isQueueMode ? 'queue' : 'new'}
+            platform={platform}
             userTimezone={userTimezone}
             effectiveProfileId={effectiveProfileId}
             scheduledAt={formState.scheduledAt}

@@ -1,1 +1,96 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-34-f319aead5b_f2344b158d","featureId":"feat_gh-34_ae664d7f2e","title":"gh#34: Bug: Auto-destruct help copy hardcoded to \"Twitter/X\" on LinkedIn and Facebook composer forms","category":"bug","severity":"medium","confidence":"high","triage":"confirmed-bug","evidence":[{"path":"packages/web/src/components/posts/SharedPostFields.tsx","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/34.\nBacklog section: Bugs.\n\n## Summary\n\nThe Auto-destruct toggle on the new-post / edit-post composer shows the help text:\n\n> Automatically delete this post from Twitter/X after the specified time. The deletion runs in the background.\n\nThis copy renders verbatim on LinkedIn and Facebook composer forms after the profile picker switches platforms. It's misleading — and if auto-destruct isn't supported on LI/FB at all, the toggle itself shouldn't appear on those platforms.\n\n## Reproduction\n\n1. Open `/posts/new`.\n2. Select a LinkedIn profile — the form switches to LinkedIn shape, but the Auto-destruct help copy still references \"Twitter/X\".\n3. Switch to a Facebook profile — same copy.\n\n## Open question\n\nIs auto-destruct actually supported on LinkedIn or Facebook? If not, the right fix is to hide the toggle entirely on those platforms (it already isn't part of the LinkedIn / Facebook posting flows in the worker). If it is supported, the help text needs platform-aware copy.\n\n## Suggested fix\n\nEither:\n\n1. Move the Auto-destruct toggle into `TwitterPostFields.tsx` only (current `LinkedInPostFields.tsx` and `FacebookPostFields.tsx` shouldn't include it).\n2. Or keep it shared and parameterize the help-text string by platform.\n\n## Affected files\n\n- `packages/web/src/components/posts/SharedPostFields.tsx` (or wherever the auto-destruct block lives)\n- `packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx`\n\n## Scope\n\nPhase 8 platform-branching gap — auto-destruct UI was placed in a shared region without platform gating. Surfaced during browser verification.","reproduction":"1. Open `/posts/new`.\n2. Select a LinkedIn profile — the form switches to LinkedIn shape, but the Auto-destruct help copy still references \"Twitter/X\".\n3. Switch to a Facebook profile — same copy.","recommendation":"Phase 8 platform-branching gap — auto-destruct UI was placed in a shared region without platform gating. Surfaced during browser verification.","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":null,"minimumFixScope":"packages/web/src/components/posts/SharedPostFields.tsx, packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx","status":"open","history":[],"signature":"sig_gh-34_f319aead5b","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-34-f319aead5b_f2344b158d",
+  "featureId": "feat_gh-34_ae664d7f2e",
+  "title": "gh#34: Bug: Auto-destruct help copy hardcoded to \"Twitter/X\" on LinkedIn and Facebook composer forms",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/web/src/components/posts/SharedPostFields.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/34.\nBacklog section: Bugs.\n\n## Summary\n\nThe Auto-destruct toggle on the new-post / edit-post composer shows the help text:\n\n> Automatically delete this post from Twitter/X after the specified time. The deletion runs in the background.\n\nThis copy renders verbatim on LinkedIn and Facebook composer forms after the profile picker switches platforms. It's misleading — and if auto-destruct isn't supported on LI/FB at all, the toggle itself shouldn't appear on those platforms.\n\n## Reproduction\n\n1. Open `/posts/new`.\n2. Select a LinkedIn profile — the form switches to LinkedIn shape, but the Auto-destruct help copy still references \"Twitter/X\".\n3. Switch to a Facebook profile — same copy.\n\n## Open question\n\nIs auto-destruct actually supported on LinkedIn or Facebook? If not, the right fix is to hide the toggle entirely on those platforms (it already isn't part of the LinkedIn / Facebook posting flows in the worker). If it is supported, the help text needs platform-aware copy.\n\n## Suggested fix\n\nEither:\n\n1. Move the Auto-destruct toggle into `TwitterPostFields.tsx` only (current `LinkedInPostFields.tsx` and `FacebookPostFields.tsx` shouldn't include it).\n2. Or keep it shared and parameterize the help-text string by platform.\n\n## Affected files\n\n- `packages/web/src/components/posts/SharedPostFields.tsx` (or wherever the auto-destruct block lives)\n- `packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx`\n\n## Scope\n\nPhase 8 platform-branching gap — auto-destruct UI was placed in a shared region without platform gating. Surfaced during browser verification.",
+  "reproduction": "1. Open `/posts/new`.\n2. Select a LinkedIn profile — the form switches to LinkedIn shape, but the Auto-destruct help copy still references \"Twitter/X\".\n3. Switch to a Facebook profile — same copy.",
+  "recommendation": "Phase 8 platform-branching gap — auto-destruct UI was placed in a shared region without platform gating. Surfaced during browser verification.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/components/posts/SharedPostFields.tsx, packages/web/src/components/posts/{Twitter,LinkedIn,Facebook}PostFields.tsx",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T223158-d59e64",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence paths still exist, and the issue is still present in current code. SharedPostFields unconditionally renders AutoDestructPicker at packages/web/src/components/posts/SharedPostFields.tsx:177-181, while AutoDestructPicker still hardcodes the help copy to \"Twitter/X\" at packages/web/src/components/posts/AutoDestructPicker.tsx:101-103. NewPostPage renders LinkedIn and Facebook branches at packages/web/src/pages/posts/NewPostPage.tsx:500-568, then always renders SharedPostFields at :570-590, so the same Twitter/X auto-destruct copy appears after selecting LinkedIn or Facebook. EditPostPage likewise always renders SharedPostFields at packages/web/src/pages/posts/EditPostPage.tsx:646-666. The platform-specific files still exist and do not contain their own gated auto-destruct control. Focused Vitest attempts could not run in this read-only sandbox because Vite/Vitest tried to write under packages/web/node_modules/.vite-temp, and alternate config loaders failed on the repo's __dirname-based config, but static current-code evidence is sufficient to revalidate the bug as open.",
+      "commands": [
+        "rg -n \"Auto-destruct|auto-destruct|Twitter/X|Automatically delete|delete this post\" packages/web/src/components/posts",
+        "rg --files packages/web/src/components/posts",
+        "sed -n '1,240p' packages/web/src/components/posts/SharedPostFields.tsx",
+        "sed -n '1,180p' packages/web/src/components/posts/AutoDestructPicker.tsx",
+        "sed -n '1,220p' packages/web/src/components/posts/TwitterPostFields.tsx",
+        "sed -n '1,220p' packages/web/src/components/posts/LinkedInPostFields.tsx",
+        "sed -n '1,220p' packages/web/src/components/posts/FacebookPostFields.tsx",
+        "rg -n \"<SharedPostFields|SharedPostFields\\(\" packages/web/src",
+        "sed -n '540,710p' packages/web/src/pages/posts/NewPostPage.tsx",
+        "sed -n '620,760p' packages/web/src/pages/posts/EditPostPage.tsx",
+        "rg -n \"autoDestructAfter|auto-destruct|AutoDestruct\" packages -g '*.{ts,tsx}'",
+        "pnpm --filter @sms/web test -- SharedPostFields.test.tsx --run",
+        "pnpm --filter @sms/web exec vitest --configLoader runner --run src/components/posts/__tests__/SharedPostFields.test.tsx",
+        "pnpm --filter @sms/web exec vitest --configLoader native --run src/components/posts/__tests__/SharedPostFields.test.tsx",
+        "nl -ba packages/web/src/components/posts/SharedPostFields.tsx | sed -n '168,184p'",
+        "nl -ba packages/web/src/components/posts/AutoDestructPicker.tsx | sed -n '96,106p'",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '468,590p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '644,666p'"
+      ],
+      "createdAt": "2026-05-20T22:33:22.916Z"
+    },
+    {
+      "runId": "20260520T223557-6e525f",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence files still exist, and the current code now implements the suggested platform gate. SharedPostFields takes a platform prop and renders AutoDestructPicker only when platform === 'twitter' at packages/web/src/components/posts/SharedPostFields.tsx:22 and :180-185. NewPostPage passes the selected/effective platform into SharedPostFields at packages/web/src/pages/posts/NewPostPage.tsx:572-589 and clears autoDestructAfter when switching to a non-Twitter profile at :147-156. EditPostPage passes formState.platform into SharedPostFields at packages/web/src/pages/posts/EditPostPage.tsx:647-665. AutoDestructPicker still contains Twitter/X-specific help copy at packages/web/src/components/posts/AutoDestructPicker.tsx:101-103, but it is now gated away from LinkedIn and Facebook. Current regression tests assert Twitter shows the control while LinkedIn/Facebook hide both Auto-destruct and the Twitter/X help copy at packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx:122-139. I attempted to run the focused Vitest test, but this read-only sandbox blocked Vite's config temp-file write under node_modules/.vite-temp; native config loading also failed because the config uses __dirname in ESM scope.",
+      "commands": [
+        "rg -n \"Auto-destruct|auto-destruct|Twitter/X|Automatically delete|delete this post|AutoDestruct\" packages/web/src/components/posts packages/web/src/pages/posts packages -g '*.{ts,tsx}'",
+        "rg --files packages/web/src/components/posts",
+        "git status --short",
+        "nl -ba packages/web/src/components/posts/SharedPostFields.tsx | sed -n '1,230p'",
+        "nl -ba packages/web/src/components/posts/AutoDestructPicker.tsx | sed -n '1,140p'",
+        "nl -ba packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx | sed -n '1,180p'",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '460,610p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '620,690p'",
+        "nl -ba packages/web/src/components/posts/TwitterPostFields.tsx | sed -n '1,180p' && nl -ba packages/web/src/components/posts/LinkedInPostFields.tsx | sed -n '1,180p' && nl -ba packages/web/src/components/posts/FacebookPostFields.tsx | sed -n '1,180p'",
+        "pnpm --filter @sms/web test -- src/components/posts/__tests__/SharedPostFields.test.tsx --run",
+        "pnpm --filter @sms/web exec vitest --configLoader native --run src/components/posts/__tests__/SharedPostFields.test.tsx",
+        "rg -n \"const platform|let platform|platform =|formState.platform|effectiveProfile|handleProfileChange\" packages/web/src/pages/posts/NewPostPage.tsx",
+        "rg -n \"const platform|let platform|platform =|formState.platform|handleProfileChange\" packages/web/src/pages/posts/EditPostPage.tsx",
+        "git diff -- packages/web/src/components/posts/SharedPostFields.tsx packages/web/src/components/posts/__tests__/SharedPostFields.test.tsx packages/web/src/pages/posts/NewPostPage.tsx packages/web/src/pages/posts/EditPostPage.tsx",
+        "rg -n \"<SharedPostFields|SharedPostFields\\(\" packages/web/src -g '*.tsx'",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '116,160p'"
+      ],
+      "createdAt": "2026-05-20T22:37:03.598Z"
+    }
+  ],
+  "signature": "sig_gh-34_f319aead5b",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-34-f319aead5b-f2344b1_0a25f12562"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T22:37:03.598Z"
+}

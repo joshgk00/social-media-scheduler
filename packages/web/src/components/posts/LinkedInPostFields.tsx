@@ -13,6 +13,11 @@ interface LinkedInPostFieldsProps {
   onRemoveMedia: (id: string) => void;
   onReorderMedia: (ids: string[]) => void;
   onRetryTranscode: (id: string) => void;
+  onMediaStatusUpdate?: (
+    id: string,
+    status: MediaItem['transcodeStatus'],
+    error: string | null,
+  ) => void;
   disabled?: boolean;
 }
 
@@ -32,6 +37,7 @@ export function LinkedInPostFields({
   onRemoveMedia,
   onReorderMedia,
   onRetryTranscode,
+  onMediaStatusUpdate,
   disabled,
 }: LinkedInPostFieldsProps) {
   return (
@@ -60,6 +66,7 @@ export function LinkedInPostFields({
             onRemove={onRemoveMedia}
             onReorder={onReorderMedia}
             onRetryTranscode={onRetryTranscode}
+            onStatusUpdate={onMediaStatusUpdate}
             readOnly={false}
           />
         )}
