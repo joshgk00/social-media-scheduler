@@ -60,7 +60,8 @@ export async function processImageUpload(params: ProcessImageParams) {
   }
 
   try {
-    const metadata = await sharp(tempFilePath).metadata();
+    const originalImage = sharp(tempFilePath);
+    const metadata = await originalImage.clone().metadata();
     const imageWidth = metadata.width ?? 0;
     const imageHeight = metadata.height ?? 0;
     const format = metadata.format ?? 'jpeg';
@@ -71,23 +72,19 @@ export async function processImageUpload(params: ProcessImageParams) {
       limits?.maxImageHeight &&
       (imageWidth > limits.maxImageWidth || imageHeight > limits.maxImageHeight);
 
-    let processedBuffer: Buffer;
+    const processedImage = originalImage.clone().rotate();
     if (needsResize) {
-      processedBuffer = await sharp(tempFilePath)
-        .rotate()
-        .resize(limits.maxImageWidth, limits.maxImageHeight, {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .toBuffer();
-    } else {
-      processedBuffer = await sharp(tempFilePath).rotate().toBuffer();
+      processedImage.resize(limits.maxImageWidth, limits.maxImageHeight, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
     }
 
-    // Re-read dimensions from the processed buffer
-    const processedMeta = await sharp(processedBuffer).metadata();
-    const resizedWidth = processedMeta.width ?? imageWidth;
-    const resizedHeight = processedMeta.height ?? imageHeight;
+    const { data: processedBuffer, info: processedInfo } = await processedImage.toBuffer({
+      resolveWithObject: true,
+    });
+    const resizedWidth = processedInfo.width ?? imageWidth;
+    const resizedHeight = processedInfo.height ?? imageHeight;
 
     const fileUuid = randomUUID();
     const ext = formatToExt(format);
