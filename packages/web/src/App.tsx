@@ -21,6 +21,7 @@ const QueueFormPage = lazy(() => import("./pages/queues/QueueDetailPage"));
 const QueueOverviewPage = lazy(() => import("./pages/queues/QueueOverviewPage"));
 const QueuePostsPage = lazy(() => import("./pages/queues/QueuePostsPage"));
 const CalendarPage = lazy(() => import("./pages/calendar/CalendarPage"));
+const ProfilesPage = lazy(() => import("./pages/profiles/ProfilesPage"));
 
 export function App() {
   return (
@@ -75,7 +76,7 @@ export function App() {
               />
               <Route
                 path="/profiles"
-                element={<RedesignPlaceholderPage title="Profiles" />}
+                element={<ProfilesPage />}
               />
               <Route
                 path="/notifications"

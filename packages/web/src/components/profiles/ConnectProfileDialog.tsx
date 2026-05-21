@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createProfileSchema, type CreateProfileInput } from '@sms/shared';
-import { Eye, EyeOff, Info, Loader2, Network, Share2 } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Info, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useCreateProfile } from '../../hooks/use-profiles';
+import { useCreateProfile, type Platform } from '../../hooks/use-profiles';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import {
@@ -21,32 +22,58 @@ import {
   FormItem,
   FormLabel,
   FormControl,
-  FormDescription,
   FormMessage,
 } from '../ui/form';
-import { Separator } from '../ui/separator';
+import { IconButton } from '../ui/icon';
+import { PlatformGlyph } from '../ui/platform-glyph';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { cn } from '../../lib/utils';
 
 interface ConnectProfileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+type ConnectPlatform = Platform;
 type CredentialField = 'consumerKey' | 'consumerSecret' | 'accessToken' | 'accessTokenSecret';
+
+const platformTabs: Array<{ value: ConnectPlatform; label: string }> = [
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'twitter', label: 'Twitter / X' },
+];
 
 const credentialFields: Array<{
   name: CredentialField;
   label: string;
-  description: string;
 }> = [
-  { name: 'consumerKey', label: 'Consumer Key', description: 'Also called API Key' },
-  { name: 'consumerSecret', label: 'Consumer Secret', description: 'Also called API Secret' },
-  { name: 'accessToken', label: 'Access Token', description: 'Generated under Authentication Tokens' },
-  { name: 'accessTokenSecret', label: 'Access Token Secret', description: 'Generated under Authentication Tokens' },
+  { name: 'consumerKey', label: 'Consumer Key (API Key)' },
+  { name: 'consumerSecret', label: 'Consumer Secret (API Secret)' },
+  { name: 'accessToken', label: 'Access Token' },
+  { name: 'accessTokenSecret', label: 'Access Token Secret' },
 ];
+
+function oauthCopy(platform: Exclude<ConnectPlatform, 'twitter'>) {
+  if (platform === 'linkedin') {
+    return {
+      platformLabel: 'LinkedIn',
+      body: "You'll be redirected to LinkedIn to sign in. After signing in, pick a Personal Profile or Company Page to post as.",
+      action: 'Sign in with LinkedIn',
+      href: '/api/oauth/start/linkedin?returnTo=/profiles',
+    };
+  }
+
+  return {
+    platformLabel: 'Facebook',
+    body: "You'll be redirected to Facebook to sign in. After signing in, pick which Page you want to post to.",
+    action: 'Sign in with Facebook',
+    href: '/api/oauth/start/facebook?returnTo=/profiles',
+  };
+}
 
 export function ConnectProfileDialog({ open, onOpenChange }: ConnectProfileDialogProps) {
   const createProfile = useCreateProfile();
-
+  const [activePlatform, setActivePlatform] = useState<ConnectPlatform>('linkedin');
   const [visibleFields, setVisibleFields] = useState<Record<CredentialField, boolean>>({
     consumerKey: false,
     consumerSecret: false,
@@ -65,18 +92,38 @@ export function ConnectProfileDialog({ open, onOpenChange }: ConnectProfileDialo
     },
   });
 
+  function resetDialog() {
+    form.reset();
+    createProfile.reset();
+    setActivePlatform('linkedin');
+    setVisibleFields({
+      consumerKey: false,
+      consumerSecret: false,
+      accessToken: false,
+      accessTokenSecret: false,
+    });
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) resetDialog();
+    onOpenChange(nextOpen);
+  }
+
   function toggleFieldVisibility(fieldName: CredentialField) {
-    setVisibleFields(previous => ({
+    setVisibleFields((previous) => ({
       ...previous,
       [fieldName]: !previous[fieldName],
     }));
   }
 
+  function startOAuth(platform: Exclude<ConnectPlatform, 'twitter'>) {
+    window.location.assign(oauthCopy(platform).href);
+  }
+
   async function onSubmit(data: CreateProfileInput) {
     try {
       await createProfile.mutateAsync(data);
-      form.reset();
-      resetVisibility();
+      resetDialog();
       onOpenChange(false);
       toast.success('Profile connected');
     } catch (err) {
@@ -95,134 +142,139 @@ export function ConnectProfileDialog({ open, onOpenChange }: ConnectProfileDialo
     }
   }
 
-  function resetVisibility() {
-    setVisibleFields({
-      consumerKey: false,
-      consumerSecret: false,
-      accessToken: false,
-      accessTokenSecret: false,
-    });
-  }
-
-  function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen) {
-      form.reset();
-      resetVisibility();
-      createProfile.reset();
-    }
-    onOpenChange(nextOpen);
-  }
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
-          <DialogTitle>Connect a profile</DialogTitle>
+          <DialogTitle>Connect a social profile</DialogTitle>
           <DialogDescription>
-            Choose a platform. You'll be redirected to sign in and authorize posting access.
+            Authorize publishing access for one platform.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <Button
-            type="button"
-            className="w-full justify-center"
-            onClick={() =>
-              window.location.assign('/api/oauth/start/linkedin?returnTo=/profiles')
-            }
-          >
-            <Network className="h-4 w-4 mr-2" aria-hidden="true" />
-            Connect LinkedIn
-          </Button>
-          <p className="text-xs text-muted-foreground flex items-start gap-1">
-            <Info className="h-3 w-3 mt-0.5 shrink-0" aria-hidden="true" />
-            You'll pick a Personal Profile or Company Page after signing in.
-          </p>
-
-          <Button
-            type="button"
-            className="w-full justify-center"
-            onClick={() =>
-              window.location.assign('/api/oauth/start/facebook?returnTo=/profiles')
-            }
-          >
-            <Share2 className="h-4 w-4 mr-2" aria-hidden="true" />
-            Connect Facebook Page
-          </Button>
-          <p className="text-xs text-muted-foreground flex items-start gap-1">
-            <Info className="h-3 w-3 mt-0.5 shrink-0" aria-hidden="true" />
-            You'll pick which Page to post to after signing in.
-          </p>
-        </div>
-
-        <Separator />
-
-        <div>
-          <p className="text-sm font-semibold">Connect Twitter/X</p>
-          <p className="text-xs text-muted-foreground mb-2 flex items-start gap-1">
-            <Info className="h-3 w-3 mt-0.5 shrink-0" aria-hidden="true" />
-            You'll paste your Developer App credentials on the next step.
-          </p>
-        </div>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {credentialFields.map(({ name, label, description }) => (
-              <FormField
-                key={name}
-                control={form.control}
-                name={name}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{label}</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Input
-                          type={visibleFields[name] ? 'text' : 'password'}
-                          autoComplete="off"
-                          {...field}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0 h-10 w-10"
-                          onClick={() => toggleFieldVisibility(name)}
-                          aria-label={visibleFields[name] ? `Hide ${label}` : `Show ${label}`}
-                        >
-                          {visibleFields[name] ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <FormDescription>{description}</FormDescription>
-                    <FormMessage />
-                  </FormItem>
+        <Tabs value={activePlatform} onValueChange={(value) => setActivePlatform(value as ConnectPlatform)}>
+          <TabsList className="grid h-auto w-full grid-cols-3 rounded-none border-b bg-transparent p-0">
+            {platformTabs.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className={cn(
+                  "gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-2 py-2 text-xs shadow-none data-[state=active]:border-[var(--brand-accent)] data-[state=active]:bg-transparent data-[state=active]:shadow-none",
                 )}
-              />
+              >
+                <PlatformGlyph platform={tab.value} size={11} />
+                {tab.label}
+              </TabsTrigger>
             ))}
+          </TabsList>
 
-            {form.formState.errors.root && (
-              <p className="text-sm text-destructive">
-                {form.formState.errors.root.message}
-              </p>
-            )}
+          <TabsContent value="linkedin" className="mt-3">
+            <OAuthPanel platform="linkedin" onStartOAuth={startOAuth} onCancel={() => handleOpenChange(false)} />
+          </TabsContent>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-                Maybe later
-              </Button>
-              <Button type="submit" disabled={createProfile.isPending}>
-                {createProfile.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Connect Twitter/X
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+          <TabsContent value="facebook" className="mt-3">
+            <OAuthPanel platform="facebook" onStartOAuth={startOAuth} onCancel={() => handleOpenChange(false)} />
+          </TabsContent>
+
+          <TabsContent value="twitter" className="mt-3">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+                <Alert className="border-[var(--status-warning)]/40 bg-[var(--status-warning-soft)]/40">
+                  <AlertCircle className="h-4 w-4 text-[var(--status-warning)]" />
+                  <AlertTitle className="text-xs">Developer App credentials required</AlertTitle>
+                  <AlertDescription className="text-xs">
+                    Twitter / X doesn't offer one-click OAuth for self-hosted apps. Create a Developer App, then paste its credentials below.
+                  </AlertDescription>
+                </Alert>
+
+                {credentialFields.map(({ name, label }) => (
+                  <FormField
+                    key={name}
+                    control={form.control}
+                    name={name}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{label}</FormLabel>
+                        <div className="relative">
+                          <FormControl>
+                            <Input
+                              type={visibleFields[name] ? 'text' : 'password'}
+                              autoComplete="off"
+                              className="pr-9"
+                              {...field}
+                            />
+                          </FormControl>
+                          <IconButton
+                            icon={visibleFields[name] ? EyeOff : Eye}
+                            label={visibleFields[name] ? `Hide ${label}` : `Show ${label}`}
+                            variant="ghost"
+                            className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
+                            onClick={() => toggleFieldVisibility(name)}
+                          />
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
+
+                <p className="mono text-[11px] leading-5 text-muted-foreground">
+                  Setup: developer.x.com &gt; Projects & Apps &gt; User authentication settings &gt; Read and write.
+                </p>
+
+                {form.formState.errors.root ? (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.root.message}
+                  </p>
+                ) : null}
+
+                <DialogFooter>
+                  <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
+                    Maybe later
+                  </Button>
+                  <Button type="submit" variant="accent" disabled={createProfile.isPending}>
+                    {createProfile.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Connect Twitter / X
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function OAuthPanel({
+  platform,
+  onStartOAuth,
+  onCancel,
+}: {
+  platform: Exclude<ConnectPlatform, 'twitter'>;
+  onStartOAuth: (platform: Exclude<ConnectPlatform, 'twitter'>) => void;
+  onCancel: () => void;
+}) {
+  const copy = oauthCopy(platform);
+
+  return (
+    <div className="space-y-4">
+      <Alert className="border-[var(--status-info)]/40 bg-[var(--status-info-soft)]/50">
+        <Info className="h-4 w-4 text-[var(--status-info)]" />
+        <AlertTitle className="text-xs">One-click OAuth</AlertTitle>
+        <AlertDescription className="text-xs">
+          {copy.body}
+        </AlertDescription>
+      </Alert>
+
+      <DialogFooter>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Maybe later
+        </Button>
+        <Button type="button" variant="accent" onClick={() => onStartOAuth(platform)}>
+          {copy.action}
+        </Button>
+      </DialogFooter>
+    </div>
   );
 }

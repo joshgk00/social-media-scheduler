@@ -71,6 +71,7 @@ const statusConfig: Record<string, StatusConfig> = {
   published: { tone: "success", icon: Check, label: "Published" },
   failed: { tone: "danger", icon: TriangleAlert, label: "Failed" },
   active: { tone: "success", label: "Active", dot: true },
+  inactive: { tone: "neutral", label: "Inactive", dot: true },
   paused: { tone: "warning", icon: Pause, label: "Paused" },
   deprecated: { tone: "neutral", label: "Deprecated", dot: true },
 };
