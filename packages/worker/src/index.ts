@@ -64,7 +64,12 @@ async function main() {
     connection: redis,
   });
 
-  const publishWorker = createPublishWorker({ redis, db, notificationQueue });
+  const publishWorker = createPublishWorker({
+    redis,
+    db,
+    notificationQueue,
+    vault: tokenVault,
+  });
   const { scannerQueue, scannerWorker } = await startScanner(
     redis,
     db,

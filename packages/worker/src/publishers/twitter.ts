@@ -1,5 +1,4 @@
 import { TwitterApi, ApiRequestError, ApiResponseError } from 'twitter-api-v2';
-import { decrypt, validateEncryptionKey } from '@sms/shared/encryption';
 import { createLogger } from '@sms/shared/logger';
 import {
   PublishFailure,
@@ -7,7 +6,9 @@ import {
   type PublishResult,
   type Publisher,
 } from '@sms/shared';
-import type { socialProfiles } from '@sms/db';
+import type { Credentials, SafeProfile } from '@sms/shared/tokens';
+
+// Credentials arrive pre-unsealed from TokenVault - see ADR-0005.
 
 type ClassifiedError = {
   kind: PublishFailureKind;
@@ -139,84 +140,16 @@ function redactTokenShapedSubstrings(message: string): string {
     .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[redacted-token]');
 }
 
-function asHexString(value: string | Buffer | null): string | null {
-  if (value === null) return null;
-  return typeof value === 'string' ? value : value.toString('hex');
+function assertTwitterCredentials(credentials: Credentials) {
+  if (credentials.kind !== 'twitter') {
+    throw new TwitterCredentialError('TwitterPublisher requires kind=twitter credentials');
+  }
+  return credentials;
 }
 
-function readTwitterCredentials(profile: typeof socialProfiles.$inferSelect) {
-  const rawKey = process.env.ENCRYPTION_KEY;
-  if (!rawKey) {
-    throw new TwitterCredentialError(
-      'ENCRYPTION_KEY env var is not set - cannot decrypt Twitter credentials',
-    );
-  }
-  let encryptionKey: Buffer;
-  try {
-    encryptionKey = validateEncryptionKey(rawKey);
-  } catch {
-    throw new TwitterCredentialError('ENCRYPTION_KEY env var is invalid');
-  }
-
-  const consumerKeyCiphertext = asHexString(profile.consumerKeyCiphertext);
-  const consumerKeyIv = asHexString(profile.consumerKeyIv);
-  const consumerKeyAuthTag = asHexString(profile.consumerKeyAuthTag);
-  const consumerSecretCiphertext = asHexString(profile.consumerSecretCiphertext);
-  const consumerSecretIv = asHexString(profile.consumerSecretIv);
-  const consumerSecretAuthTag = asHexString(profile.consumerSecretAuthTag);
-  const accessTokenCiphertext = asHexString(profile.accessTokenCiphertext);
-  const accessTokenIv = asHexString(profile.accessTokenIv);
-  const accessTokenAuthTag = asHexString(profile.accessTokenAuthTag);
-  const accessTokenSecretCiphertext = asHexString(profile.accessTokenSecretCiphertext);
-  const accessTokenSecretIv = asHexString(profile.accessTokenSecretIv);
-  const accessTokenSecretAuthTag = asHexString(profile.accessTokenSecretAuthTag);
-
-  if (
-    !consumerKeyCiphertext ||
-    !consumerKeyIv ||
-    !consumerKeyAuthTag ||
-    !consumerSecretCiphertext ||
-    !consumerSecretIv ||
-    !consumerSecretAuthTag ||
-    !accessTokenCiphertext ||
-    !accessTokenIv ||
-    !accessTokenAuthTag ||
-    !accessTokenSecretCiphertext ||
-    !accessTokenSecretIv ||
-    !accessTokenSecretAuthTag
-  ) {
-    throw new TwitterCredentialError(
-      `Profile ${profile.id} is missing one or more encrypted Twitter credential fields`,
-    );
-  }
-
-  try {
-    return {
-      consumerKey: decrypt(consumerKeyCiphertext, consumerKeyIv, consumerKeyAuthTag, encryptionKey),
-      consumerSecret: decrypt(
-        consumerSecretCiphertext,
-        consumerSecretIv,
-        consumerSecretAuthTag,
-        encryptionKey,
-      ),
-      accessToken: decrypt(accessTokenCiphertext, accessTokenIv, accessTokenAuthTag, encryptionKey),
-      accessSecret: decrypt(
-        accessTokenSecretCiphertext,
-        accessTokenSecretIv,
-        accessTokenSecretAuthTag,
-        encryptionKey,
-      ),
-    };
-  } catch {
-    throw new TwitterCredentialError(
-      `Profile ${profile.id} has Twitter credentials that could not be decrypted`,
-    );
-  }
-}
-
-export function createTwitterPublisher(): Publisher<typeof socialProfiles.$inferSelect> {
+export function createTwitterPublisher(): Publisher {
   return {
-    async publish(profile, post, ctx): Promise<PublishResult> {
+    async publish(profile, credentials, post, ctx): Promise<PublishResult> {
       if (post.isThread) {
         throw new PublishFailure({
           kind: 'permanent',
@@ -226,18 +159,17 @@ export function createTwitterPublisher(): Publisher<typeof socialProfiles.$infer
       }
 
       try {
-        const { consumerKey, consumerSecret, accessToken, accessSecret } =
-          readTwitterCredentials(profile);
+        const twitterCredentials = assertTwitterCredentials(credentials);
         const client = new TwitterApi({
-          appKey: consumerKey,
-          appSecret: consumerSecret,
-          accessToken,
-          accessSecret,
+          appKey: twitterCredentials.consumerKey,
+          appSecret: twitterCredentials.consumerSecret,
+          accessToken: twitterCredentials.accessToken,
+          accessSecret: twitterCredentials.accessTokenSecret,
         });
 
         logger.info(
           {
-            profileId: profile.id,
+            profilePlatform: profile.platform,
             correlationId: ctx.correlationId,
             textLength: post.text.length,
           },
@@ -266,7 +198,7 @@ export function createTwitterPublisher(): Publisher<typeof socialProfiles.$infer
 
 export function createFakeTwitterPublisher(
   options: { result?: PublishResult; error?: unknown } = {},
-): Publisher<typeof socialProfiles.$inferSelect> {
+): Publisher<SafeProfile> {
   return {
     async publish() {
       if (Object.prototype.hasOwnProperty.call(options, 'error')) {

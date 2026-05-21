@@ -1,4 +1,3 @@
-import { decrypt, validateEncryptionKey } from '@sms/shared/encryption';
 import { createLogger } from '@sms/shared/logger';
 import {
   PublishFailure,
@@ -6,7 +5,9 @@ import {
   type PublishResult,
   type Publisher,
 } from '@sms/shared';
-import type { socialProfiles } from '@sms/db';
+import type { Credentials, SafeProfile } from '@sms/shared/tokens';
+
+// Credentials arrive pre-unsealed from TokenVault - see ADR-0005.
 
 type ClassifiedError = {
   kind: PublishFailureKind;
@@ -83,34 +84,20 @@ function redactTokenShapedSubstrings(message: string): string {
     .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[redacted-token]');
 }
 
-function asHexString(value: string | Buffer | null): string | null {
-  if (value === null) return null;
-  return typeof value === 'string' ? value : value.toString('hex');
-}
-
-function readLinkedInCredentials(profile: typeof socialProfiles.$inferSelect): string {
-  const rawKey = process.env.ENCRYPTION_KEY;
-  if (!rawKey) {
-    throw new LinkedInPublisherCredentialError('ENCRYPTION_KEY env var is not set');
-  }
-  const encryptionKey = validateEncryptionKey(rawKey);
-
-  const cipher = asHexString(profile.oauth2AccessTokenCiphertext);
-  const iv = asHexString(profile.oauth2AccessTokenIv);
-  const authTag = asHexString(profile.oauth2AccessTokenAuthTag);
-  if (!cipher || !iv || !authTag) {
+function assertLinkedInCredentials(credentials: Credentials) {
+  if (credentials.kind !== 'oauth2') {
     throw new LinkedInPublisherCredentialError(
-      `Profile ${profile.id} is missing one or more encrypted OAuth 2.0 token fields`,
+      'LinkedInPublisher requires kind=oauth2 credentials',
     );
   }
-  return decrypt(cipher, iv, authTag, encryptionKey);
+  return credentials;
 }
 
-function buildAuthorUrn(profile: typeof socialProfiles.$inferSelect): string {
+function buildAuthorUrn(profile: SafeProfile): string {
   const accountId = profile.platformAccountId;
   if (!accountId) {
     throw new LinkedInPublisherCredentialError(
-      `Profile ${profile.id} missing platformAccountId`,
+      'LinkedIn profile missing platformAccountId',
     );
   }
   if (accountId.startsWith('urn:li:')) return accountId;
@@ -167,11 +154,11 @@ async function putImageBinary(args: {
   }
 }
 
-export function createLinkedInPublisher(): Publisher<typeof socialProfiles.$inferSelect> {
+export function createLinkedInPublisher(): Publisher {
   return {
-    async publish(profile, post, ctx): Promise<PublishResult> {
+    async publish(profile, credentials, post, ctx): Promise<PublishResult> {
       try {
-        const accessToken = readLinkedInCredentials(profile);
+        const { accessToken } = assertLinkedInCredentials(credentials);
         const apiVersion = resolveApiVersion();
         const ownerUrn = buildAuthorUrn(profile);
         const mediaItem = post.media[0];
@@ -215,7 +202,7 @@ export function createLinkedInPublisher(): Publisher<typeof socialProfiles.$infe
 
         logger.info(
           {
-            profileId: profile.id,
+            profileAccountId: profile.platformAccountId,
             correlationId: ctx.correlationId,
             textLength: post.text.length,
             hasImage: !!imageUrn,
@@ -276,7 +263,7 @@ export function createLinkedInPublisher(): Publisher<typeof socialProfiles.$infe
 
 export function createFakeLinkedInPublisher(
   options: { result?: PublishResult; error?: unknown } = {},
-): Publisher<typeof socialProfiles.$inferSelect> {
+): Publisher<SafeProfile> {
   return {
     async publish() {
       if (Object.prototype.hasOwnProperty.call(options, 'error')) {

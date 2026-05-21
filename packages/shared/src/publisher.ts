@@ -1,5 +1,6 @@
 import type { Buffer } from 'node:buffer';
 import type { SupportedPlatform } from './schemas/profiles.js';
+import type { Credentials, SafeProfile } from './tokens/index.js';
 
 export type MediaKind = 'image' | 'video' | 'gif';
 
@@ -28,9 +29,10 @@ export interface PublishResult {
   platformPostId: string;
 }
 
-export interface Publisher<Profile = unknown> {
+export interface Publisher<Profile = SafeProfile> {
   publish(
     profile: Profile,
+    credentials: Credentials,
     post: PublishablePost,
     ctx: PublishCtx,
   ): Promise<PublishResult>;
