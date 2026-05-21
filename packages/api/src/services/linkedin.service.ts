@@ -5,7 +5,7 @@ const logger = createLogger('linkedin-service');
 // WR-03: runtime contract check on LinkedIn token responses. A partial 200
 // (malformed proxy rewrite, test environment, future API change) would
 // otherwise yield `undefined` fields — `expires_in * 1000` becomes `NaN` in
-// downstream date math, and `encrypt(undefined)` fails obscurely. Validating
+// downstream date math, and token sealing fails obscurely. Validating
 // here keeps the typed LinkedInTokenResponse contract honest at runtime
 // without pulling zod into the api package (see CLAUDE.md: don't add new
 // dependencies unless required).

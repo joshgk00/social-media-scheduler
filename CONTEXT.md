@@ -17,8 +17,20 @@ An ordered, recycling list of Posts associated with a **Social Profile**. The sc
 _Avoid_: list, schedule, backlog
 
 **Publisher**:
-A module that knows how to transmit one **Post** to one social network. There is one Publisher per platform (Twitter, LinkedIn, Facebook). A Publisher owns: credential decryption, the API-call sequence (including multi-step flows like LinkedIn image upload or Facebook multi-photo carousels), error classification, and message redaction. A Publisher does **not** own pre-flight checks (budget, token health, thread support) — those belong to the **Post Lifecycle**.
+A module that knows how to transmit one **Post** to one social network. There is one Publisher per platform (Twitter, LinkedIn, Facebook). A Publisher owns: the API-call sequence (including multi-step flows like LinkedIn image upload or Facebook multi-photo carousels), error classification, and message redaction. A Publisher receives **Credentials** from the dispatcher and does not see cipher fields. A Publisher does **not** own pre-flight checks (budget, token health, thread support) — those belong to the **Post Lifecycle**.
 _Avoid_: client, adapter (we use "adapter" for the architectural concept; "Publisher" is the named seam)
+
+**TokenVault**:
+A shared capability in `@sms/shared/tokens` that is the only production code allowed to call `encrypt` or `decrypt` for Social Profile credentials. API code uses it to seal incoming tokens before storage; worker code uses it to unseal tokens at dispatch time.
+_Avoid_: ad hoc encryption helper, publisher-owned decrypt
+
+**Credentials**:
+The typed plaintext credential bag returned by **TokenVault** after unsealing: Twitter credentials are OAuth 1.0a fields, and LinkedIn/Facebook credentials are OAuth 2 access tokens. Credentials stay function-scoped and are never logged, cached, or stored.
+_Avoid_: token map, raw secret record
+
+**SafeProfile**:
+The Social Profile projection passed to Publishers after cipher fields have been stripped. It contains only routing and platform identity fields needed by the platform API call.
+_Avoid_: raw profile row, encrypted profile
 
 **Post Lifecycle**:
 The rules governing what state a Post can be in, what transitions are legal, and what each transition implies. Lives as pure operations in `@sms/shared/post/aggregate.ts` (the `plan*` functions). Both user-driven changes (create / update / delete from the API) and scheduler-driven changes (transition to publishing, record success, record failure from the worker) consult the same Post Lifecycle. Each package has a thin **repository** that loads a row, asks the Post Lifecycle for a **PostPatch**, then writes it.

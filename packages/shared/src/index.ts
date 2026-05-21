@@ -1,8 +1,8 @@
-// Server-only exports (node:crypto, pino) — import directly:
-//   import { encrypt, decrypt, validateEncryptionKey } from '@sms/shared/encryption'
+// Server-only exports (node:crypto, pino) import directly from their subpaths.
 //   import { createLogger } from '@sms/shared/logger'
 //   import { requireEnv } from '@sms/shared/env'
 // These are NOT re-exported from the barrel to avoid breaking browser bundles.
+export { validateEncryptionKey } from './encryption-key.js';
 export { AppError } from './errors.js';
 export * from './schemas/auth.js';
 export * from './schemas/settings.js';
