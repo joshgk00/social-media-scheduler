@@ -25,6 +25,7 @@ import {
   planRecordFailure,
   planRecordSuccess,
   planTransitionToPublishing,
+  countFacebookPublishApiCalls,
   type MediaItem,
   type PostState,
   type PostTransitionProfile,
@@ -226,6 +227,17 @@ async function loadPublishableMedia(
       fileName: row.fileName,
     })),
   );
+}
+
+async function loadFacebookCounterMedia(
+  db: WorkerDb,
+  postId: string,
+): Promise<Array<{ mimeType: string }>> {
+  return db
+    .select({ mimeType: postMedia.mimeType })
+    .from(postMedia)
+    .where(and(eq(postMedia.postId, postId), isNull(postMedia.deletedAt)))
+    .orderBy(postMedia.sortOrder);
 }
 
 function classifyPublishError(err: unknown): ClassifiedError {
@@ -503,9 +515,15 @@ export async function publishPost(
   // rolled back. The tweet is already live. Skip the Twitter call AND the
   // pre-write (idempotent — the marker is already on the row) and continue
   // straight to Phase 3 with the recovered id.
+  let facebookPublishCallCount = 1;
   let platformPostId: string;
   if (recoveryPlatformPostId !== null) {
     platformPostId = recoveryPlatformPostId;
+    if (lockedProfile.platform === 'facebook') {
+      facebookPublishCallCount = countFacebookPublishApiCalls(
+        await loadFacebookCounterMedia(db, ctx.postId),
+      );
+    }
     lifecycleLogger.info(
       { platformPostId },
       'Resuming from issue-#17 recovery — Twitter call and pre-write skipped, advancing to Phase 3',
@@ -523,6 +541,9 @@ export async function publishPost(
         linkUrl: lockedPost.link_url ?? null,
         media,
       };
+      if (publishablePost.platform === 'facebook') {
+        facebookPublishCallCount = countFacebookPublishApiCalls(media);
+      }
       const callResult = await ctx.publish(
         lockedProfile,
         publishablePost,
@@ -668,8 +689,8 @@ export async function publishPost(
           facebookHourlyCount: sql`CASE
             WHEN ${socialProfiles.facebookWindowStartUtc} IS NULL
               OR ${socialProfiles.facebookWindowStartUtc} < ${hourThreshold}
-              THEN 1
-            ELSE ${socialProfiles.facebookHourlyCount} + 1
+              THEN ${facebookPublishCallCount}
+            ELSE ${socialProfiles.facebookHourlyCount} + ${facebookPublishCallCount}
           END`,
           facebookWindowStartUtc: sql`CASE
             WHEN ${socialProfiles.facebookWindowStartUtc} IS NULL

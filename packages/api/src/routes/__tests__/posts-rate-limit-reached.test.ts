@@ -7,6 +7,7 @@ import { JOB_NAMES, rateLimitReachedNotificationSchema } from '@sms/shared';
 import { createPostsRouter } from '../posts.js';
 
 const mockCheckPlatformBudgetWithDb = vi.fn();
+const mockCreatePost = vi.fn();
 
 vi.mock('../../services/rate-limit.service.js', () => ({
   checkPlatformBudgetWithDb: (...args: unknown[]) => mockCheckPlatformBudgetWithDb(...args),
@@ -18,7 +19,7 @@ vi.mock('../../services/post.service.js', async () => {
   );
   return {
     ...actual,
-    createPost: vi.fn(),
+    createPost: (...args: unknown[]) => mockCreatePost(...args),
     updatePost: vi.fn(),
     deletePost: vi.fn(),
     getPostById: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock('../../services/post.service.js', async () => {
 const USER_ID = '44444444-4444-4444-4444-444444444444';
 const PROFILE_ID = '22222222-2222-2222-2222-222222222222';
 const POST_ID = '11111111-1111-1111-1111-111111111111';
+const MEDIA_ID = '33333333-3333-4333-8333-333333333333';
 const FIXED_NOW = DateTime.fromISO('2026-04-28T12:00:00Z').toMillis();
 
 function createSelectChain(rows: unknown[]) {
@@ -77,6 +79,14 @@ beforeEach(() => {
     currentUsage: 500,
     budget: 500,
   });
+  mockCreatePost.mockResolvedValue({
+    id: POST_ID,
+    profileId: PROFILE_ID,
+    platform: 'facebook',
+    status: 'scheduled',
+    scheduledAt: '2099-12-31T23:59:00Z',
+    postVersion: 1,
+  });
 });
 
 afterEach(() => {
@@ -84,6 +94,40 @@ afterEach(() => {
 });
 
 describe('posts rate_limit_reached producer', () => {
+  it('POST counts a Facebook video post as one preflight API call', async () => {
+    mockCheckPlatformBudgetWithDb.mockResolvedValueOnce({
+      blockThresholdHit: false,
+      warnThresholdHit: false,
+    });
+    const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'job-1' }) };
+    const app = createTestApp({
+      db: createDb([
+        [{ id: PROFILE_ID, platform: 'facebook' }],
+        [{ mimeType: 'video/mp4' }],
+      ]),
+      notificationQueue,
+    });
+
+    const response = await request(app).post('/api/posts').send({
+      platform: 'facebook',
+      profileId: PROFILE_ID,
+      text: 'Video update',
+      status: 'scheduled',
+      scheduledAt: '2099-12-31T23:59:00Z',
+      mediaIds: [MEDIA_ID],
+    });
+
+    expect(response.status).toBe(201);
+    expect(mockCheckPlatformBudgetWithDb).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        profileId: PROFILE_ID,
+        platform: 'facebook',
+        additionalCount: 1,
+      }),
+    );
+  });
+
   it('POST enqueues one reached notification per profile and billing month', async () => {
     const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'job-1' }) };
     const app = createTestApp({

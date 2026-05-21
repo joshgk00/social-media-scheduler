@@ -178,10 +178,9 @@ export async function checkLinkedInBudgetWithDb(
  * with rolling-hour window semantics instead of UTC-day. Same single-writer
  * rule applies: counter mutation lives only in the worker's success path.
  *
- * CRITICAL: callers must pass `mediaIds.length + 1` for multi-photo posts
- * because each photo POST counts against the hourly cap independently of
- * the final /feed call (Pitfall 2). For text-only or single-link posts,
- * pass 1.
+ * CRITICAL: callers must pass `countFacebookPublishApiCalls(media)` so video
+ * posts count as a single /videos call, while each photo POST counts against
+ * the hourly cap independently of the final /feed call (Pitfall 2).
  */
 export async function checkFacebookBudgetWithDb(
   db: Db,

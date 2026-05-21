@@ -92,6 +92,37 @@ export interface PlatformBudgetCheckResult {
   percent: number;
 }
 
+export interface FacebookPublishApiCallMedia {
+  kind?: string | null;
+  mimeType?: string | null;
+}
+
+function resolveFacebookMediaKind(
+  media: FacebookPublishApiCallMedia,
+): 'image' | 'video' | 'gif' | 'other' {
+  if (media.kind === 'image' || media.kind === 'video' || media.kind === 'gif') {
+    return media.kind;
+  }
+  const mimeType = media.mimeType ?? '';
+  if (mimeType === 'image/gif') return 'gif';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('image/')) return 'image';
+  return 'other';
+}
+
+export function countFacebookPublishApiCalls(
+  media: readonly FacebookPublishApiCallMedia[] = [],
+): number {
+  if (media.some((item) => resolveFacebookMediaKind(item) === 'video')) {
+    return 1;
+  }
+
+  const imageCount = media.filter(
+    (item) => resolveFacebookMediaKind(item) === 'image',
+  ).length;
+  return imageCount + 1;
+}
+
 /**
  * LinkedIn rolling-day budget pre-flight check (LIMIT-07).
  * `additionalCallCount` is normally 1 because LinkedIn /rest/posts is a single
@@ -108,10 +139,9 @@ export function checkLinkedInBudget(
 /**
  * Facebook rolling-hour budget pre-flight check (LIMIT-06).
  *
- * CRITICAL: caller must pass `mediaIds.length + 1` for multi-photo posts,
- * because each photo upload counts against the hourly limit independently of
- * the final /feed call (Pitfall 2 in 08-RESEARCH.md). For text-only or
- * single-link posts, pass 1.
+ * CRITICAL: callers should pass `countFacebookPublishApiCalls(media)` so video
+ * posts count as the single `/videos` request, while multi-photo posts count
+ * each photo upload plus the final `/feed` call (Pitfall 2 in 08-RESEARCH.md).
  */
 export function checkFacebookBudget(
   snapshot: PlatformBudgetSnapshot,

@@ -20,12 +20,13 @@ import {
   type Queue,
 } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { eq } from 'drizzle-orm';
-import { posts, socialProfiles } from '@sms/db';
+import { and, eq, isNull } from 'drizzle-orm';
+import { posts, postMedia, socialProfiles } from '@sms/db';
 import {
   QUEUE_NAMES,
   JOB_NAMES,
   PublishFailure,
+  countFacebookPublishApiCalls,
   type Publisher,
   type SupportedPlatform,
 } from '@sms/shared';
@@ -65,6 +66,17 @@ export interface PublishWorkerDeps {
   db: WorkerDb;
   notificationQueue: Queue;
   vault: TokenVault;
+}
+
+async function loadFacebookBudgetMedia(
+  db: WorkerDb,
+  postId: string,
+): Promise<Array<{ mimeType: string }>> {
+  return db
+    .select({ mimeType: postMedia.mimeType })
+    .from(postMedia)
+    .where(and(eq(postMedia.postId, postId), isNull(postMedia.deletedAt)))
+    .orderBy(postMedia.sortOrder);
 }
 
 export interface PublishHandlerDeps {
@@ -219,14 +231,12 @@ export function createPublishHandler(deps: PublishHandlerDeps) {
             };
           }
           if (platform === 'facebook') {
-            // POST-FB-02 Pitfall 2 — multi-photo counts each upload + the feed
-            // call independently. Phase 8 worker hot path doesn't yet thread
-            // mediaIds.length here; the API pre-flight + the worker's runtime
-            // re-check are layered defenses. This single-call estimate is
-            // conservative and matches Phase 7's existing behavior.
+            // POST-FB-02 Pitfall 2 — videos count as one /videos request,
+            // while multi-photo posts count each upload plus the /feed call.
+            const media = await loadFacebookBudgetMedia(deps.db, job.data.postId);
             const state = await checkFacebookBudgetForWorker(deps.db, {
               profileId,
-              additionalCount: 1,
+              additionalCount: countFacebookPublishApiCalls(media),
             });
             return {
               wouldExceed: state.willExceed,
