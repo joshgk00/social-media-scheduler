@@ -43,6 +43,14 @@ const AUTO_DESTRUCT_CONFIG = {
 } as const;
 
 const logger = createLogger('auto-destruct-worker');
+const MAX_NOTIFICATION_ERROR_MESSAGE_LENGTH = 2000;
+const TOKEN_SHAPED_SEQUENCE_RE = /[A-Za-z0-9_-]{32,}/g;
+
+function sanitizeNotificationErrorMessage(message: string): string {
+  return message
+    .replace(TOKEN_SHAPED_SEQUENCE_RE, '[redacted]')
+    .slice(0, MAX_NOTIFICATION_ERROR_MESSAGE_LENGTH);
+}
 
 export function createAutoDestructWorker(
   deps: AutoDestructWorkerDeps,
@@ -127,7 +135,7 @@ export function createAutoDestructWorker(
       await deps.notificationQueue.add(JOB_NAMES.autoDestructFailedNotification, {
         postId: job.data.postId,
         profileId: postRow.profileId,
-        errorMessage: err.message,
+        errorMessage: sanitizeNotificationErrorMessage(err.message),
         correlationId: job.data.correlationId,
         occurredAt: new Date().toISOString(),
       });
