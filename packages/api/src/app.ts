@@ -35,6 +35,7 @@ import { createEmailLogsRouter } from './routes/email-logs.js';
 import { createSystemRouter } from './routes/system.js';
 import type { PublishQueueService } from './services/publish-queue.service.js';
 import type { BulkOpsQueueService } from './services/bulk-ops-queue.service.js';
+import { createBulkOperationFactory } from './services/bulk-operation.factory.js';
 import { createTokenVault, type TokenVault } from './services/token-vault.service.js';
 import { createBulkImportRouter } from './routes/bulk-import.js';
 interface AppDependencies {
@@ -120,7 +121,10 @@ export function createApp({
   app.use(createProfilesRouter({ db, getTokenVault }));
   app.use(createOAuthRouter({ db, redis, getTokenVault }));
   if (bulkOpsQueueService) {
-    app.use('/api/bulk-import', createBulkImportRouter({ db, bulkOpsQueueService }));
+    app.use('/api/bulk-import', createBulkImportRouter({
+      db,
+      bulkOperationFactory: createBulkOperationFactory(db, bulkOpsQueueService),
+    }));
   }
   app.use(createPostsRouter({ db, publishQueueService, bulkOpsQueueService, notificationQueue }));
   app.use(createRateLimitRouter({ db }));
