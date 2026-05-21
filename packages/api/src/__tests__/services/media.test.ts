@@ -434,7 +434,7 @@ describe('media.service', () => {
   });
 
   describe('associateMediaToPost', () => {
-    it('sets postId + sortOrder for each media id', async () => {
+    it('sets postId + sortOrder for all media ids in one update', async () => {
       const mediaIds = ['media-1', 'media-2', 'media-3'];
       const selectChain: any = {
         from: vi.fn().mockReturnThis(),
@@ -444,8 +444,13 @@ describe('media.service', () => {
 
       await associateMediaToPost(mockDb, 'user-1', 'post-id-1', mediaIds);
 
-      // Should have called update for each media id directly (no inner transaction)
-      expect(mockDb.update).toHaveBeenCalledTimes(3);
+      expect(mockDb.update).toHaveBeenCalledTimes(1);
+      const updateChain = mockDb.update.mock.results[0].value;
+      const setCall = updateChain.set.mock.calls[0][0];
+      expect(setCall.postId).toBe('post-id-1');
+      expect(setCall.sortOrder).toEqual(expect.objectContaining({
+        getSQL: expect.any(Function),
+      }));
     });
 
     it('skips rows where postId is already set (prevents double-claiming)', async () => {

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import sharp from 'sharp';
-import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
 import { PLATFORM_MEDIA_LIMITS, JOB_NAMES, AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -313,16 +313,20 @@ export async function associateMediaToPost(
     throw new MediaServiceError('One or more media files not found', 400);
   }
 
-  for (let sortOrder = 0; sortOrder < mediaIds.length; sortOrder++) {
-    const mediaId = mediaIds[sortOrder];
-    await db
-      .update(postMedia)
-      .set({ postId, sortOrder })
-      .where(and(
-        eq(postMedia.id, mediaId),
-        eq(postMedia.userId, userId),
-        isNull(postMedia.postId),
-        isNull(postMedia.deletedAt),
-      ));
-  }
+  const sortOrderCases = mediaIds.map((mediaId, sortOrder) => (
+    sql`when ${postMedia.id} = ${mediaId} then ${sortOrder}`
+  ));
+
+  await db
+    .update(postMedia)
+    .set({
+      postId,
+      sortOrder: sql<number>`case ${sql.join(sortOrderCases, sql` `)} else ${postMedia.sortOrder} end`,
+    })
+    .where(and(
+      inArray(postMedia.id, mediaIds),
+      eq(postMedia.userId, userId),
+      isNull(postMedia.postId),
+      isNull(postMedia.deletedAt),
+    ));
 }
