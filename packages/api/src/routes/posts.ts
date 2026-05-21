@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type Response } from 'express';
 import { DateTime } from 'luxon';
-import { and, eq, ilike, inArray, sql } from 'drizzle-orm';
+import { and, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
 import {
   bulkDeleteInputSchema,
@@ -14,12 +14,13 @@ import {
   planRetryFailedPost,
   JOB_NAMES,
   AppError,
+  countFacebookPublishApiCalls,
   type JobName,
   type PostStatus,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
-import { posts, postAttempts, postTags, socialProfiles, tags } from '@sms/db';
+import { posts, postAttempts, postMedia, postTags, socialProfiles, tags } from '@sms/db';
 
 import {
   createPost,
@@ -47,6 +48,43 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 function escapeLikePattern(input: string): string {
   return input.replace(/[%_\\]/g, '\\$&');
+}
+
+async function loadFacebookBudgetMediaByIds(
+  db: Db,
+  userId: string,
+  mediaIds: string[],
+): Promise<Array<{ mimeType: string }>> {
+  if (mediaIds.length === 0) return [];
+
+  return db
+    .select({ mimeType: postMedia.mimeType })
+    .from(postMedia)
+    .where(
+      and(
+        inArray(postMedia.id, mediaIds),
+        eq(postMedia.userId, userId),
+        isNull(postMedia.deletedAt),
+      ),
+    );
+}
+
+async function loadFacebookBudgetMediaForPost(
+  db: Db,
+  userId: string,
+  postId: string,
+): Promise<Array<{ mimeType: string }>> {
+  return db
+    .select({ mimeType: postMedia.mimeType })
+    .from(postMedia)
+    .where(
+      and(
+        eq(postMedia.postId, postId),
+        eq(postMedia.userId, userId),
+        isNull(postMedia.deletedAt),
+      ),
+    )
+    .orderBy(postMedia.sortOrder);
 }
 
 async function loadTagNamesByPostId(db: Db, postIds: string[]): Promise<Record<string, string>> {
@@ -296,12 +334,20 @@ export function createPostsRouter({
         return;
       }
 
-      // Pitfall 2: Facebook multi-photo posts consume mediaIds.length + 1
-      // calls (one per photo upload + one for the /feed wrapper). LinkedIn
-      // and Twitter publish via a single API call.
+      // Pitfall 2: Facebook videos publish as one /videos request, while
+      // multi-photo posts consume one upload call per photo plus the /feed
+      // wrapper. LinkedIn and Twitter publish via a single API call.
+      const facebookMedia =
+        parsed.data.platform === 'facebook'
+          ? await loadFacebookBudgetMediaByIds(
+              db,
+              userId,
+              parsed.data.mediaIds ?? [],
+            )
+          : [];
       const additionalCount =
         parsed.data.platform === 'facebook'
-          ? (parsed.data.mediaIds?.length ?? 0) + 1
+          ? countFacebookPublishApiCalls(facebookMedia)
           : 1;
 
       const budget = await checkPlatformBudgetWithDb(db, {
@@ -612,14 +658,22 @@ export function createPostsRouter({
           );
 
         if (ownedProfile) {
-          // additionalCount = 0 when re-scheduling an already-scheduled post
-          // (it's already counted), 1 for new schedule transitions. Facebook
-          // multi-photo posts add mediaIds.length on top of the +1 wrapper.
-          const baseAdditional = existingPost.status === 'scheduled' ? 0 : 1;
-          const additionalCount =
-            ownedProfile.platform === 'facebook'
-              ? baseAdditional + (parsed.data.mediaIds?.length ?? 0)
-              : baseAdditional;
+          // additionalCount = 0 when re-scheduling an already-scheduled
+          // non-Facebook post (it's already counted), 1 for new schedule
+          // transitions. Facebook needs media-aware call counting: videos are
+          // one /videos call, while photo bundles are photos + /feed.
+          let additionalCount = existingPost.status === 'scheduled' ? 0 : 1;
+          if (ownedProfile.platform === 'facebook') {
+            const facebookMedia =
+              parsed.data.mediaIds === undefined
+                ? await loadFacebookBudgetMediaForPost(db, userId, postId)
+                : await loadFacebookBudgetMediaByIds(db, userId, parsed.data.mediaIds);
+            const publishCallCount = countFacebookPublishApiCalls(facebookMedia);
+            additionalCount =
+              existingPost.status === 'scheduled'
+                ? Math.max(0, publishCallCount - 1)
+                : publishCallCount;
+          }
 
           const budget = await checkPlatformBudgetWithDb(db, {
             profileId: existingPost.profileId,

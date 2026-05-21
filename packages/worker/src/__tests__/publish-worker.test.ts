@@ -53,6 +53,31 @@ function buildDeps(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function createSelectChain(rows: unknown[]) {
+  const chain = {
+    from: vi.fn(() => chain),
+    where: vi.fn(() => chain),
+    orderBy: vi.fn(() => chain),
+    then: (resolve: (value: unknown[]) => void) => resolve(rows),
+  };
+  return chain;
+}
+
+function createBudgetDb(selectRows: unknown[][]) {
+  let selectIndex = 0;
+  return {
+    select: vi.fn(() => createSelectChain(selectRows[selectIndex++] ?? [])),
+    execute: vi.fn().mockResolvedValue([
+      {
+        limit: 200,
+        count: 198,
+        windowStart: new Date('2026-05-21T13:00:00Z'),
+        warnThresholdPercent: 80,
+      },
+    ]),
+  } as unknown as Parameters<typeof createPublishHandler>[0]['db'];
+}
+
 function createTestVault(overrides: Partial<TokenVault> = {}): TokenVault {
   const credentials: Credentials = {
     kind: 'twitter',
@@ -101,6 +126,28 @@ describe('createPublishHandler', () => {
     expect(ctxArg.isFinalAttempt).toBe(false);
     expect(ctxArg.storage).toBe(deps.storage);
     expect(result).toEqual({ platformPostId: 'tw_success_1' });
+  });
+
+  it('uses media-aware Facebook call counts in the runtime budget check', async () => {
+    deps = buildDeps({
+      db: createBudgetDb([
+        [{ platform: 'facebook' }],
+        [{ mimeType: 'image/jpeg' }, { mimeType: 'image/png' }],
+      ]),
+    });
+    const handler = createPublishHandler(deps);
+
+    await handler(buildJob());
+    const [, ctxArg] = deps.publishPostImpl.mock.calls[0];
+    const budget = await ctxArg.checkBudget('profile-fb');
+
+    // 198 existing calls + 2 photo uploads + 1 feed call reaches 201/200.
+    // A stale single-call estimate would report this as not blocked.
+    expect(budget).toMatchObject({
+      platform: 'facebook',
+      blockThresholdHit: true,
+      wouldExceed: true,
+    });
   });
 
   it('currentAttemptNum tracks attemptsMade + 1 on retries', async () => {

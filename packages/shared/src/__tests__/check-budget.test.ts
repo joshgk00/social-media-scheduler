@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   checkTwitterBudget,
   checkBulkBudget,
+  countFacebookPublishApiCalls,
   type BudgetCheckArgs,
 } from '../rate-limit/check-budget.js';
 
@@ -130,5 +131,36 @@ describe('checkBulkBudget (LIMIT-05 contract)', () => {
     expect(result.wouldExceed).toBe(false);
     expect(result.warnThresholdHit).toBe(false);
     expect(result.projectedCount).toBe(250);
+  });
+});
+
+describe('countFacebookPublishApiCalls', () => {
+  it('counts text-only and link-only Facebook posts as one /feed call', () => {
+    expect(countFacebookPublishApiCalls()).toBe(1);
+    expect(countFacebookPublishApiCalls([])).toBe(1);
+  });
+
+  it('counts each Facebook photo upload plus the final /feed call', () => {
+    expect(
+      countFacebookPublishApiCalls([
+        { mimeType: 'image/jpeg' },
+        { mimeType: 'image/png' },
+        { kind: 'image' },
+      ]),
+    ).toBe(4);
+  });
+
+  it('counts a Facebook video post as one /videos call', () => {
+    expect(countFacebookPublishApiCalls([{ mimeType: 'video/mp4' }])).toBe(1);
+    expect(countFacebookPublishApiCalls([{ kind: 'video' }])).toBe(1);
+  });
+
+  it('uses the video path when mixed media includes a video', () => {
+    expect(
+      countFacebookPublishApiCalls([
+        { mimeType: 'image/jpeg' },
+        { mimeType: 'video/mp4' },
+      ]),
+    ).toBe(1);
   });
 });
