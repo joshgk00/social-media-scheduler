@@ -39,10 +39,10 @@ import {
 } from '../rate-limit.service.js';
 
 // -----------------------------------------------------------------------------
-// Helpers: build a mocked Drizzle `db.select().from().where()` pipeline where
-// the first select resolves to `profileRows` and the second resolves to
-// `postsCountRows`. Returns a `db` object that satisfies the two chained
-// selects inside `loadTwitterUsage`.
+// Helpers: build a mocked Drizzle `db.execute()` pipeline where the first query
+// resolves to `profileRows` and the second resolves to `postsCountRows`.
+// Returns a `db` object that satisfies the two SQL reads inside
+// `loadTwitterUsage`.
 // -----------------------------------------------------------------------------
 interface MockDbOptions {
   profileRows: Array<{ monthlyBudget: number; warnThresholdPercent: number }>;
@@ -50,34 +50,22 @@ interface MockDbOptions {
 }
 
 function createMockDb(options: MockDbOptions) {
-  let selectCallCount = 0;
+  let executeCallCount = 0;
 
-  function makeSelectChain(resolved: unknown[]) {
-    const chain: Record<string, unknown> = {};
-    // Drizzle chains: .from().where() — each returns the chain, and the
-    // chain is thenable so `await` resolves with the row array.
-    (chain as { from: () => unknown }).from = vi.fn().mockReturnValue(chain);
-    (chain as { where: () => unknown }).where = vi.fn().mockReturnValue(chain);
-    (chain as { then: (resolve: (v: unknown) => void) => void }).then = (
-      resolve,
-    ) => resolve(resolved);
-    return chain;
-  }
-
-  const select = vi.fn().mockImplementation(() => {
-    selectCallCount += 1;
-    if (selectCallCount === 1) {
-      return makeSelectChain(options.profileRows);
+  const execute = vi.fn().mockImplementation(() => {
+    executeCallCount += 1;
+    if (executeCallCount === 1) {
+      return Promise.resolve(options.profileRows);
     }
-    return makeSelectChain(options.countRows);
+    return Promise.resolve(options.countRows);
   });
 
   return {
-    select,
+    execute,
     // Expose for assertions if a test wants them.
-    _selectCallCount: () => selectCallCount,
+    _executeCallCount: () => executeCallCount,
   } as unknown as Parameters<typeof loadTwitterUsage>[0] & {
-    _selectCallCount: () => number;
+    _executeCallCount: () => number;
   };
 }
 

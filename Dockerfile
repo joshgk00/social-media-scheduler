@@ -76,6 +76,8 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine AS web-production
 USER root
 RUN apk add --no-cache wget
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
+COPY nginx/realip-env.sh /docker-entrypoint.d/40-realip-env.sh
+RUN chmod +x /docker-entrypoint.d/40-realip-env.sh
 COPY --from=build /app/packages/web/dist /usr/share/nginx/html
 USER nginx
 EXPOSE 8080

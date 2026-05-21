@@ -61,6 +61,72 @@ interface OAuthRouterDependencies {
 
 type Platform = 'linkedin' | 'facebook';
 
+type OAuthErrorCode = 'invalid_return_to' | 'oauth_not_configured' | 'mismatched_account';
+
+type OAuthHttpResponse = {
+  status: number;
+  body: Record<string, unknown>;
+};
+
+type OAuthErrorToHttpContext = {
+  reissuePendingSelection?: () => Promise<string>;
+};
+
+type OAuthErrorHttpMapper = (
+  err: OAuthServiceError,
+  context: OAuthErrorToHttpContext,
+) => OAuthHttpResponse | Promise<OAuthHttpResponse>;
+
+const OAUTH_ERROR_HTTP_RESPONSES = {
+  invalid_return_to: (err) => ({
+    status: 400,
+    body: { error: err.message, code: 'invalid_return_to' },
+  }),
+  oauth_not_configured: (err) => ({
+    status: 500,
+    body: { error: err.message, code: 'oauth_not_configured' },
+  }),
+  mismatched_account: async (err, context) => {
+    if (!(err instanceof MismatchedAccountError)) {
+      throw new Error('mismatched_account requires MismatchedAccountError');
+    }
+    if (!context.reissuePendingSelection) {
+      throw new Error('mismatched_account response requires pending selection reissue');
+    }
+
+    return {
+      status: 409,
+      body: {
+        error: 'mismatched_account',
+        existingHandle: err.existingHandle,
+        incomingHandle: err.incomingHandle,
+        tempToken: await context.reissuePendingSelection(),
+      },
+    };
+  },
+} satisfies Record<OAuthErrorCode, OAuthErrorHttpMapper>;
+
+function isOAuthErrorCode(code: string | undefined): code is OAuthErrorCode {
+  return (
+    code !== undefined &&
+    Object.prototype.hasOwnProperty.call(OAUTH_ERROR_HTTP_RESPONSES, code)
+  );
+}
+
+async function oauthErrorToHttpResponse(
+  err: unknown,
+  context: OAuthErrorToHttpContext = {},
+): Promise<OAuthHttpResponse | null> {
+  if (err instanceof MismatchedAccountError) {
+    return OAUTH_ERROR_HTTP_RESPONSES.mismatched_account(err, context);
+  }
+  if (!(err instanceof OAuthServiceError) || !isOAuthErrorCode(err.code)) {
+    return null;
+  }
+
+  return OAUTH_ERROR_HTTP_RESPONSES[err.code](err, context);
+}
+
 function resolveRedirectUri(platform: Platform): string {
   const base = process.env.OAUTH_REDIRECT_BASE_URL;
   if (!base) {
@@ -139,8 +205,9 @@ export function createOAuthRouter({ db, redis, getTokenVault }: OAuthRouterDepen
 
       res.redirect(authorizeUrl);
     } catch (err: unknown) {
-      if (err instanceof OAuthServiceError) {
-        res.status(err.statusCode).json({ error: err.message, code: err.code });
+      const oauthResponse = await oauthErrorToHttpResponse(err);
+      if (oauthResponse) {
+        res.status(oauthResponse.status).json(oauthResponse.body);
         return;
       }
       throw err;
@@ -477,21 +544,14 @@ export function createOAuthRouter({ db, redis, getTokenVault }: OAuthRouterDepen
 
       res.status(201).json({ profileId });
     } catch (err: unknown) {
-      if (err instanceof MismatchedAccountError) {
-        // WR-02: pull the handles off the typed error rather than regex-parsing
-        // the message, so a future service-side message tweak can't silently
-        // break the frontend contract.
-        res.status(err.statusCode).json({
-          error: 'mismatched_account',
-          existingHandle: err.existingHandle,
-          incomingHandle: err.incomingHandle,
-          // Re-issue the temp token so the frontend can call /finalize-as-new
-          // without forcing the user back through the provider.
-          tempToken: await createPendingSelection(redis, payload),
-        });
+      const oauthResponse = await oauthErrorToHttpResponse(err, {
+        reissuePendingSelection: () => createPendingSelection(redis, payload),
+      });
+      if (oauthResponse) {
+        res.status(oauthResponse.status).json(oauthResponse.body);
         return;
       }
-      if (err instanceof ProfileServiceError || err instanceof OAuthServiceError) {
+      if (err instanceof ProfileServiceError) {
         res.status(err.statusCode).json({ error: err.message });
         return;
       }

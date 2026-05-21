@@ -14,8 +14,8 @@ describe('worker rate-limit wrapper', () => {
     warnThresholdPercent: number,
     publishedCount: number,
   ) {
-    db.__pushSelect(() => [{ monthlyBudget, warnThresholdPercent }]);
-    db.__pushSelect(() => [{ publishedCount }]);
+    db.__pushExecute(() => [{ monthlyBudget, warnThresholdPercent }]);
+    db.__pushExecute(() => [{ publishedCount }]);
   }
 
   it('loadWorkerUsage returns zero currentUsage for an empty profile', async () => {
@@ -30,7 +30,7 @@ describe('worker rate-limit wrapper', () => {
   });
 
   it('loadWorkerUsage throws when profile is missing', async () => {
-    db.__pushSelect(() => []); // no profile row
+    db.__pushExecute(() => []); // no profile row
     await expect(
       loadWorkerUsage(
         db as unknown as Parameters<typeof loadWorkerUsage>[0],
@@ -65,7 +65,7 @@ describe('worker rate-limit wrapper', () => {
       db as unknown as Parameters<typeof checkBudgetForWorker>[0],
       { profileId: 'profile_abc', additionalPostCount: 1 },
     );
-    // 399 + 1 = 400 = 80% of 500 → warn threshold hit, not exceeded
+    // 399 + 1 = 400 = 80% of 500 -> warn threshold hit, not exceeded
     expect(result.warnThresholdHit).toBe(true);
     expect(result.wouldExceed).toBe(false);
   });
