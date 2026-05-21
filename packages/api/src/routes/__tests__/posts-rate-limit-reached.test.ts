@@ -38,6 +38,7 @@ function createSelectChain(rows: unknown[]) {
   const chain = {
     from: vi.fn(() => chain),
     where: vi.fn(() => chain),
+    orderBy: vi.fn(() => chain),
     then: (resolve: (value: unknown[]) => void) => resolve(rows),
   };
   return chain;
@@ -124,6 +125,84 @@ describe('posts rate_limit_reached producer', () => {
         profileId: PROFILE_ID,
         platform: 'facebook',
         additionalCount: 1,
+      }),
+    );
+  });
+
+  it('PATCH re-scheduling a Facebook video post does not add extra preflight calls', async () => {
+    mockCheckPlatformBudgetWithDb.mockResolvedValueOnce({
+      blockThresholdHit: false,
+      warnThresholdHit: false,
+    });
+    const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'job-1' }) };
+    const app = createTestApp({
+      db: createDb([
+        [{
+          id: POST_ID,
+          profileId: PROFILE_ID,
+          status: 'scheduled',
+          postVersion: 1,
+          platform: 'facebook',
+        }],
+        [{ id: PROFILE_ID, platform: 'facebook' }],
+        [{ mimeType: 'video/mp4' }],
+      ]),
+      notificationQueue,
+    });
+
+    const response = await request(app).patch(`/api/posts/${POST_ID}`).send({
+      platform: 'facebook',
+      postVersion: 1,
+      status: 'scheduled',
+      scheduledAt: '2099-12-31T23:59:00Z',
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockCheckPlatformBudgetWithDb).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        profileId: PROFILE_ID,
+        platform: 'facebook',
+        additionalCount: 0,
+      }),
+    );
+  });
+
+  it('PATCH re-scheduling a Facebook photo post adds only the photo upload calls', async () => {
+    mockCheckPlatformBudgetWithDb.mockResolvedValueOnce({
+      blockThresholdHit: false,
+      warnThresholdHit: false,
+    });
+    const notificationQueue = { add: vi.fn().mockResolvedValue({ id: 'job-1' }) };
+    const app = createTestApp({
+      db: createDb([
+        [{
+          id: POST_ID,
+          profileId: PROFILE_ID,
+          status: 'scheduled',
+          postVersion: 1,
+          platform: 'facebook',
+        }],
+        [{ id: PROFILE_ID, platform: 'facebook' }],
+        [{ mimeType: 'image/jpeg' }, { mimeType: 'image/png' }],
+      ]),
+      notificationQueue,
+    });
+
+    const response = await request(app).patch(`/api/posts/${POST_ID}`).send({
+      platform: 'facebook',
+      postVersion: 1,
+      status: 'scheduled',
+      scheduledAt: '2099-12-31T23:59:00Z',
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockCheckPlatformBudgetWithDb).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        profileId: PROFILE_ID,
+        platform: 'facebook',
+        additionalCount: 2,
       }),
     );
   });

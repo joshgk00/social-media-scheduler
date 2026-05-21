@@ -117,6 +117,8 @@ export function countFacebookPublishApiCalls(
     return 1;
   }
 
+  // Facebook GIF uploads use the video pipeline, so they intentionally stay
+  // out of the multi-photo upload count and cost a single API call.
   const imageCount = media.filter(
     (item) => resolveFacebookMediaKind(item) === 'image',
   ).length;
