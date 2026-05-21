@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { DateTime } from 'luxon';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -13,9 +13,10 @@ import {
   queueRandomizeInputSchema,
   queueTextModifyInputSchema,
   JOB_NAMES,
+  type JobName,
 } from '@sms/shared';
 import type { Db } from '@sms/db';
-import { bulkOperations, posts, postTags, queues, tags } from '@sms/db';
+import { posts, postTags, queues, tags } from '@sms/db';
 
 import {
   createQueue,
@@ -33,16 +34,10 @@ import {
 import { requireAuth } from '../middleware/auth-guard.js';
 import { validateUuidParam } from '../middleware/validation.js';
 import { bulkOperationsLimiter, queueMutationLimiter } from '../middleware/rate-limiter.js';
-import type { BulkOpsQueueService } from '../services/bulk-ops-queue.service.js';
 import { beginCsvDownload, writeCsvRows } from '../services/bulk-export.service.js';
+import { InvalidIdempotencyKeyError, type BulkOperationFactory } from '../services/bulk-operation.factory.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function parseIdempotencyKey(rawHeader: string | undefined): string | null {
-  if (rawHeader === undefined) return randomUUID();
-  const idempotencyKey = rawHeader.trim();
-  return UUID_PATTERN.test(idempotencyKey) ? idempotencyKey : null;
-}
 
 function requestCorrelationId(req: { id?: string }): string {
   return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
@@ -50,10 +45,10 @@ function requestCorrelationId(req: { id?: string }): string {
 
 interface QueuesDependencies {
   db: Db;
-  bulkOpsQueueService?: BulkOpsQueueService;
+  bulkOperationFactory?: BulkOperationFactory;
 }
 
-export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependencies) {
+export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependencies) {
   const router = Router();
 
   async function loadTagNamesByPostId(postIds: string[]): Promise<Record<string, string>> {
@@ -79,54 +74,40 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
     );
   }
 
-  async function enqueueQueueBulkOperation(args: {
+  async function startQueueBulkOperation(args: {
     userId: string;
     queueId: string;
-    operationType: string;
+    operationType: JobName;
     params: Record<string, unknown>;
-    idempotencyKey: string;
+    idempotencyKey: string | undefined;
     correlationId: string;
   }) {
-    if (!bulkOpsQueueService) {
+    if (!bulkOperationFactory) {
       throw new Error('Bulk operations queue is not configured');
     }
-    const [existingBulkOperation] = await db
-      .select({ id: bulkOperations.id })
-      .from(bulkOperations)
-      .where(and(
-        eq(bulkOperations.userId, args.userId),
-        eq(bulkOperations.idempotencyKey, args.idempotencyKey),
-      ));
-    if (existingBulkOperation) {
-      return { bulkOperationId: existingBulkOperation.id, jobId: null, replay: true };
-    }
+    return bulkOperationFactory.startBulkOperation({
+      userId: args.userId,
+      idempotencyKey: args.idempotencyKey,
+      type: args.operationType,
+      targetKind: 'queue',
+      targetId: args.queueId,
+      params: args.params,
+      jobName: args.operationType,
+      correlationId: args.correlationId,
+    });
+  }
 
-    const [bulkOperation] = await db
-      .insert(bulkOperations)
-      .values({
-        userId: args.userId,
-        operationType: args.operationType,
-        targetKind: 'queue',
-        targetId: args.queueId,
-        idempotencyKey: args.idempotencyKey,
-        payload: args.params,
-      })
-      .returning();
-    const job = await bulkOpsQueueService.enqueueBulkOp(
-      args.operationType as typeof JOB_NAMES[keyof typeof JOB_NAMES],
-      {
-        bulkOperationId: bulkOperation.id,
-        userId: args.userId,
-        operationType: args.operationType,
-        targetKind: 'queue',
-        targetId: args.queueId,
-        idempotencyKey: args.idempotencyKey,
-        params: args.params,
-        correlationId: args.correlationId,
-      },
-      Math.floor(Date.now() / 1000),
-    );
-    return { bulkOperationId: bulkOperation.id, jobId: job.id };
+  async function sendQueueBulkOperation(args: Parameters<typeof startQueueBulkOperation>[0], res: Response) {
+    try {
+      const result = await startQueueBulkOperation(args);
+      res.status(202).json(result);
+    } catch (err) {
+      if (err instanceof InvalidIdempotencyKeyError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
   }
 
   async function loadOwnedQueue(userId: string, queueId: string) {
@@ -239,11 +220,6 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
   });
 
   router.post('/:id/randomize', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const queueId = validateUuidParam(req.params.id as string);
     const parsed = queueRandomizeInputSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -255,23 +231,17 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       res.status(404).json({ error: 'Queue not found' });
       return;
     }
-    const result = await enqueueQueueBulkOperation({
+    await sendQueueBulkOperation({
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueueRandomize,
       params: parsed.data,
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.post('/:id/purge', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const queueId = validateUuidParam(req.params.id as string);
     const parsed = queuePurgeInputSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -287,23 +257,17 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       res.status(400).json({ error: 'typedConfirmation_mismatch', expected: queue.name });
       return;
     }
-    const result = await enqueueQueueBulkOperation({
+    await sendQueueBulkOperation({
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueuePurge,
       params: parsed.data,
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.post('/:id/copy', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const queueId = validateUuidParam(req.params.id as string);
     const parsed = queueCopyInputSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -315,23 +279,17 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       res.status(404).json({ error: 'Queue not found' });
       return;
     }
-    const result = await enqueueQueueBulkOperation({
+    await sendQueueBulkOperation({
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueueCopy,
       params: parsed.data,
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.post('/:id/modify-text', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const queueId = validateUuidParam(req.params.id as string);
     const parsed = queueTextModifyInputSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -343,23 +301,17 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       res.status(404).json({ error: 'Queue not found' });
       return;
     }
-    const result = await enqueueQueueBulkOperation({
+    await sendQueueBulkOperation({
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueueTextModify,
       params: parsed.data,
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.post('/:id/dedupe', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const queueId = validateUuidParam(req.params.id as string);
     const parsed = queueDedupeInputSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -371,15 +323,14 @@ export function createQueuesRouter({ db, bulkOpsQueueService }: QueuesDependenci
       res.status(404).json({ error: 'Queue not found' });
       return;
     }
-    const result = await enqueueQueueBulkOperation({
+    await sendQueueBulkOperation({
       userId: req.session.userId!,
       queueId,
       operationType: JOB_NAMES.bulkQueueDedupe,
       params: parsed.data,
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.post('/:id/posts', requireAuth, queueMutationLimiter, async (req, res) => {

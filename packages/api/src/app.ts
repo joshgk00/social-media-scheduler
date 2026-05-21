@@ -120,13 +120,16 @@ export function createApp({
 
   app.use(createProfilesRouter({ db, getTokenVault }));
   app.use(createOAuthRouter({ db, redis, getTokenVault }));
-  if (bulkOpsQueueService) {
+  const bulkOperationFactory = bulkOpsQueueService
+    ? createBulkOperationFactory(db, bulkOpsQueueService)
+    : undefined;
+  if (bulkOperationFactory) {
     app.use('/api/bulk-import', createBulkImportRouter({
       db,
-      bulkOperationFactory: createBulkOperationFactory(db, bulkOpsQueueService),
+      bulkOperationFactory,
     }));
   }
-  app.use(createPostsRouter({ db, publishQueueService, bulkOpsQueueService, notificationQueue }));
+  app.use(createPostsRouter({ db, publishQueueService, bulkOperationFactory, notificationQueue }));
   app.use(createRateLimitRouter({ db }));
   app.use(createTagsRouter({ db }));
   app.use(createSnippetsRouter({ db }));
@@ -135,7 +138,7 @@ export function createApp({
   app.use(createNotificationPrefsRouter({ db }));
   app.use(createEmailLogsRouter({ db }));
   app.use(createSystemRouter());
-  app.use('/api/queues', createQueuesRouter({ db, bulkOpsQueueService }));
+  app.use('/api/queues', createQueuesRouter({ db, bulkOperationFactory }));
 
   if (storage && transcodeQueue) {
     app.use('/api/media', createMediaRouter({ db, storage, transcodeQueue }));

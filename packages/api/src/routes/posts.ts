@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { DateTime } from 'luxon';
 import { and, eq, ilike, inArray, sql } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
@@ -14,11 +14,12 @@ import {
   planRetryFailedPost,
   JOB_NAMES,
   AppError,
+  type JobName,
   type PostStatus,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Db } from '@sms/db';
-import { bulkOperations, posts, postAttempts, postTags, socialProfiles, tags } from '@sms/db';
+import { posts, postAttempts, postTags, socialProfiles, tags } from '@sms/db';
 
 import {
   createPost,
@@ -35,8 +36,8 @@ import {
   type FacebookRateLimitExceededBody,
 } from '../services/rate-limit.service.js';
 import type { PublishQueueService } from '../services/publish-queue.service.js';
-import type { BulkOpsQueueService } from '../services/bulk-ops-queue.service.js';
 import { beginCsvDownload, writeCsvRows } from '../services/bulk-export.service.js';
+import { InvalidIdempotencyKeyError, type BulkOperationFactory } from '../services/bulk-operation.factory.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { bulkOperationsLimiter } from '../middleware/rate-limiter.js';
 import { validateUuidParam } from '../middleware/validation.js';
@@ -77,7 +78,7 @@ interface PostsDependencies {
   // paths can keep omitting BullMQ. Handlers that require enqueue will
   // degrade gracefully when the dependency is missing (see below).
   publishQueueService?: PublishQueueService;
-  bulkOpsQueueService?: BulkOpsQueueService;
+  bulkOperationFactory?: BulkOperationFactory;
   notificationQueue?: Queue;
 }
 
@@ -131,12 +132,6 @@ function requestCorrelationId(req: { id?: string }): string {
   return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
 }
 
-function parseIdempotencyKey(rawHeader: string | undefined): string | null {
-  if (rawHeader === undefined) return randomUUID();
-  const idempotencyKey = rawHeader.trim();
-  return UUID_PATTERN.test(idempotencyKey) ? idempotencyKey : null;
-}
-
 async function enqueueRateLimitReachedNotification(
   notificationQueue: Queue,
   params: {
@@ -176,60 +171,46 @@ async function enqueueRateLimitReachedNotification(
 export function createPostsRouter({
   db,
   publishQueueService,
-  bulkOpsQueueService,
+  bulkOperationFactory,
   notificationQueue,
 }: PostsDependencies) {
   const router = Router();
 
-  async function enqueuePostBulkOperation(args: {
+  async function startPostBulkOperation(args: {
     userId: string;
-    operationType: string;
+    operationType: JobName;
     params: Record<string, unknown>;
     targetKind?: 'profile' | 'queue' | 'scheduled-list';
     targetId?: string | null;
-    idempotencyKey: string;
+    idempotencyKey: string | undefined;
     correlationId: string;
   }) {
-    if (!bulkOpsQueueService) {
+    if (!bulkOperationFactory) {
       throw new Error('Bulk operations queue is not configured');
     }
-    const [existingBulkOperation] = await db
-      .select({ id: bulkOperations.id })
-      .from(bulkOperations)
-      .where(and(
-        eq(bulkOperations.userId, args.userId),
-        eq(bulkOperations.idempotencyKey, args.idempotencyKey),
-      ));
-    if (existingBulkOperation) {
-      return { bulkOperationId: existingBulkOperation.id, jobId: null, replay: true };
-    }
+    return bulkOperationFactory.startBulkOperation({
+      userId: args.userId,
+      idempotencyKey: args.idempotencyKey,
+      type: args.operationType,
+      targetKind: args.targetKind ?? 'scheduled-list',
+      targetId: args.targetId ?? null,
+      params: args.params,
+      jobName: args.operationType,
+      correlationId: args.correlationId,
+    });
+  }
 
-    const [bulkOperation] = await db
-      .insert(bulkOperations)
-      .values({
-        userId: args.userId,
-        operationType: args.operationType,
-        targetKind: args.targetKind ?? 'scheduled-list',
-        targetId: args.targetId ?? null,
-        idempotencyKey: args.idempotencyKey,
-        payload: args.params,
-      })
-      .returning();
-    const job = await bulkOpsQueueService.enqueueBulkOp(
-      args.operationType as typeof JOB_NAMES[keyof typeof JOB_NAMES],
-      {
-        bulkOperationId: bulkOperation.id,
-        userId: args.userId,
-        operationType: args.operationType,
-        targetKind: args.targetKind ?? 'scheduled-list',
-        targetId: args.targetId ?? null,
-        idempotencyKey: args.idempotencyKey,
-        params: args.params,
-        correlationId: args.correlationId,
-      },
-      Math.floor(Date.now() / 1000),
-    );
-    return { bulkOperationId: bulkOperation.id, jobId: job.id };
+  async function sendPostBulkOperation(args: Parameters<typeof startPostBulkOperation>[0], res: Response) {
+    try {
+      const result = await startPostBulkOperation(args);
+      res.status(202).json(result);
+    } catch (err) {
+      if (err instanceof InvalidIdempotencyKeyError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
   }
 
   async function resolveSelectedPostIds(
@@ -480,57 +461,40 @@ export function createPostsRouter({
   });
 
   router.post('/api/posts/bulk-pause', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const parsed = bulkPauseInputSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
       return;
     }
-    const result = await enqueuePostBulkOperation({
+    await sendPostBulkOperation({
       userId: req.session.userId!,
       operationType: JOB_NAMES.bulkProfilePause,
       params: parsed.data,
       targetKind: 'profile',
       targetId: parsed.data.profileId,
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.post('/api/posts/bulk-resume', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const parsed = bulkPauseInputSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
       return;
     }
-    const result = await enqueuePostBulkOperation({
+    await sendPostBulkOperation({
       userId: req.session.userId!,
       operationType: JOB_NAMES.bulkProfileResume,
       params: parsed.data,
       targetKind: 'profile',
       targetId: parsed.data.profileId,
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.post('/api/posts/bulk-delete', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const parsed = bulkDeleteInputSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -543,35 +507,28 @@ export function createPostsRouter({
       res.status(400).json({ error: 'typedConfirmation_mismatch', expected });
       return;
     }
-    const result = await enqueuePostBulkOperation({
+    await sendPostBulkOperation({
       userId: req.session.userId!,
       operationType: JOB_NAMES.bulkProfileBulkDelete,
       params: { postIds, typedConfirmation: parsed.data.typedConfirmation, postCount },
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.post('/api/posts/bulk-modify-tags', requireAuth, bulkOperationsLimiter, async (req, res) => {
-    const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-    if (!idempotencyKey) {
-      res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-      return;
-    }
     const parsed = bulkModifyTagsInputSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
       return;
     }
-    const result = await enqueuePostBulkOperation({
+    await sendPostBulkOperation({
       userId: req.session.userId!,
       operationType: JOB_NAMES.bulkProfileModifyTags,
       params: parsed.data,
-      idempotencyKey,
+      idempotencyKey: req.get('Idempotency-Key'),
       correlationId: requestCorrelationId(req as { id?: string }),
-    });
-    res.status(202).json(result);
+    }, res);
   });
 
   router.get('/api/posts/conflicts', requireAuth, async (req, res) => {
