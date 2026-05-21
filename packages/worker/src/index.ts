@@ -18,8 +18,10 @@ import { Redis } from 'ioredis';
 import { Queue } from 'bullmq';
 import { createLogger } from '@sms/shared/logger';
 import { requireEnv } from '@sms/shared/env';
+import { validateEncryptionKey } from '@sms/shared/encryption';
 import { QUEUE_NAMES } from '@sms/shared';
 import { createStorageBackend } from '@sms/shared/storage';
+import { createTokenVault } from '@sms/shared/tokens';
 import { startHeartbeat, stopHeartbeat } from './heartbeat.js';
 import { createWorkerDb } from './db.js';
 import { createPublishWorker } from './publish-worker.js';
@@ -41,6 +43,8 @@ const SHUTDOWN_TIMEOUT_MS = 30_000;
 async function main() {
   const REDIS_URL = requireEnv('REDIS_URL');
   const DATABASE_URL = requireEnv('DATABASE_URL');
+  const ENCRYPTION_KEY = requireEnv('ENCRYPTION_KEY');
+  const tokenVault = createTokenVault(validateEncryptionKey(ENCRYPTION_KEY));
 
   // BullMQ requires `maxRetriesPerRequest: null` on the ioredis connection
   // used by Worker/Queue instances (RESEARCH.md Pitfall 1). The heartbeat
@@ -80,6 +84,7 @@ async function main() {
     redis,
     db,
     notificationQueue,
+    vault: tokenVault,
   });
 
   const storage = createStorageBackend();
@@ -93,6 +98,7 @@ async function main() {
     redis,
     db,
     notificationQueue,
+    vault: tokenVault,
   });
 
   const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:5173';

@@ -11,8 +11,11 @@
 
 import { Worker, type Job, type Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { eq } from 'drizzle-orm';
+import { posts } from '@sms/db';
 import { QUEUE_NAMES, JOB_NAMES } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
+import type { TokenVault } from '@sms/shared/tokens';
 import type { WorkerDb } from './db.js';
 import { autoDestructPost } from './auto-destruct-lifecycle.service.js';
 import { deleteTweet } from './twitter-delete.service.js';
@@ -28,6 +31,7 @@ export interface AutoDestructWorkerDeps {
   redis: Redis;
   db: WorkerDb;
   notificationQueue: Queue;
+  vault: TokenVault;
 }
 
 const AUTO_DESTRUCT_CONFIG = {
@@ -39,6 +43,14 @@ const AUTO_DESTRUCT_CONFIG = {
 } as const;
 
 const logger = createLogger('auto-destruct-worker');
+const MAX_NOTIFICATION_ERROR_MESSAGE_LENGTH = 2000;
+const TOKEN_SHAPED_SEQUENCE_RE = /[A-Za-z0-9_-]{32,}/g;
+
+function sanitizeNotificationErrorMessage(message: string): string {
+  return message
+    .replace(TOKEN_SHAPED_SEQUENCE_RE, '[redacted]')
+    .slice(0, MAX_NOTIFICATION_ERROR_MESSAGE_LENGTH);
+}
 
 export function createAutoDestructWorker(
   deps: AutoDestructWorkerDeps,
@@ -65,6 +77,7 @@ export function createAutoDestructWorker(
             profile,
             platformPostId,
             correlationId: job.data.correlationId,
+            vault: deps.vault,
           });
         },
       });
@@ -96,13 +109,35 @@ export function createAutoDestructWorker(
     if (!isFinalFailure) return;
 
     try {
+      let postRow: { profileId: string | null } | undefined;
+      try {
+        [postRow] = await deps.db
+          .select({ profileId: posts.profileId })
+          .from(posts)
+          .where(eq(posts.id, job.data.postId))
+          .limit(1);
+      } catch (lookupErr) {
+        logger.error(
+          { err: lookupErr, postId: job.data.postId },
+          'auto-destruct-failed listener: failed to resolve profileId',
+        );
+        return;
+      }
+
+      if (!postRow?.profileId) {
+        logger.error(
+          { postId: job.data.postId },
+          'auto-destruct-failed listener: post not found, skipping notification enqueue',
+        );
+        return;
+      }
+
       await deps.notificationQueue.add(JOB_NAMES.autoDestructFailedNotification, {
-        kind: 'auto_destruct_failed',
         postId: job.data.postId,
-        platformPostId: job.data.platformPostId,
+        profileId: postRow.profileId,
+        errorMessage: sanitizeNotificationErrorMessage(err.message),
         correlationId: job.data.correlationId,
-        reason: err.message,
-        at: new Date().toISOString(),
+        occurredAt: new Date().toISOString(),
       });
     } catch (enqueueErr) {
       logger.error(

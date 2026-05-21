@@ -1,1 +1,90 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-68-ffa0623281_63d2a82987","featureId":"feat_gh-68_603f99f2e6","title":"gh#68: R3.3 — Switch worker/token-refresh-worker to TokenVault","category":"maintainability","severity":"medium","confidence":"high","triage":"risk","evidence":[{"path":"packages/worker/src/token-refresh-worker.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/worker/src/index.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/68.\nBacklog section: Candidate 3 — TokenVault.\n\n## Context\n\nThird PR in Candidate 3. The token-refresh-worker is the only callsite that uses *both* unseal and seal directions, so it's the most cipher-heavy file. Migration is mechanical: every `decrypt`/`encrypt` call becomes a vault method.\n\n## Scope\n\n- Modify `packages/worker/src/token-refresh-worker.ts`:\n  - Inject `vault: TokenVault` via the worker factory (similar to how `notificationQueue` is injected today)\n  - Replace `decrypt(refreshCt, refreshIv, refreshTag, encryptionKey)` (line ~269) with `vault.unsealOAuth2RefreshToken(profile)`\n  - Replace `decrypt(accessCt, accessIv, accessTag, encryptionKey)` (line ~328) with `vault.unsealForProfile(profile)` and narrow to the OAuth 2.0 variant\n  - Replace `encrypt(response.access_token, encryptionKey)` (line ~289) with `vault.sealOAuth2AccessToken(response.access_token)`\n  - Replace any refresh-token re-encrypt with `vault.sealOAuth2RefreshToken(...)` \n  - Remove `process.env.ENCRYPTION_KEY` reads and `validateEncryptionKey` calls inside the worker — vault is injected\n- Update `packages/worker/src/index.ts` `main()` to construct the vault once via `createTokenVault(validateEncryptionKey(rawKey))` and pass it to the token-refresh-worker factory\n- Update token-refresh-worker tests to inject a fake vault\n\n## Out of scope\n\n- twitter-delete (R3.4)\n- Publishers (R3.5)\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` and test pass\n- `rg \"decrypt\\(|encrypt\\(\" packages/worker/src/token-refresh-worker.ts` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/token-refresh-worker.ts` returns no matches\n- Existing token-refresh test coverage maintained\n\n## References\n\n- Depends on: #66","reproduction":"Third PR in Candidate 3. The token-refresh-worker is the only callsite that uses *both* unseal and seal directions, so it's the most cipher-heavy file. Migration is mechanical: every `decrypt`/`encrypt` call becomes a vault method.","recommendation":"- Modify `packages/worker/src/token-refresh-worker.ts`:\n  - Inject `vault: TokenVault` via the worker factory (similar to how `notificationQueue` is injected today)\n  - Replace `decrypt(refreshCt, refreshIv, refreshTag, encryptionKey)` (line ~269) with `vault.unsealOAuth2RefreshToken(profile)`\n  - Replace `decrypt(accessCt, accessIv, accessTag, encryptionKey)` (line ~328) with `vault.unsealForProfile(profile)` and narrow to the OAuth 2.0 variant\n  - Replace `encrypt(response.access_token, encryptionKey)` (line ~289) with `vault.sealOAuth2AccessToken(response.access_token)`\n  - Replace any refresh-token re-encrypt with `vault.sealOAuth2RefreshToken(...)` \n  - Remove `process.env.ENCRYPTION_KEY` reads and `validateEncryptionKey` calls inside the worker — vault is injected\n- Update `packages/worker/src/index.ts` `main()` to construct the vault once via `createTokenVault(validateEncryptionKey(rawKey))` and pass it to the token-refresh-worker factory\n- Update token-refresh-worker tests to inject a fake vault","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/worker build` and test pass\n- `rg \"decrypt\\(|encrypt\\(\" packages/worker/src/token-refresh-worker.ts` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/token-refresh-worker.ts` returns no matches\n- Existing token-refresh test coverage maintained","minimumFixScope":"packages/worker/src/token-refresh-worker.ts, packages/worker/src/index.ts","status":"open","history":[],"signature":"sig_gh-68_ffa0623281","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-68-ffa0623281_63d2a82987",
+  "featureId": "feat_gh-68_603f99f2e6",
+  "title": "gh#68: R3.3 — Switch worker/token-refresh-worker to TokenVault",
+  "category": "maintainability",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/worker/src/token-refresh-worker.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/68.\nBacklog section: Candidate 3 — TokenVault.\n\n## Context\n\nThird PR in Candidate 3. The token-refresh-worker is the only callsite that uses *both* unseal and seal directions, so it's the most cipher-heavy file. Migration is mechanical: every `decrypt`/`encrypt` call becomes a vault method.\n\n## Scope\n\n- Modify `packages/worker/src/token-refresh-worker.ts`:\n  - Inject `vault: TokenVault` via the worker factory (similar to how `notificationQueue` is injected today)\n  - Replace `decrypt(refreshCt, refreshIv, refreshTag, encryptionKey)` (line ~269) with `vault.unsealOAuth2RefreshToken(profile)`\n  - Replace `decrypt(accessCt, accessIv, accessTag, encryptionKey)` (line ~328) with `vault.unsealForProfile(profile)` and narrow to the OAuth 2.0 variant\n  - Replace `encrypt(response.access_token, encryptionKey)` (line ~289) with `vault.sealOAuth2AccessToken(response.access_token)`\n  - Replace any refresh-token re-encrypt with `vault.sealOAuth2RefreshToken(...)` \n  - Remove `process.env.ENCRYPTION_KEY` reads and `validateEncryptionKey` calls inside the worker — vault is injected\n- Update `packages/worker/src/index.ts` `main()` to construct the vault once via `createTokenVault(validateEncryptionKey(rawKey))` and pass it to the token-refresh-worker factory\n- Update token-refresh-worker tests to inject a fake vault\n\n## Out of scope\n\n- twitter-delete (R3.4)\n- Publishers (R3.5)\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` and test pass\n- `rg \"decrypt\\(|encrypt\\(\" packages/worker/src/token-refresh-worker.ts` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/token-refresh-worker.ts` returns no matches\n- Existing token-refresh test coverage maintained\n\n## References\n\n- Depends on: #66",
+  "reproduction": "Third PR in Candidate 3. The token-refresh-worker is the only callsite that uses *both* unseal and seal directions, so it's the most cipher-heavy file. Migration is mechanical: every `decrypt`/`encrypt` call becomes a vault method.",
+  "recommendation": "- Modify `packages/worker/src/token-refresh-worker.ts`:\n  - Inject `vault: TokenVault` via the worker factory (similar to how `notificationQueue` is injected today)\n  - Replace `decrypt(refreshCt, refreshIv, refreshTag, encryptionKey)` (line ~269) with `vault.unsealOAuth2RefreshToken(profile)`\n  - Replace `decrypt(accessCt, accessIv, accessTag, encryptionKey)` (line ~328) with `vault.unsealForProfile(profile)` and narrow to the OAuth 2.0 variant\n  - Replace `encrypt(response.access_token, encryptionKey)` (line ~289) with `vault.sealOAuth2AccessToken(response.access_token)`\n  - Replace any refresh-token re-encrypt with `vault.sealOAuth2RefreshToken(...)` \n  - Remove `process.env.ENCRYPTION_KEY` reads and `validateEncryptionKey` calls inside the worker — vault is injected\n- Update `packages/worker/src/index.ts` `main()` to construct the vault once via `createTokenVault(validateEncryptionKey(rawKey))` and pass it to the token-refresh-worker factory\n- Update token-refresh-worker tests to inject a fake vault",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` and test pass\n- `rg \"decrypt\\(|encrypt\\(\" packages/worker/src/token-refresh-worker.ts` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/token-refresh-worker.ts` returns no matches\n- Existing token-refresh test coverage maintained",
+  "minimumFixScope": "packages/worker/src/token-refresh-worker.ts, packages/worker/src/index.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260520T235034-e1f635",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. packages/worker/src/token-refresh-worker.ts still imports decrypt/encrypt/validateEncryptionKey from @sms/shared/encryption and still directly reads process.env.ENCRYPTION_KEY at lines 268 and 327. It still calls decrypt at lines 269 and 328 and encrypt at line 289, so the acceptance checks for no decrypt/encrypt calls and no ENCRYPTION_KEY reads in this worker fail. packages/worker/src/index.ts does construct createTokenVault(validateEncryptionKey(ENCRYPTION_KEY)), but the tokenRefreshWorker construction at lines 97-101 does not pass vault; only autoDestructWorker receives vault. The token-refresh-worker tests also still mock @sms/shared/encryption rather than injecting a fake vault. A targeted Vitest run could not complete because the read-only sandbox prevented Vite from writing its .vite-temp config file, but the current code directly demonstrates the finding remains open.",
+      "commands": [
+        "pwd && rg -n \"decrypt\\(|encrypt\\(|process\\.env\\.ENCRYPTION_KEY|validateEncryptionKey|TokenVault|createTokenVault|vault\\.|createTokenRefreshWorker|token-refresh\" packages/worker/src/token-refresh-worker.ts packages/worker/src/index.ts",
+        "rg --files | rg 'token-refresh-worker|token.*vault|worker.*test|package.json|pnpm-lock.yaml'",
+        "sed -n '1,430p' packages/worker/src/token-refresh-worker.ts",
+        "sed -n '1,150p' packages/worker/src/index.ts",
+        "sed -n '1,260p' packages/worker/src/__tests__/token-refresh-worker.test.ts",
+        "sed -n '1,260p' packages/shared/src/tokens/vault.ts",
+        "cat packages/worker/package.json",
+        "rg -n \"interface TokenVault|type TokenVault|sealOAuth2AccessToken|sealOAuth2RefreshToken|unsealOAuth2RefreshToken|unsealForProfile|sealOAuth2\" packages/shared/src packages/worker/src packages/api/src",
+        "rg -n \"createTokenRefreshWorker\\(\" packages/worker/src packages/api/src packages/shared/src",
+        "pnpm --filter @sms/worker test -- --run src/__tests__/token-refresh-worker.test.ts",
+        "rg -n \"decrypt\\(|encrypt\\(\" packages/worker/src/token-refresh-worker.ts",
+        "rg -n \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/token-refresh-worker.ts",
+        "rg -n \"validateEncryptionKey|@sms/shared/encryption|TokenVault|vault\" packages/worker/src/token-refresh-worker.ts packages/worker/src/__tests__/token-refresh-worker.test.ts packages/worker/src/index.ts"
+      ],
+      "createdAt": "2026-05-20T23:51:23.040Z"
+    },
+    {
+      "runId": "20260520T235806-1687e1",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist, but the current implementation has been migrated. packages/worker/src/token-refresh-worker.ts now imports TokenVault types, requires vault in TokenRefreshWorkerDeps, passes deps.vault into both handlers, uses vault.unsealOAuth2RefreshToken for LinkedIn refresh tokens, vault.sealOAuth2AccessToken for refreshed access tokens, and vault.unsealForProfile with an OAuth2 kind check for Facebook. The worker no longer imports @sms/shared/encryption, calls decrypt/encrypt, or reads process.env.ENCRYPTION_KEY. packages/worker/src/index.ts constructs tokenVault with createTokenVault(validateEncryptionKey(ENCRYPTION_KEY)) and passes vault: tokenVault into createTokenRefreshWorker. The token-refresh-worker tests define createTestVault and inject fake vaults, with assertions covering unsealOAuth2RefreshToken, sealOAuth2AccessToken, and unsealForProfile. Acceptance grep checks for decrypt/encrypt and ENCRYPTION_KEY in token-refresh-worker.ts returned no matches. pnpm --filter @sms/worker typecheck passed. The exact test and build commands could not complete in this read-only sandbox because Vitest/Vite and tsc attempted to write .vite-temp/dist files and hit EPERM, so those failures are environmental rather than evidence that the finding remains open.",
+      "commands": [
+        "pwd && rg -n \"decrypt\\(|encrypt\\(|process\\.env\\.ENCRYPTION_KEY|validateEncryptionKey|TokenVault|createTokenVault|vault\\.|createTokenRefreshWorker|token-refresh\" packages/worker/src/token-refresh-worker.ts packages/worker/src/index.ts packages/worker/src/__tests__/token-refresh-worker.test.ts packages/shared/src/tokens/vault.ts",
+        "rg --files | rg 'token-refresh-worker|tokens/vault|worker/package.json|package.json$'",
+        "git status --short",
+        "sed -n '1,380p' packages/worker/src/token-refresh-worker.ts",
+        "sed -n '1,130p' packages/worker/src/index.ts",
+        "sed -n '1,470p' packages/worker/src/__tests__/token-refresh-worker.test.ts",
+        "rg -n \"decrypt\\(|encrypt\\(|process\\.env\\.ENCRYPTION_KEY|validateEncryptionKey|@sms/shared/encryption\" packages/worker/src/token-refresh-worker.ts packages/worker/src/__tests__/token-refresh-worker.test.ts packages/worker/src/index.ts",
+        "rg -n \"createTokenRefreshWorker\\(\" packages/worker/src packages/api/src packages/shared/src",
+        "rg -n \"decrypt\\(|encrypt\\(\" packages/worker/src/token-refresh-worker.ts",
+        "rg -n \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/token-refresh-worker.ts",
+        "rg -n \"@sms/shared/encryption|validateEncryptionKey|process\\.env\\.ENCRYPTION_KEY|decrypt\\(|encrypt\\(\" packages/worker/src/token-refresh-worker.ts packages/worker/src/__tests__/token-refresh-worker.test.ts",
+        "pnpm --filter @sms/worker test -- --run src/__tests__/token-refresh-worker.test.ts",
+        "pnpm --filter @sms/worker build",
+        "cat packages/worker/package.json",
+        "pnpm --filter @sms/worker typecheck"
+      ],
+      "createdAt": "2026-05-20T23:59:06.912Z"
+    }
+  ],
+  "signature": "sig_gh-68_ffa0623281",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-68-ffa0623281-63d2a82_e708248c4d"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-20T23:59:06.911Z"
+}

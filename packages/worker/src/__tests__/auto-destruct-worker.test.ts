@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UnrecoverableError, type Queue, type Job } from 'bullmq';
+import type { TokenVault, TwitterCredentials } from '@sms/shared/tokens';
 import type { WorkerDb } from '../db.js';
 
 vi.mock('@sms/shared/logger', () => ({
@@ -15,10 +16,27 @@ vi.mock('@sms/shared/logger', () => ({
   }),
 }));
 
-vi.mock('@sms/shared/encryption', () => ({
-  decrypt: vi.fn().mockReturnValue('decrypted-value'),
-  validateEncryptionKey: vi.fn().mockReturnValue(Buffer.alloc(32)),
-}));
+const capturedListeners: Record<string, Array<(...args: unknown[]) => Promise<unknown> | unknown>> = {};
+
+vi.mock('bullmq', () => {
+  class UnrecoverableError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'UnrecoverableError';
+    }
+  }
+
+  return {
+    UnrecoverableError,
+    Worker: class MockWorker {
+      on(evt: string, cb: (...args: unknown[]) => Promise<unknown> | unknown) {
+        capturedListeners[evt] = capturedListeners[evt] ?? [];
+        capturedListeners[evt]!.push(cb);
+        return this;
+      }
+    },
+  };
+});
 
 const deleteTweetMock = vi.fn().mockResolvedValue({ data: { deleted: true } });
 
@@ -68,29 +86,60 @@ function createMockProfile(): Record<string, unknown> {
   };
 }
 
+function createFakeVault(
+  credentials: TwitterCredentials = {
+    kind: 'twitter',
+    consumerKey: 'consumer-key',
+    consumerSecret: 'consumer-secret',
+    accessToken: 'access-token',
+    accessTokenSecret: 'access-token-secret',
+  },
+): { vault: TokenVault; unsealForProfile: ReturnType<typeof vi.fn> } {
+  const unsealForProfile = vi.fn().mockReturnValue(credentials);
+
+  return {
+    vault: {
+      sealTwitter: vi.fn(),
+      unsealTwitter: vi.fn(),
+      sealOAuth2: vi.fn(),
+      unsealOAuth2: vi.fn(),
+      unsealForProfile,
+      toSafeProfile: vi.fn((profile) => profile),
+    } as unknown as TokenVault,
+    unsealForProfile,
+  };
+}
+
 describe('Auto-Destruct System', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ENCRYPTION_KEY = 'a'.repeat(64);
+    for (const key of Object.keys(capturedListeners)) {
+      delete capturedListeners[key];
+    }
   });
 
   describe('deleteTweet', () => {
-    it('calls Twitter v2.deleteTweet with platformPostId', async () => {
+    it('unseals credentials through TokenVault and calls Twitter v2.deleteTweet with platformPostId', async () => {
       const { deleteTweet } = await import('../twitter-delete.service.js');
       const profile = createMockProfile();
+      const { vault, unsealForProfile } = createFakeVault();
 
       const result = await deleteTweet({
         profile: profile as never,
         platformPostId: 'tweet-123',
         correlationId: 'corr-1',
+        vault,
       });
 
       expect(result.deleted).toBe(true);
+      expect(unsealForProfile).toHaveBeenCalledWith(profile);
+      expect(deleteTweetMock).toHaveBeenCalledWith('tweet-123');
     });
 
     it('returns deleted:true on 404 response (D-13: post already gone)', async () => {
       const { deleteTweet } = await import('../twitter-delete.service.js');
       const profile = createMockProfile();
+      const { vault } = createFakeVault();
 
       // Make deleteTweet throw a 404 ApiResponseError
       deleteTweetMock.mockRejectedValueOnce(
@@ -101,6 +150,7 @@ describe('Auto-Destruct System', () => {
         profile: profile as never,
         platformPostId: 'tweet-gone',
         correlationId: 'corr-2',
+        vault,
       });
 
       expect(result.deleted).toBe(true);
@@ -312,6 +362,108 @@ describe('Auto-Destruct System', () => {
       // This is a smoke test - just verify it creates without throwing
       // In a real test we'd need a Redis connection, so we just verify the export exists
       expect(typeof createAutoDestructWorker).toBe('function');
+    });
+
+    it('enqueues a schema-valid auto-destruct failed notification after final failure', async () => {
+      const { createAutoDestructWorker } = await import('../auto-destruct-worker.js');
+      const { JOB_NAMES, autoDestructFailedNotificationSchema } = await import('@sms/shared');
+
+      const postId = '00000000-0000-4000-8000-000000000101';
+      const profileId = '00000000-0000-4000-8000-000000000102';
+      const correlationId = 'corr-auto-destruct-failed';
+      const add = vi.fn().mockResolvedValue(undefined);
+
+      const limit = vi.fn().mockResolvedValue([{ profileId }]);
+      const where = vi.fn().mockReturnValue({ limit });
+      const from = vi.fn().mockReturnValue({ where });
+      const db = {
+        select: vi.fn().mockReturnValue({ from }),
+      } as unknown as WorkerDb;
+
+      createAutoDestructWorker({
+        redis: {} as never,
+        db,
+        notificationQueue: { add } as unknown as Queue,
+        vault: createFakeVault().vault,
+      });
+
+      const failedListener = capturedListeners.failed?.[0];
+      expect(failedListener).toBeTypeOf('function');
+
+      await failedListener!(
+        {
+          data: {
+            postId,
+            platformPostId: 'tweet-123',
+            correlationId,
+          },
+          opts: { attempts: 4 },
+          attemptsMade: 4,
+        } as unknown as Job,
+        new Error('Twitter delete failed'),
+      );
+
+      expect(add).toHaveBeenCalledOnce();
+      expect(add).toHaveBeenCalledWith(JOB_NAMES.autoDestructFailedNotification, {
+        postId,
+        profileId,
+        errorMessage: 'Twitter delete failed',
+        correlationId,
+        occurredAt: expect.any(String),
+      });
+
+      const payload = add.mock.calls[0]![1];
+      expect(autoDestructFailedNotificationSchema.safeParse(payload).success).toBe(true);
+      expect(payload).not.toHaveProperty('kind');
+      expect(payload).not.toHaveProperty('platformPostId');
+      expect(payload).not.toHaveProperty('reason');
+      expect(payload).not.toHaveProperty('at');
+    });
+
+    it('redacts token-shaped values and caps auto-destruct failed notification errors', async () => {
+      const { createAutoDestructWorker } = await import('../auto-destruct-worker.js');
+      const { autoDestructFailedNotificationSchema } = await import('@sms/shared');
+
+      const postId = '00000000-0000-4000-8000-000000000201';
+      const profileId = '00000000-0000-4000-8000-000000000202';
+      const add = vi.fn().mockResolvedValue(undefined);
+      const limit = vi.fn().mockResolvedValue([{ profileId }]);
+      const where = vi.fn().mockReturnValue({ limit });
+      const from = vi.fn().mockReturnValue({ where });
+      const db = {
+        select: vi.fn().mockReturnValue({ from }),
+      } as unknown as WorkerDb;
+
+      createAutoDestructWorker({
+        redis: {} as never,
+        db,
+        notificationQueue: { add } as unknown as Queue,
+        vault: createFakeVault().vault,
+      });
+
+      const failedListener = capturedListeners.failed?.[0];
+      expect(failedListener).toBeTypeOf('function');
+
+      const secret = 'tok_' + 'a'.repeat(80);
+      const longNonTokenMessage = Array.from({ length: 600 }, () => 'failure').join(' ');
+      await failedListener!(
+        {
+          data: {
+            postId,
+            platformPostId: 'tweet-123',
+            correlationId: 'corr-auto-destruct-redacted',
+          },
+          opts: { attempts: 4 },
+          attemptsMade: 4,
+        } as unknown as Job,
+        new Error(`Delete failed ${secret} ${longNonTokenMessage}`),
+      );
+
+      const payload = add.mock.calls[0]![1];
+      expect(payload.errorMessage).toContain('[redacted]');
+      expect(payload.errorMessage).not.toContain(secret);
+      expect(payload.errorMessage).toHaveLength(2000);
+      expect(autoDestructFailedNotificationSchema.safeParse(payload).success).toBe(true);
     });
   });
 });
