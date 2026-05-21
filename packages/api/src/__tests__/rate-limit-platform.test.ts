@@ -14,11 +14,9 @@ import {
 const PROFILE_ID = '00000000-0000-4000-8000-00000000aaaa';
 
 // LinkedIn / Facebook share a profile shape but track different windows.
-// The mock simulates Drizzle's `.select({ alias: column }).from(...).where(...)`
-// chain by exposing rows keyed under the canonical service aliases
-// (`limit`, `count`, `windowStart`, `warnThresholdPercent`). The rate-limit
-// service uses these aliases when reading the snapshot AND when reading the
-// post-update RETURNING row.
+// The shared rate-limit loaders use `db.execute(sql`...`)` and expose rows
+// keyed under the canonical service aliases (`limit`, `count`, `windowStart`,
+// `warnThresholdPercent`).
 function buildProfileMockDb(profile: {
   platform: 'linkedin' | 'facebook';
   monthlyBudget?: number;
@@ -37,43 +35,12 @@ function buildProfileMockDb(profile: {
     platform: profile.platform,
   };
 
-  const updates: Array<Record<string, unknown>> = [];
-  const selectChain = (rows: unknown[]) => {
-    const chain: any = {};
-    chain.from = vi.fn().mockReturnValue(chain);
-    chain.where = vi.fn().mockReturnValue(chain);
-    chain.limit = vi.fn().mockReturnValue(chain);
-    chain.then = (resolve: (val: unknown) => void) => resolve(rows);
-    return chain;
-  };
-
-  const updateChain = () => {
-    const chain: any = {};
-    let setPayload: Record<string, unknown> = {};
-    chain.set = vi.fn().mockImplementation((patch: Record<string, unknown>) => {
-      setPayload = patch;
-      return chain;
-    });
-    chain.where = vi.fn().mockImplementation(() => {
-      const result: any = Promise.resolve(undefined);
-      result.returning = vi.fn().mockImplementation(() => {
-        updates.push(setPayload);
-        // Echo back the aliased row — the production service reads the
-        // post-update count via the same alias keys it used in `.select()`.
-        return Promise.resolve([aliasedRow]);
-      });
-      return result;
-    });
-    return chain;
-  };
-
   const db: any = {
-    select: vi.fn().mockReturnValue(selectChain([aliasedRow])),
-    update: vi.fn().mockReturnValue(updateChain()),
+    execute: vi.fn().mockResolvedValue([aliasedRow]),
+    update: vi.fn(),
     transaction: vi
       .fn()
       .mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
-    __updates: updates,
   };
   return db;
 }

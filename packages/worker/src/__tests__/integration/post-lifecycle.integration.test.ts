@@ -262,10 +262,11 @@ describe('post-lifecycle integration', () => {
       return { platformPostId: tweetId };
     });
 
-    // For transient failures, the lifecycle service sets status back to 'scheduled'
-    // and then rethrows the error so BullMQ uses its retry logic. We run 3 separate
-    // jobs (simulating BullMQ retry) since the lifecycle expects each attempt as
-    // a fresh job invocation with incrementing attemptsMade.
+    // For transient failures, the lifecycle service leaves status as
+    // 'publishing' and rethrows so BullMQ retries the same in-flight job. We run
+    // 3 separate handler calls (simulating BullMQ retry) since the lifecycle
+    // expects each attempt as a fresh job invocation with incrementing
+    // attemptsMade.
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
@@ -284,16 +285,14 @@ describe('post-lifecycle integration', () => {
     // Attempt 1: should throw (transient)
     await expect(handler(makeJob(0) as any)).rejects.toThrow();
 
-    // Reset post to scheduled (transient failure handler does this, but in our
-    // manual test we need to ensure the status is right for the next attempt)
     const [postAfterAttempt1] = await env.db.select().from(posts).where(eq(posts.id, postId));
-    expect(postAfterAttempt1.status).toBe('scheduled');
+    expect(postAfterAttempt1.status).toBe('publishing');
 
     // Attempt 2: should throw (transient)
     await expect(handler(makeJob(1) as any)).rejects.toThrow();
 
     const [postAfterAttempt2] = await env.db.select().from(posts).where(eq(posts.id, postId));
-    expect(postAfterAttempt2.status).toBe('scheduled');
+    expect(postAfterAttempt2.status).toBe('publishing');
 
     // Attempt 3: should succeed
     const result = await handler(makeJob(2) as any);
