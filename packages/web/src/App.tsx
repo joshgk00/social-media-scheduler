@@ -1,29 +1,15 @@
-import { BrowserRouter, Routes, Route } from 'react-router';
-import { SetupGuard } from './components/SetupGuard';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { SidebarLayout } from './components/layout/SidebarLayout';
-import { PageSkeleton } from './components/PageSkeleton';
-import { lazy, Suspense } from 'react';
+import { BrowserRouter, Navigate, Routes, Route } from "react-router";
+import { SetupGuard } from "./components/SetupGuard";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { SidebarLayout } from "./components/layout/SidebarLayout";
+import { PageSkeleton } from "./components/PageSkeleton";
+import { lazy, Suspense } from "react";
+import { RedesignPlaceholderPage } from "./pages/redesign/RedesignPlaceholderPage";
 
-const LoginPage = lazy(() => import('./pages/login/LoginPage'));
-const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
-const RecoverPage = lazy(() => import('./pages/recover/RecoverPage'));
-const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
-const EmailLogsPage = lazy(() => import('./pages/settings/EmailLogsPage'));
-const SnippetsPage = lazy(() => import('./pages/settings/SnippetsPage'));
-const ProfilesPage = lazy(() => import('./pages/profiles/ProfilesPage'));
-const PostsPage = lazy(() => import('./pages/posts/PostsPage'));
-const NotificationsPage = lazy(() => import('./pages/notifications/NotificationsPage'));
-const NewPostPage = lazy(() => import('./pages/posts/NewPostPage'));
-const BulkImportPage = lazy(() => import('./pages/posts/BulkImportPage'));
-const EditPostPage = lazy(() => import('./pages/posts/EditPostPage'));
-const QueuesPage = lazy(() => import('./pages/queues/QueuesPage'));
-const QueueDetailPage = lazy(() => import('./pages/queues/QueueDetailPage'));
-const QueuePostsPage = lazy(() => import('./pages/queues/QueuePostsPage'));
-const CalendarPage = lazy(() => import('./pages/calendar/CalendarPage'));
-const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage'));
-const AdminQueuesRedirect = lazy(() => import('./pages/admin/AdminQueuesRedirect'));
+const LoginPage = lazy(() => import("./pages/login/LoginPage"));
+const SetupPage = lazy(() => import("./pages/setup/SetupPage"));
+const RecoverPage = lazy(() => import("./pages/recover/RecoverPage"));
 
 export function App() {
   return (
@@ -37,24 +23,82 @@ export function App() {
             <Route path="/recover" element={<RecoverPage />} />
 
             {/* Protected routes -- with sidebar layout */}
-            <Route element={<ProtectedRoute><ErrorBoundary><SidebarLayout /></ErrorBoundary></ProtectedRoute>}>
-              <Route index element={<DashboardPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/posts" element={<PostsPage />} />
-              <Route path="/posts/new" element={<NewPostPage />} />
-              <Route path="/posts/import" element={<BulkImportPage />} />
-              <Route path="/posts/:id/edit" element={<EditPostPage />} />
-              <Route path="/queues" element={<QueuesPage />} />
-              <Route path="/queues/new" element={<QueueDetailPage />} />
-              <Route path="/queues/:id/edit" element={<QueueDetailPage />} />
-              <Route path="/queues/:id/posts" element={<QueuePostsPage />} />
-              <Route path="/calendar" element={<CalendarPage />} />
-              <Route path="/profiles" element={<ProfilesPage />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/admin/queues" element={<AdminQueuesRedirect />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/settings/snippets" element={<SnippetsPage />} />
-              <Route path="/settings/email-logs" element={<EmailLogsPage />} />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <SidebarLayout />
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route
+                path="/dashboard"
+                element={<RedesignPlaceholderPage title="Dashboard" />}
+              />
+              <Route
+                path="/posts"
+                element={<RedesignPlaceholderPage title="Posts" />}
+              />
+              <Route
+                path="/posts/new"
+                element={<RedesignPlaceholderPage title="New post" />}
+              />
+              <Route
+                path="/posts/import"
+                element={<RedesignPlaceholderPage title="Import CSV" />}
+              />
+              <Route
+                path="/posts/:id/edit"
+                element={<RedesignPlaceholderPage title="Edit post" />}
+              />
+              <Route
+                path="/queues"
+                element={<RedesignPlaceholderPage title="Queues" />}
+              />
+              <Route
+                path="/queues/new"
+                element={<RedesignPlaceholderPage title="Create queue" />}
+              />
+              <Route
+                path="/queues/:id"
+                element={<RedesignPlaceholderPage title="Queue detail" />}
+              />
+              <Route
+                path="/queues/:id/edit"
+                element={<RedesignPlaceholderPage title="Edit queue" />}
+              />
+              <Route
+                path="/queues/:id/posts"
+                element={<RedesignPlaceholderPage title="Queue posts" />}
+              />
+              <Route
+                path="/calendar"
+                element={<RedesignPlaceholderPage title="Calendar" />}
+              />
+              <Route
+                path="/profiles"
+                element={<RedesignPlaceholderPage title="Profiles" />}
+              />
+              <Route
+                path="/notifications"
+                element={<RedesignPlaceholderPage title="Notifications" />}
+              />
+              <Route
+                path="/settings/advanced/bull-board"
+                element={
+                  <RedesignPlaceholderPage title="Worker queue inspector" />
+                }
+              />
+              <Route
+                path="/settings"
+                element={<Navigate to="/settings/profile" replace />}
+              />
+              <Route
+                path="/settings/:tab"
+                element={<RedesignPlaceholderPage title="Settings" />}
+              />
             </Route>
           </Routes>
         </Suspense>
