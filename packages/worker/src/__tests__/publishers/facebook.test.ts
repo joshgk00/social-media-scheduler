@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PublishFailure, type PublishablePost } from '@sms/shared';
+import type { OAuth2Credentials, SafeProfile } from '@sms/shared/tokens';
 import { createFacebookPublisher, createFakeFacebookPublisher } from '../../publishers/facebook.js';
 
 vi.mock('@sms/shared/logger', () => ({
@@ -15,18 +16,15 @@ vi.mock('@sms/shared/logger', () => ({
   }),
 }));
 
-vi.mock('@sms/shared/encryption', () => ({
-  decrypt: vi.fn().mockReturnValue('test-page-access-token'),
-  validateEncryptionKey: vi.fn().mockReturnValue(Buffer.alloc(32)),
-}));
-
-const baseProfile = {
-  id: '00000000-0000-4000-8000-000000000020',
+const baseProfile: SafeProfile = {
   platform: 'facebook',
   platformAccountId: '123456789',
-  oauth2AccessTokenCiphertext: 'enc-cipher',
-  oauth2AccessTokenIv: 'iv-bytes-12345678',
-  oauth2AccessTokenAuthTag: 'auth-tag-bytes-1',
+  linkedinAccountType: 'person',
+};
+
+const oauth2Credentials: OAuth2Credentials = {
+  kind: 'oauth2',
+  accessToken: 'test-page-access-token',
 };
 
 const basePost: PublishablePost = {
@@ -54,13 +52,11 @@ describe('createFacebookPublisher', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    process.env.ENCRYPTION_KEY = 'a'.repeat(64);
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    delete process.env.ENCRYPTION_KEY;
   });
 
   it('publishes a multi-photo post through unpublished photos and feed', async () => {
@@ -71,7 +67,8 @@ describe('createFacebookPublisher', () => {
 
     const publisher = createFacebookPublisher();
     const result = await publisher.publish(
-      baseProfile as never,
+      baseProfile,
+      oauth2Credentials,
       {
         ...basePost,
         media: [
@@ -109,7 +106,8 @@ describe('createFacebookPublisher', () => {
 
     const publisher = createFacebookPublisher();
     const result = await publisher.publish(
-      baseProfile as never,
+      baseProfile,
+      oauth2Credentials,
       {
         ...basePost,
         media: [
@@ -134,7 +132,7 @@ describe('createFacebookPublisher', () => {
     const publisher = createFacebookPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-fb-3' }),
+      publisher.publish(baseProfile, oauth2Credentials, basePost, { correlationId: 'corr-fb-3' }),
     );
 
     expect(failure.kind).toBe('permanent');
@@ -151,7 +149,7 @@ describe('createFacebookPublisher', () => {
     const publisher = createFacebookPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-fb-4' }),
+      publisher.publish(baseProfile, oauth2Credentials, basePost, { correlationId: 'corr-fb-4' }),
     );
 
     expect(failure.kind).toBe('transient');
@@ -167,7 +165,7 @@ describe('createFacebookPublisher', () => {
     const publisher = createFacebookPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-fb-5' }),
+      publisher.publish(baseProfile, oauth2Credentials, basePost, { correlationId: 'corr-fb-5' }),
     );
 
     expect(failure.kind).toBe('permanent');
@@ -183,7 +181,8 @@ describe('createFacebookPublisher', () => {
     const publisher = createFacebookPublisher();
     const failure = await capturePublishFailure(
       publisher.publish(
-        baseProfile as never,
+        baseProfile,
+        oauth2Credentials,
         {
           ...basePost,
           media: [
@@ -216,7 +215,7 @@ describe('createFacebookPublisher', () => {
     });
 
     await expect(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-fb-7' }),
+      publisher.publish(baseProfile, oauth2Credentials, basePost, { correlationId: 'corr-fb-7' }),
     ).resolves.toEqual({ platformPostId: 'fb_fake_result' });
   });
 });

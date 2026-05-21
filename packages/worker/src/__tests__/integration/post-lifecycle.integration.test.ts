@@ -14,6 +14,7 @@ import { eq, sql, and, gte, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { users, socialProfiles, posts, postAttempts } from '@sms/db';
 import { PublishFailure, QUEUE_NAMES, JOB_NAMES, buildPublishJobId } from '@sms/shared';
+import type { Credentials, SafeProfile, TokenVault } from '@sms/shared/tokens';
 import { startTestEnv, type TestEnv } from '../helpers/testcontainer.js';
 import {
   createPublishHandler,
@@ -81,6 +82,33 @@ async function seedPost(overrides: Partial<typeof posts.$inferInsert> = {}) {
   return postId;
 }
 
+function createIntegrationVault(): TokenVault {
+  const credentials: Credentials = {
+    kind: 'twitter',
+    consumerKey: 'ck',
+    consumerSecret: 'cs',
+    accessToken: 'at',
+    accessTokenSecret: 'ats',
+  };
+  const safeProfile: SafeProfile = {
+    platform: 'twitter',
+    platformAccountId: null,
+    linkedinAccountType: 'person',
+  };
+
+  return {
+    sealTwitter: vi.fn() as TokenVault['sealTwitter'],
+    unsealTwitter: vi.fn(() => credentials) as TokenVault['unsealTwitter'],
+    sealOAuth2: vi.fn() as TokenVault['sealOAuth2'],
+    sealOAuth2AccessToken: vi.fn() as TokenVault['sealOAuth2AccessToken'],
+    sealOAuth2RefreshToken: vi.fn() as TokenVault['sealOAuth2RefreshToken'],
+    unsealOAuth2: vi.fn() as TokenVault['unsealOAuth2'],
+    unsealOAuth2RefreshToken: vi.fn() as TokenVault['unsealOAuth2RefreshToken'],
+    unsealForProfile: vi.fn(() => credentials) as TokenVault['unsealForProfile'],
+    toSafeProfile: vi.fn(() => safeProfile) as TokenVault['toSafeProfile'],
+  };
+}
+
 function buildWorkerWithMockedTwitter(
   twitterMock: ReturnType<typeof vi.fn>,
   budgetMock?: PublishHandlerDeps['checkBudgetImpl'],
@@ -88,6 +116,7 @@ function buildWorkerWithMockedTwitter(
   const handler = createPublishHandler({
     db: env.db,
     notificationQueue,
+    vault: createIntegrationVault(),
     publishers: { twitter: { publish: twitterMock } },
     checkBudgetImpl: budgetMock,
   });
@@ -240,6 +269,7 @@ describe('post-lifecycle integration', () => {
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
+      vault: createIntegrationVault(),
       publishers: { twitter: { publish: twitterMock } },
     });
 
@@ -303,6 +333,7 @@ describe('post-lifecycle integration', () => {
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
+      vault: createIntegrationVault(),
       publishers: { twitter: { publish: twitterMock } },
     });
 
@@ -377,6 +408,7 @@ describe('post-lifecycle integration', () => {
     const handler = createPublishHandler({
       db: env.db,
       notificationQueue,
+      vault: createIntegrationVault(),
       publishers: { twitter: { publish: twitterMock } },
     });
 

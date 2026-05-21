@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PublishFailure, type PublishablePost } from '@sms/shared';
+import type { Credentials, SafeProfile, TwitterCredentials } from '@sms/shared/tokens';
 import { createFakeTwitterPublisher, createTwitterPublisher } from '../../publishers/twitter.js';
 import {
   buildApiRequestError,
@@ -28,11 +29,6 @@ vi.mock('@sms/shared/logger', () => ({
   }),
 }));
 
-vi.mock('@sms/shared/encryption', () => ({
-  decrypt: vi.fn().mockReturnValue('decrypted-twitter-secret'),
-  validateEncryptionKey: vi.fn().mockReturnValue(Buffer.alloc(32)),
-}));
-
 vi.mock('twitter-api-v2', async (importOriginal) => {
   const actual = await importOriginal<typeof import('twitter-api-v2')>();
   return {
@@ -41,26 +37,18 @@ vi.mock('twitter-api-v2', async (importOriginal) => {
   };
 });
 
-const baseProfile = {
-  id: '00000000-0000-4000-8000-000000000010',
-  userId: '00000000-0000-4000-8000-000000000011',
+const baseProfile: SafeProfile = {
   platform: 'twitter',
-  platformUserId: 'tw_user_1',
-  displayName: 'Test Twitter',
-  handle: 'testtwitter',
-  avatarUrl: null,
-  consumerKeyCiphertext: 'enc-ck',
-  consumerKeyIv: 'iv-ck',
-  consumerKeyAuthTag: 'tag-ck',
-  consumerSecretCiphertext: 'enc-cs',
-  consumerSecretIv: 'iv-cs',
-  consumerSecretAuthTag: 'tag-cs',
-  accessTokenCiphertext: 'enc-at',
-  accessTokenIv: 'iv-at',
-  accessTokenAuthTag: 'tag-at',
-  accessTokenSecretCiphertext: 'enc-ats',
-  accessTokenSecretIv: 'iv-ats',
-  accessTokenSecretAuthTag: 'tag-ats',
+  platformAccountId: null,
+  linkedinAccountType: 'person',
+};
+
+const twitterCredentials: TwitterCredentials = {
+  kind: 'twitter',
+  consumerKey: 'test-consumer-key',
+  consumerSecret: 'test-consumer-secret',
+  accessToken: 'test-access-token',
+  accessTokenSecret: 'test-access-token-secret',
 };
 
 const basePost: PublishablePost = {
@@ -87,29 +75,25 @@ async function capturePublishFailure(
 describe('createTwitterPublisher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ENCRYPTION_KEY = 'a'.repeat(64);
     twitterMocks.tweet.mockResolvedValue(buildSuccessfulTweetResponse('tw_123'));
-  });
-
-  afterEach(() => {
-    delete process.env.ENCRYPTION_KEY;
   });
 
   it('publishes a single tweet and returns the platform post id', async () => {
     const publisher = createTwitterPublisher();
 
     const result = await publisher.publish(
-      baseProfile as never,
+      baseProfile,
+      twitterCredentials,
       basePost,
       { correlationId: 'corr-1' },
     );
 
     expect(result).toEqual({ platformPostId: 'tw_123' });
     expect(twitterMocks.TwitterApi).toHaveBeenCalledWith({
-      appKey: 'decrypted-twitter-secret',
-      appSecret: 'decrypted-twitter-secret',
-      accessToken: 'decrypted-twitter-secret',
-      accessSecret: 'decrypted-twitter-secret',
+      appKey: 'test-consumer-key',
+      appSecret: 'test-consumer-secret',
+      accessToken: 'test-access-token',
+      accessSecret: 'test-access-token-secret',
     });
     expect(twitterMocks.tweet).toHaveBeenCalledWith({ text: basePost.text });
   });
@@ -121,7 +105,7 @@ describe('createTwitterPublisher', () => {
     const publisher = createTwitterPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-2' }),
+      publisher.publish(baseProfile, twitterCredentials, basePost, { correlationId: 'corr-2' }),
     );
 
     expect(failure.kind).toBe('permanent');
@@ -134,19 +118,19 @@ describe('createTwitterPublisher', () => {
     const publisher = createTwitterPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-3' }),
+      publisher.publish(baseProfile, twitterCredentials, basePost, { correlationId: 'corr-3' }),
     );
 
     expect(failure.kind).toBe('transient');
     expect(failure.errorCode).toBe('ECONNRESET');
   });
 
-  it('throws a permanent credential_error when Twitter credentials cannot be read', async () => {
-    delete process.env.ENCRYPTION_KEY;
+  it('throws a permanent credential_error when credentials are for another platform', async () => {
     const publisher = createTwitterPublisher();
+    const credentials: Credentials = { kind: 'oauth2', accessToken: 'not-twitter' };
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-cred' }),
+      publisher.publish(baseProfile, credentials, basePost, { correlationId: 'corr-cred' }),
     );
 
     expect(failure.kind).toBe('permanent');
@@ -166,7 +150,7 @@ describe('createTwitterPublisher', () => {
     const publisher = createTwitterPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-4' }),
+      publisher.publish(baseProfile, twitterCredentials, basePost, { correlationId: 'corr-4' }),
     );
 
     expect(failure.kind).toBe('permanent');
@@ -179,7 +163,8 @@ describe('createTwitterPublisher', () => {
 
     const failure = await capturePublishFailure(
       publisher.publish(
-        baseProfile as never,
+        baseProfile,
+        twitterCredentials,
         { ...basePost, isThread: true },
         { correlationId: 'corr-5' },
       ),
@@ -196,7 +181,7 @@ describe('createTwitterPublisher', () => {
     });
 
     await expect(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-6' }),
+      publisher.publish(baseProfile, twitterCredentials, basePost, { correlationId: 'corr-6' }),
     ).resolves.toEqual({ platformPostId: 'tw_fake_result' });
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PublishFailure, type PublishablePost } from '@sms/shared';
+import type { OAuth2Credentials, SafeProfile } from '@sms/shared/tokens';
 import { createFakeLinkedInPublisher, createLinkedInPublisher } from '../../publishers/linkedin.js';
 
 vi.mock('@sms/shared/logger', () => ({
@@ -15,19 +16,15 @@ vi.mock('@sms/shared/logger', () => ({
   }),
 }));
 
-vi.mock('@sms/shared/encryption', () => ({
-  decrypt: vi.fn().mockReturnValue('test-bearer-token'),
-  validateEncryptionKey: vi.fn().mockReturnValue(Buffer.alloc(32)),
-}));
-
-const baseProfile = {
-  id: '00000000-0000-4000-8000-000000000010',
+const baseProfile: SafeProfile = {
   platform: 'linkedin',
   platformAccountId: 'urn:li:person:abc',
   linkedinAccountType: 'person',
-  oauth2AccessTokenCiphertext: 'enc-cipher',
-  oauth2AccessTokenIv: 'iv-bytes-12345678',
-  oauth2AccessTokenAuthTag: 'auth-tag-bytes-1',
+};
+
+const oauth2Credentials: OAuth2Credentials = {
+  kind: 'oauth2',
+  accessToken: 'test-bearer-token',
 };
 
 const basePost: PublishablePost = {
@@ -55,13 +52,11 @@ describe('createLinkedInPublisher', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    process.env.ENCRYPTION_KEY = 'a'.repeat(64);
     fetchSpy = vi.spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    delete process.env.ENCRYPTION_KEY;
   });
 
   it('publishes an image post with initializeUpload, PUT, and /posts', async () => {
@@ -87,7 +82,8 @@ describe('createLinkedInPublisher', () => {
 
     const publisher = createLinkedInPublisher();
     const result = await publisher.publish(
-      baseProfile as never,
+      baseProfile,
+      oauth2Credentials,
       {
         ...basePost,
         media: [
@@ -114,7 +110,7 @@ describe('createLinkedInPublisher', () => {
     const publisher = createLinkedInPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-li-2' }),
+      publisher.publish(baseProfile, oauth2Credentials, basePost, { correlationId: 'corr-li-2' }),
     );
 
     expect(failure.kind).toBe('permanent');
@@ -127,7 +123,7 @@ describe('createLinkedInPublisher', () => {
     const publisher = createLinkedInPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-li-3' }),
+      publisher.publish(baseProfile, oauth2Credentials, basePost, { correlationId: 'corr-li-3' }),
     );
 
     expect(failure.kind).toBe('transient');
@@ -143,7 +139,7 @@ describe('createLinkedInPublisher', () => {
     const publisher = createLinkedInPublisher();
 
     const failure = await capturePublishFailure(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-li-4' }),
+      publisher.publish(baseProfile, oauth2Credentials, basePost, { correlationId: 'corr-li-4' }),
     );
 
     expect(failure.kind).toBe('permanent');
@@ -169,7 +165,8 @@ describe('createLinkedInPublisher', () => {
     const publisher = createLinkedInPublisher();
     await capturePublishFailure(
       publisher.publish(
-        baseProfile as never,
+        baseProfile,
+        oauth2Credentials,
         {
           ...basePost,
           media: [
@@ -197,7 +194,7 @@ describe('createLinkedInPublisher', () => {
     });
 
     await expect(
-      publisher.publish(baseProfile as never, basePost, { correlationId: 'corr-li-6' }),
+      publisher.publish(baseProfile, oauth2Credentials, basePost, { correlationId: 'corr-li-6' }),
     ).resolves.toEqual({ platformPostId: 'li_fake_result' });
   });
 });

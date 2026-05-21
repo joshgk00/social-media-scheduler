@@ -1,1 +1,102 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-70-5c6cfd4822_f9e214f516","featureId":"feat_gh-70_b3a358bb9a","title":"gh#70: R3.5 — Switch Publishers to receive Credentials from dispatcher","category":"maintainability","severity":"low","confidence":"high","triage":"risk","evidence":[{"path":"packages/worker/src/publishers/{twitter,linkedin,facebook}.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/publisher.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/worker/src/publish-worker.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/tokens","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/70.\nBacklog section: Candidate 3 — TokenVault.\n\n## Context\n\nFifth PR in Candidate 3. **The locality win.** Publishers stop seeing cipher fields entirely — the dispatcher computes Credentials via vault, and Publishers receive a typed bag.\n\n**Hard dependency**: Candidate 1 R1.5 (gh#60) must have shipped — Publishers must already exist as `@sms/worker/src/publishers/{twitter,linkedin,facebook}.ts` named modules.\n\n## Scope\n\nInterface change in `@sms/shared/publisher.ts`:\n- `Publisher.publish` signature changes from:\n  ```ts\n  publish(profile: socialProfiles.$inferSelect, post: PublishablePost, ctx: PublishCtx): Promise<PublishResult>\n  ```\n  to:\n  ```ts\n  publish(profile: SafeProfile, credentials: Credentials, post: PublishablePost, ctx: PublishCtx): Promise<PublishResult>\n  ```\n\nPer-Publisher changes (`packages/worker/src/publishers/{twitter,linkedin,facebook}.ts`):\n- Remove the cipher-field validation prelude\n- Remove the `decrypt(...)` calls\n- Remove `process.env.ENCRYPTION_KEY` reads\n- Remove the `asHexString` helper (now lives in vault)\n- Accept `credentials` param; narrow with a one-line type guard:\n  ```ts\n  if (credentials.kind !== 'twitter') throw new Error('TwitterPublisher requires kind=twitter credentials');\n  ```\n- Use `credentials.consumerKey` etc. directly\n\nDispatcher changes (`packages/worker/src/publish-worker.ts`):\n- Inject `vault: TokenVault` via deps\n- After loading the full profile row, compute:\n  ```ts\n  const safeProfile = toSafeProfile(fullProfile);   // strip ciphers\n  const credentials = vault.unsealForProfile(fullProfile);\n  ```\n- Pass to Publisher: `publishers[platform].publish(safeProfile, credentials, post, ctx)`\n- Add a `toSafeProfile(row): SafeProfile` helper (or in `@sms/shared/tokens`)\n\nTest fixture updates:\n- All Publisher unit tests stop constructing encrypted profile fixtures\n- Tests use `createFakeTokenVault({ twitter: {...} })` for the unseal step, or pass pre-constructed `Credentials` directly to the Publisher\n\n## Out of scope\n\n- Sweep / final cleanup (R3.6)\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` and test pass\n- `pnpm --filter @sms/shared build` and test pass\n- `rg \"decrypt\\(|consumerKeyCiphertext|oauth2AccessTokenCiphertext\" packages/worker/src/publishers/` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/publishers/` returns no matches\n- The cipher-discipline doc comment at the top of each Publisher (CREDENTIAL DISCIPLINE / SEC-04 / D-06 / T-04-03-01) can be replaced with a one-line `// Credentials arrive pre-unsealed from TokenVault — see ADR-0005`\n\n## References\n\n- ADRs: 0005 (TokenVault — to be written as part of this candidate), supersedes [0002](../blob/main/docs/adr/0002-publisher-receives-raw-profile-row.md)\n- Depends on: #60, #66","reproduction":"Fifth PR in Candidate 3. **The locality win.** Publishers stop seeing cipher fields entirely — the dispatcher computes Credentials via vault, and Publishers receive a typed bag.\n\n**Hard dependency**: Candidate 1 R1.5 (gh#60) must have shipped — Publishers must already exist as `@sms/worker/src/publishers/{twitter,linkedin,facebook}.ts` named modules.","recommendation":"Interface change in `@sms/shared/publisher.ts`:\n- `Publisher.publish` signature changes from:\n  ```ts\n  publish(profile: socialProfiles.$inferSelect, post: PublishablePost, ctx: PublishCtx): Promise<PublishResult>\n  ```\n  to:\n  ```ts\n  publish(profile: SafeProfile, credentials: Credentials, post: PublishablePost, ctx: PublishCtx): Promise<PublishResult>\n  ```\n\nPer-Publisher changes (`packages/worker/src/publishers/{twitter,linkedin,facebook}.ts`):\n- Remove the cipher-field validation prelude\n- Remove the `decrypt(...)` calls\n- Remove `process.env.ENCRYPTION_KEY` reads\n- Remove the `asHexString` helper (now lives in vault)\n- Accept `credentials` param; narrow with a one-line type guard:\n  ```ts\n  if (credentials.kind !== 'twitter') throw new Error('TwitterPublisher requires kind=twitter credentials');\n  ```\n- Use `credentials.consumerKey` etc. directly\n\nDispatcher changes (`packages/worker/src/publish-worker.ts`):\n- Inject `vault: TokenVault` via deps\n- After loading the full profile row, compute:\n  ```ts\n  const safeProfile = toSafeProfile(fullProfile);   // strip ciphers\n  const credentials = vault.unsealForProfile(fullProfile);\n  ```\n- Pass to Publisher: `publishers[platform].publish(safeProfile, credentials, post, ctx)`\n- Add a `toSafeProfile(row): SafeProfile` helper (or in `@sms/shared/tokens`)\n\nTest fixture updates:\n- All Publisher unit tests stop constructing encrypted profile fixtures\n- Tests use `createFakeTokenVault({ twitter: {...} })` for the unseal step, or pass pre-constructed `Credentials` directly to the Publisher","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/worker build` and test pass\n- `pnpm --filter @sms/shared build` and test pass\n- `rg \"decrypt\\(|consumerKeyCiphertext|oauth2AccessTokenCiphertext\" packages/worker/src/publishers/` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/publishers/` returns no matches\n- The cipher-discipline doc comment at the top of each Publisher (CREDENTIAL DISCIPLINE / SEC-04 / D-06 / T-04-03-01) can be replaced with a one-line `// Credentials arrive pre-unsealed from TokenVault — see ADR-0005`","minimumFixScope":"packages/worker/src/publishers/{twitter,linkedin,facebook}.ts, packages/shared/src/publisher.ts, packages/worker/src/publish-worker.ts, packages/shared/src/tokens","status":"open","history":[],"signature":"sig_gh-70_5c6cfd4822","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-70-5c6cfd4822_f9e214f516",
+  "featureId": "feat_gh-70_b3a358bb9a",
+  "title": "gh#70: R3.5 — Switch Publishers to receive Credentials from dispatcher",
+  "category": "maintainability",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/worker/src/publishers/{twitter,linkedin,facebook}.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/publisher.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/publish-worker.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/tokens",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/70.\nBacklog section: Candidate 3 — TokenVault.\n\n## Context\n\nFifth PR in Candidate 3. **The locality win.** Publishers stop seeing cipher fields entirely — the dispatcher computes Credentials via vault, and Publishers receive a typed bag.\n\n**Hard dependency**: Candidate 1 R1.5 (gh#60) must have shipped — Publishers must already exist as `@sms/worker/src/publishers/{twitter,linkedin,facebook}.ts` named modules.\n\n## Scope\n\nInterface change in `@sms/shared/publisher.ts`:\n- `Publisher.publish` signature changes from:\n  ```ts\n  publish(profile: socialProfiles.$inferSelect, post: PublishablePost, ctx: PublishCtx): Promise<PublishResult>\n  ```\n  to:\n  ```ts\n  publish(profile: SafeProfile, credentials: Credentials, post: PublishablePost, ctx: PublishCtx): Promise<PublishResult>\n  ```\n\nPer-Publisher changes (`packages/worker/src/publishers/{twitter,linkedin,facebook}.ts`):\n- Remove the cipher-field validation prelude\n- Remove the `decrypt(...)` calls\n- Remove `process.env.ENCRYPTION_KEY` reads\n- Remove the `asHexString` helper (now lives in vault)\n- Accept `credentials` param; narrow with a one-line type guard:\n  ```ts\n  if (credentials.kind !== 'twitter') throw new Error('TwitterPublisher requires kind=twitter credentials');\n  ```\n- Use `credentials.consumerKey` etc. directly\n\nDispatcher changes (`packages/worker/src/publish-worker.ts`):\n- Inject `vault: TokenVault` via deps\n- After loading the full profile row, compute:\n  ```ts\n  const safeProfile = toSafeProfile(fullProfile);   // strip ciphers\n  const credentials = vault.unsealForProfile(fullProfile);\n  ```\n- Pass to Publisher: `publishers[platform].publish(safeProfile, credentials, post, ctx)`\n- Add a `toSafeProfile(row): SafeProfile` helper (or in `@sms/shared/tokens`)\n\nTest fixture updates:\n- All Publisher unit tests stop constructing encrypted profile fixtures\n- Tests use `createFakeTokenVault({ twitter: {...} })` for the unseal step, or pass pre-constructed `Credentials` directly to the Publisher\n\n## Out of scope\n\n- Sweep / final cleanup (R3.6)\n\n## Acceptance\n\n- `pnpm --filter @sms/worker build` and test pass\n- `pnpm --filter @sms/shared build` and test pass\n- `rg \"decrypt\\(|consumerKeyCiphertext|oauth2AccessTokenCiphertext\" packages/worker/src/publishers/` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/publishers/` returns no matches\n- The cipher-discipline doc comment at the top of each Publisher (CREDENTIAL DISCIPLINE / SEC-04 / D-06 / T-04-03-01) can be replaced with a one-line `// Credentials arrive pre-unsealed from TokenVault — see ADR-0005`\n\n## References\n\n- ADRs: 0005 (TokenVault — to be written as part of this candidate), supersedes [0002](../blob/main/docs/adr/0002-publisher-receives-raw-profile-row.md)\n- Depends on: #60, #66",
+  "reproduction": "Fifth PR in Candidate 3. **The locality win.** Publishers stop seeing cipher fields entirely — the dispatcher computes Credentials via vault, and Publishers receive a typed bag.\n\n**Hard dependency**: Candidate 1 R1.5 (gh#60) must have shipped — Publishers must already exist as `@sms/worker/src/publishers/{twitter,linkedin,facebook}.ts` named modules.",
+  "recommendation": "Interface change in `@sms/shared/publisher.ts`:\n- `Publisher.publish` signature changes from:\n  ```ts\n  publish(profile: socialProfiles.$inferSelect, post: PublishablePost, ctx: PublishCtx): Promise<PublishResult>\n  ```\n  to:\n  ```ts\n  publish(profile: SafeProfile, credentials: Credentials, post: PublishablePost, ctx: PublishCtx): Promise<PublishResult>\n  ```\n\nPer-Publisher changes (`packages/worker/src/publishers/{twitter,linkedin,facebook}.ts`):\n- Remove the cipher-field validation prelude\n- Remove the `decrypt(...)` calls\n- Remove `process.env.ENCRYPTION_KEY` reads\n- Remove the `asHexString` helper (now lives in vault)\n- Accept `credentials` param; narrow with a one-line type guard:\n  ```ts\n  if (credentials.kind !== 'twitter') throw new Error('TwitterPublisher requires kind=twitter credentials');\n  ```\n- Use `credentials.consumerKey` etc. directly\n\nDispatcher changes (`packages/worker/src/publish-worker.ts`):\n- Inject `vault: TokenVault` via deps\n- After loading the full profile row, compute:\n  ```ts\n  const safeProfile = toSafeProfile(fullProfile);   // strip ciphers\n  const credentials = vault.unsealForProfile(fullProfile);\n  ```\n- Pass to Publisher: `publishers[platform].publish(safeProfile, credentials, post, ctx)`\n- Add a `toSafeProfile(row): SafeProfile` helper (or in `@sms/shared/tokens`)\n\nTest fixture updates:\n- All Publisher unit tests stop constructing encrypted profile fixtures\n- Tests use `createFakeTokenVault({ twitter: {...} })` for the unseal step, or pass pre-constructed `Credentials` directly to the Publisher",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/worker build` and test pass\n- `pnpm --filter @sms/shared build` and test pass\n- `rg \"decrypt\\(|consumerKeyCiphertext|oauth2AccessTokenCiphertext\" packages/worker/src/publishers/` returns no matches\n- `rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/publishers/` returns no matches\n- The cipher-discipline doc comment at the top of each Publisher (CREDENTIAL DISCIPLINE / SEC-04 / D-06 / T-04-03-01) can be replaced with a one-line `// Credentials arrive pre-unsealed from TokenVault — see ADR-0005`",
+  "minimumFixScope": "packages/worker/src/publishers/{twitter,linkedin,facebook}.ts, packages/shared/src/publisher.ts, packages/worker/src/publish-worker.ts, packages/shared/src/tokens",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260521T030440-514108",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current code has not switched the publish flow to dispatcher-unsealed credentials: packages/shared/src/publisher.ts still defines Publisher.publish(profile, post, ctx), packages/worker/src/publish-worker.ts still calls publishers[publishablePost.platform].publish(profile, publishablePost, publishCtx) and has no TokenVault dependency, and all three publisher modules still read process.env.ENCRYPTION_KEY, convert cipher fields with asHexString, and call decrypt(...) on profile cipher fields. TokenVault/SafeProfile types exist under packages/shared/src/tokens, but they are not wired into the publish worker/publishers. Publisher tests also still reference ENCRYPTION_KEY and encrypted fixtures. I attempted to run the focused publisher tests, but Vitest could not start in this read-only sandbox because it tried to write packages/worker/node_modules/.vite-temp; the static code evidence is sufficient that the finding remains open.",
+      "commands": [
+        "pwd && rg --files | rg '^(packages/worker/src/publishers/(twitter|linkedin|facebook)\\.ts|packages/shared/src/publisher\\.ts|packages/worker/src/publish-worker\\.ts|packages/shared/src/tokens)'",
+        "rg -n \"decrypt\\(|consumerKeyCiphertext|oauth2AccessTokenCiphertext|process\\.env\\.ENCRYPTION_KEY|CREDENTIAL DISCIPLINE|SEC-04|D-06|T-04-03-01|Credentials arrive pre-unsealed|publish\\(\" packages/worker/src/publishers packages/shared/src/publisher.ts packages/worker/src/publish-worker.ts packages/shared/src/tokens",
+        "sed -n '1,90p' packages/shared/src/publisher.ts",
+        "sed -n '120,165p' packages/worker/src/publish-worker.ts",
+        "sed -n '130,235p' packages/worker/src/publishers/twitter.ts",
+        "sed -n '80,200p' packages/worker/src/publishers/linkedin.ts",
+        "sed -n '115,195p' packages/worker/src/publishers/facebook.ts",
+        "rg -n \"TokenVault|toSafeProfile|unsealForProfile|Credentials|SafeProfile\" packages/worker/src packages/shared/src",
+        "rg -n \"create.*Publisher|publish\\(profile|Publisher<|ENCRYPTION_KEY|decrypt\\(\" packages/worker/src/__tests__ packages/worker/src/publishers",
+        "pnpm --filter @sms/worker test -- --run src/__tests__/publishers/twitter.test.ts src/__tests__/publishers/linkedin.test.ts src/__tests__/publishers/facebook.test.ts"
+      ],
+      "createdAt": "2026-05-21T03:05:43.432Z"
+    },
+    {
+      "runId": "20260521T031406-4398fd",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current code implements the requested TokenVault handoff: packages/shared/src/publisher.ts now imports Credentials and SafeProfile and defines Publisher.publish(profile, credentials, post, ctx). packages/worker/src/publish-worker.ts has a TokenVault dependency, converts the full profile with vault.toSafeProfile, unseals with vault.unsealForProfile, and calls publishers[publishablePost.platform].publish(safeProfile, credentials, publishablePost, publishCtx). The twitter/linkedin/facebook publishers now accept credentials, validate credentials.kind, and use plaintext credential fields directly. The acceptance searches for decrypt/cipher fields and process.env.ENCRYPTION_KEY in packages/worker/src/publishers returned no matches. Focused tests have been updated, including publish-worker.test asserting dispatcher unsealing before publisher invocation and publisher tests passing typed Credentials/SafeProfile. I attempted the shared/worker builds and focused tests, but this read-only sandbox prevented TypeScript/Vitest from writing dist and .vite-temp files with EPERM, so runtime verification could not complete here; the current static code and test coverage show the finding is fixed.",
+      "commands": [
+        "pwd && rg --files | rg '^(packages/worker/src/publishers/(twitter|linkedin|facebook)\\.ts|packages/shared/src/publisher\\.ts|packages/worker/src/publish-worker\\.ts|packages/shared/src/tokens)'",
+        "rg -n \"decrypt\\(|consumerKeyCiphertext|oauth2AccessTokenCiphertext|process\\.env\\.ENCRYPTION_KEY|CREDENTIAL DISCIPLINE|SEC-04|D-06|T-04-03-01|Credentials arrive pre-unsealed|publish\\(\" packages/worker/src/publishers packages/shared/src/publisher.ts packages/worker/src/publish-worker.ts packages/shared/src/tokens",
+        "rg -n \"TokenVault|toSafeProfile|unsealForProfile|Credentials|SafeProfile\" packages/worker/src packages/shared/src",
+        "sed -n '1,90p' packages/shared/src/publisher.ts",
+        "sed -n '120,210p' packages/worker/src/publish-worker.ts",
+        "sed -n '130,190p' packages/worker/src/publishers/twitter.ts",
+        "sed -n '80,180p' packages/worker/src/publishers/linkedin.ts",
+        "sed -n '110,185p' packages/worker/src/publishers/facebook.ts",
+        "rg \"decrypt\\(|consumerKeyCiphertext|oauth2AccessTokenCiphertext\" packages/worker/src/publishers/",
+        "rg \"process\\.env\\.ENCRYPTION_KEY\" packages/worker/src/publishers/",
+        "sed -n '1,90p' packages/worker/src/index.ts",
+        "sed -n '1,190p' packages/worker/src/__tests__/publish-worker.test.ts",
+        "pnpm --filter @sms/shared build",
+        "pnpm --filter @sms/worker build",
+        "pnpm --filter @sms/worker test -- --run src/__tests__/publish-worker.test.ts src/__tests__/publishers/twitter.test.ts src/__tests__/publishers/linkedin.test.ts src/__tests__/publishers/facebook.test.ts",
+        "pnpm --filter @sms/shared test -- --run src/__tests__/tokens-vault.test.ts"
+      ],
+      "createdAt": "2026-05-21T03:15:22.714Z"
+    }
+  ],
+  "signature": "sig_gh-70_5c6cfd4822",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-70-5c6cfd4822-f9e214f_4d230518b2"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-21T03:15:22.714Z"
+}
