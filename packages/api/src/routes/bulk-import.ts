@@ -120,6 +120,7 @@ export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportR
         return;
       }
 
+      let queueName: string | null = null;
       if (target === 'queue') {
         const [queue] = await db
           .select({ id: queues.id, name: queues.name, profileId: queues.profileId })
@@ -133,6 +134,7 @@ export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportR
           res.status(404).json({ error: 'Queue not found' });
           return;
         }
+        queueName = queue.name;
         const mismatchedRows = parsedCsv.rows.filter((row) => {
           const queueRow = row as { queue_name?: string };
           return queueRow.queue_name !== queue.name;
@@ -187,6 +189,14 @@ export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportR
           operationType,
           targetKind: target === 'scheduled' ? 'profile' : 'queue',
           targetId,
+          payload: {
+            target,
+            profileId,
+            queueId,
+            queueName,
+            parsedCount: parsedCsv.rows.length,
+            errorCount: parsedCsv.errors.length,
+          },
           params: target === 'scheduled'
             ? { profileId, rows: parsedCsv.rows, errors: parsedCsv.errors }
             : { profileId, queueId, rows: parsedCsv.rows, errors: parsedCsv.errors },
@@ -196,7 +206,8 @@ export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportR
         res.status(202).json(bulkOperation.replay
           ? bulkOperation
           : {
-              ...bulkOperation,
+              bulkOperationId: bulkOperation.bulkOperationId,
+              jobId: bulkOperation.jobId,
               parsedCount: parsedCsv.rows.length,
               errorCount: parsedCsv.errors.length,
             });

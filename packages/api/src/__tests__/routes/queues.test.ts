@@ -256,7 +256,8 @@ function resolvedChain<T>(terminal: T) {
   for (const method of ['from', 'where', 'values', 'onConflictDoNothing', 'returning']) {
     chain[method] = vi.fn().mockReturnValue(chain);
   }
-  chain.then = (resolve: (value: T) => void) => resolve(terminal);
+  chain.then = (resolve: (value: T) => void, reject?: (error: unknown) => void) =>
+    Promise.resolve(terminal).then(resolve, reject);
   return chain;
 }
 
@@ -582,6 +583,32 @@ describe('queues routes', () => {
         }),
         expect.any(Number),
       );
+    });
+
+    it('returns 400 when a queue bulk operation has an invalid idempotency key', async () => {
+      const db = {
+        select: vi.fn().mockReturnValueOnce(resolvedChain([{ id: QUEUE_ID, name: SAMPLE_QUEUE.name, userId: 'user-1' }])),
+        insert: vi.fn().mockReturnValue(resolvedChain([])),
+        update: vi.fn().mockReturnValue(resolvedChain([])),
+        delete: vi.fn().mockReturnValue(resolvedChain([])),
+        transaction: vi.fn(),
+      };
+      const bulkOpsQueueService: BulkOpsQueueService = {
+        bulkOpsQueue: {} as never,
+        enqueueBulkOp: vi.fn(),
+      };
+      const app = createTestApp({ db, bulkOpsQueueService });
+      const agent = await authenticatedAgent(app);
+
+      const res = await agent
+        .post(`/api/queues/${QUEUE_ID}/randomize`)
+        .set('Idempotency-Key', 'not-a-uuid')
+        .send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: 'Invalid Idempotency-Key header' });
+      expect(db.insert).not.toHaveBeenCalled();
+      expect(bulkOpsQueueService.enqueueBulkOp).not.toHaveBeenCalled();
     });
   });
 

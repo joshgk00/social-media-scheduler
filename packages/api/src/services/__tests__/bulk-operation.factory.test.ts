@@ -48,6 +48,11 @@ function createDb(args: {
 }) {
   let selectCalls = 0;
   const existingRowBatches = args.existingRowBatches ?? [args.existingRows ?? []];
+  const deleteChain: Record<string, any> = {};
+  deleteChain.where = vi.fn().mockImplementation(() => {
+    args.calls?.push('delete');
+    return Promise.resolve([]);
+  });
   return {
     select: vi.fn().mockImplementation(() => {
       const batch = existingRowBatches[Math.min(selectCalls, existingRowBatches.length - 1)] ?? [];
@@ -55,6 +60,7 @@ function createDb(args: {
       return selectChain(batch);
     }),
     insert: vi.fn().mockReturnValue(insertChain(args.insertedRows ?? [{ id: bulkOperationId }], args.calls ?? [])),
+    delete: vi.fn().mockReturnValue(deleteChain),
     transaction: vi.fn(),
   };
 }
@@ -125,6 +131,37 @@ describe('createBulkOperationFactory', () => {
     expect(queueService.enqueueBulkOp.mock.calls[0]?.[1].idempotencyKey).toBe(values.idempotencyKey);
   });
 
+  it('accepts newer UUID versions for client idempotency keys', async () => {
+    const uuidV7Key = '018f6d5e-9b8c-7c2d-9a1b-abcdefabcdef';
+    const db = createDb({});
+    const queueService = createQueueService();
+    const factory = createBulkOperationFactory(db as never, queueService);
+
+    await factory.startBulkOperation({ ...baseArgs, idempotencyKey: uuidV7Key });
+
+    const values = db.insert.mock.results[0]?.value.values.mock.calls[0]?.[0];
+    expect(values.idempotencyKey).toBe(uuidV7Key);
+  });
+
+  it('stores compact metadata payload separately from the queue job params', async () => {
+    const db = createDb({});
+    const queueService = createQueueService();
+    const factory = createBulkOperationFactory(db as never, queueService);
+
+    await factory.startBulkOperation({
+      ...baseArgs,
+      payload: { parsedCount: 2 },
+      params: { rows: [{ text: 'one' }, { text: 'two' }] },
+    });
+
+    expect(db.insert.mock.results[0]?.value.values).toHaveBeenCalledWith(expect.objectContaining({
+      payload: { parsedCount: 2 },
+    }));
+    expect(queueService.enqueueBulkOp.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      params: { rows: [{ text: 'one' }, { text: 'two' }] },
+    }));
+  });
+
   it('returns replay metadata for an existing idempotency key', async () => {
     const db = createDb({ existingRows: [{ id: bulkOperationId }] });
     const queueService = createQueueService();
@@ -188,7 +225,7 @@ describe('createBulkOperationFactory', () => {
     expect(queueService.enqueueBulkOp).not.toHaveBeenCalled();
   });
 
-  it('preserves existing insert-before-enqueue semantics when enqueue fails', async () => {
+  it('deletes the created operation row when enqueue fails', async () => {
     const calls: string[] = [];
     const db = createDb({ calls });
     const queueError = new Error('queue unavailable');
@@ -197,7 +234,7 @@ describe('createBulkOperationFactory', () => {
 
     await expect(factory.startBulkOperation(baseArgs)).rejects.toThrow(queueError);
 
-    expect(calls).toEqual(['insert:returning', 'enqueue']);
-    expect(db.transaction).not.toHaveBeenCalled();
+    expect(calls).toEqual(['insert:returning', 'enqueue', 'delete']);
+    expect(db.delete).toHaveBeenCalledTimes(1);
   });
 });

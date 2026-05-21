@@ -4,7 +4,7 @@ import { bulkOperations, type Db } from '@sms/db';
 import type { JobName } from '@sms/shared';
 import type { BulkOpsQueueService } from './bulk-ops-queue.service.js';
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type BulkOperationTargetKind = 'profile' | 'queue' | 'scheduled-list';
 
@@ -21,6 +21,7 @@ export interface StartBulkOperationArgs {
   operationType: JobName;
   targetKind: BulkOperationTargetKind;
   targetId: string | null;
+  payload?: Record<string, unknown>;
   params: Record<string, unknown>;
   correlationId?: string;
 }
@@ -100,7 +101,7 @@ export function createBulkOperationFactory(
           targetKind: args.targetKind,
           targetId: args.targetId,
           idempotencyKey,
-          payload: args.params,
+          payload: args.payload ?? args.params,
         })
         .onConflictDoNothing({
           target: [bulkOperations.userId, bulkOperations.idempotencyKey],
@@ -120,20 +121,26 @@ export function createBulkOperationFactory(
         throw new Error('Bulk operation insert conflict could not be reloaded');
       }
 
-      const job = await bulkOpsQueueService.enqueueBulkOp(
-        args.operationType,
-        {
-          bulkOperationId: bulkOperation.id,
-          userId: args.userId,
-          operationType: args.operationType,
-          targetKind: args.targetKind,
-          targetId: args.targetId,
-          idempotencyKey,
-          params: args.params,
-          correlationId: args.correlationId ?? randomUUID(),
-        },
-        Math.floor(Date.now() / 1000),
-      );
+      let job;
+      try {
+        job = await bulkOpsQueueService.enqueueBulkOp(
+          args.operationType,
+          {
+            bulkOperationId: bulkOperation.id,
+            userId: args.userId,
+            operationType: args.operationType,
+            targetKind: args.targetKind,
+            targetId: args.targetId,
+            idempotencyKey,
+            params: args.params,
+            correlationId: args.correlationId ?? randomUUID(),
+          },
+          Math.floor(Date.now() / 1000),
+        );
+      } catch (err) {
+        await db.delete(bulkOperations).where(eq(bulkOperations.id, bulkOperation.id));
+        throw err;
+      }
 
       return {
         bulkOperationId: bulkOperation.id,
