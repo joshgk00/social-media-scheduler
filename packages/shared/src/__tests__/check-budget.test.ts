@@ -155,6 +155,10 @@ describe('countFacebookPublishApiCalls', () => {
     expect(countFacebookPublishApiCalls([{ kind: 'video' }])).toBe(1);
   });
 
+  it('counts Facebook GIF media as one video-pipeline call', () => {
+    expect(countFacebookPublishApiCalls([{ mimeType: 'image/gif' }])).toBe(1);
+  });
+
   it('uses the video path when mixed media includes a video', () => {
     expect(
       countFacebookPublishApiCalls([
