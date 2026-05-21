@@ -139,6 +139,7 @@ export function Sidebar({ isCollapsed, onToggle, user }: SidebarProps) {
                 key={item.to}
                 to={item.to}
                 end={item.to === "/dashboard"}
+                aria-label={item.label}
                 className={({ isActive }) =>
                   cn(
                     "flex min-h-8 items-center rounded-sm text-[13px] font-medium transition-colors",
