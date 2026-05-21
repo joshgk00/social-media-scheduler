@@ -126,15 +126,13 @@ describe('SharedPostFields', () => {
     expect(screen.getByText(/Automatically delete this post from Twitter\/X/)).toBeInTheDocument();
   });
 
-  it('hides auto-destruct controls for LinkedIn and Facebook posts', () => {
-    renderSharedPostFields('linkedin');
+  it.each(['linkedin', 'facebook'] as const)(
+    'hides auto-destruct controls for %s posts',
+    (platform) => {
+      renderSharedPostFields(platform);
 
-    expect(screen.queryByText('Auto-destruct')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Automatically delete this post from Twitter\/X/)).not.toBeInTheDocument();
-
-    renderSharedPostFields('facebook');
-
-    expect(screen.queryByText('Auto-destruct')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Automatically delete this post from Twitter\/X/)).not.toBeInTheDocument();
-  });
+      expect(screen.queryByText('Auto-destruct')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Automatically delete this post from Twitter\/X/)).not.toBeInTheDocument();
+    },
+  );
 });
