@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import sharp from 'sharp';
-import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
 import type { Queue } from 'bullmq';
 import { PLATFORM_MEDIA_LIMITS, JOB_NAMES, AppError } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -60,7 +60,8 @@ export async function processImageUpload(params: ProcessImageParams) {
   }
 
   try {
-    const metadata = await sharp(tempFilePath).metadata();
+    const originalImage = sharp(tempFilePath);
+    const metadata = await originalImage.clone().metadata();
     const imageWidth = metadata.width ?? 0;
     const imageHeight = metadata.height ?? 0;
     const format = metadata.format ?? 'jpeg';
@@ -71,23 +72,19 @@ export async function processImageUpload(params: ProcessImageParams) {
       limits?.maxImageHeight &&
       (imageWidth > limits.maxImageWidth || imageHeight > limits.maxImageHeight);
 
-    let processedBuffer: Buffer;
+    const processedImage = originalImage.clone().rotate();
     if (needsResize) {
-      processedBuffer = await sharp(tempFilePath)
-        .rotate()
-        .resize(limits.maxImageWidth, limits.maxImageHeight, {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .toBuffer();
-    } else {
-      processedBuffer = await sharp(tempFilePath).rotate().toBuffer();
+      processedImage.resize(limits.maxImageWidth, limits.maxImageHeight, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
     }
 
-    // Re-read dimensions from the processed buffer
-    const processedMeta = await sharp(processedBuffer).metadata();
-    const resizedWidth = processedMeta.width ?? imageWidth;
-    const resizedHeight = processedMeta.height ?? imageHeight;
+    const { data: processedBuffer, info: processedInfo } = await processedImage.toBuffer({
+      resolveWithObject: true,
+    });
+    const resizedWidth = processedInfo.width ?? imageWidth;
+    const resizedHeight = processedInfo.height ?? imageHeight;
 
     const fileUuid = randomUUID();
     const ext = formatToExt(format);
@@ -316,16 +313,20 @@ export async function associateMediaToPost(
     throw new MediaServiceError('One or more media files not found', 400);
   }
 
-  for (let sortOrder = 0; sortOrder < mediaIds.length; sortOrder++) {
-    const mediaId = mediaIds[sortOrder];
-    await db
-      .update(postMedia)
-      .set({ postId, sortOrder })
-      .where(and(
-        eq(postMedia.id, mediaId),
-        eq(postMedia.userId, userId),
-        isNull(postMedia.postId),
-        isNull(postMedia.deletedAt),
-      ));
-  }
+  const sortOrderCases = mediaIds.map((mediaId, sortOrder) => (
+    sql`when ${postMedia.id} = ${mediaId} then ${sortOrder}`
+  ));
+
+  await db
+    .update(postMedia)
+    .set({
+      postId,
+      sortOrder: sql<number>`case ${sql.join(sortOrderCases, sql` `)} else ${postMedia.sortOrder} end`,
+    })
+    .where(and(
+      inArray(postMedia.id, mediaIds),
+      eq(postMedia.userId, userId),
+      isNull(postMedia.postId),
+      isNull(postMedia.deletedAt),
+    ));
 }

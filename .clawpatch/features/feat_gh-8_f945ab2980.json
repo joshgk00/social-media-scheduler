@@ -1,1 +1,60 @@
-{"schemaVersion":1,"featureId":"feat_gh-8_f945ab2980","title":"gh#8: Perf: Serial UPDATE loop in associateMediaToPost","summary":"Imported from GitHub issue gh#8 in BACKLOG.md section \"Performance\".","kind":"service","source":"github-issue-import","confidence":"high","entrypoints":[{"path":"packages/api/src/services/media.service.ts","symbol":null,"route":null,"command":null}],"ownedFiles":[{"path":"packages/api/src/services/media.service.ts","reason":"mentioned by issue body"}],"contextFiles":[{"path":"BACKLOG.md","reason":"backlog queue item for gh#8"}],"tests":[],"tags":["github-issue","gh#8","github-url:https://github.com/joshgk00/social-media-scheduler/issues/8","backlog-order:0030","backlog-section:performance"],"trustBoundaries":["network","filesystem","external-api"],"status":"needs-fix","lock":null,"findingIds":["fnd_sig-gh-8-31d12ef214_71e69e6a80"],"patchAttemptIds":[],"analysisHistory":[{"runId":"20260519T201935-c24f6a","kind":"github-issue-import","summary":"Imported GitHub issue gh#8","provider":"gh","model":null,"createdAt":"2026-05-19T20:19:35.980Z"}],"createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-8_f945ab2980",
+  "title": "gh#8: Perf: Serial UPDATE loop in associateMediaToPost",
+  "summary": "Imported from GitHub issue gh#8 in BACKLOG.md section \"Performance\".",
+  "kind": "service",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#8"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#8",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/8",
+    "backlog-order:0030",
+    "backlog-section:performance"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem",
+    "external-api"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-8-31d12ef214_71e69e6a80"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260519T201935-c24f6a",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#8",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-19T20:19:35.980Z"
+    }
+  ],
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-21T00:08:40.682Z"
+}
