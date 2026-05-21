@@ -4,10 +4,12 @@ import type { Queue } from 'bullmq';
 // Mock sharp before import
 const mockSharpInstance = {
   metadata: vi.fn(),
+  clone: vi.fn(),
   rotate: vi.fn(),
   resize: vi.fn(),
   toBuffer: vi.fn(),
 };
+mockSharpInstance.clone.mockReturnValue(mockSharpInstance);
 mockSharpInstance.rotate.mockReturnValue(mockSharpInstance);
 mockSharpInstance.resize.mockReturnValue(mockSharpInstance);
 
@@ -24,6 +26,7 @@ vi.mock('node:fs', () => ({
   createReadStream: vi.fn().mockReturnValue({ pipe: vi.fn() }),
 }));
 
+import sharp from 'sharp';
 import {
   processImageUpload,
   processVideoUpload,
@@ -106,7 +109,16 @@ describe('media.service', () => {
         height: 600,
         format: 'jpeg',
       });
-      mockSharpInstance.toBuffer.mockResolvedValue(Buffer.alloc(5000));
+      mockSharpInstance.toBuffer.mockImplementation((options?: { resolveWithObject?: boolean }) => {
+        const buffer = Buffer.alloc(5000);
+        if (options?.resolveWithObject) {
+          return Promise.resolve({
+            data: buffer,
+            info: { width: 800, height: 600 },
+          });
+        }
+        return Promise.resolve(buffer);
+      });
 
       // Mock insert returning a row with an id
       const insertChain: any = {
@@ -148,6 +160,32 @@ describe('media.service', () => {
       expect(mockSharpInstance.metadata).toHaveBeenCalled();
       expect(result.mimeType).toBe('image/jpeg');
       expect(result.fileSize).toBeGreaterThan(0);
+    });
+
+    it('uses cloned sharp pipelines and resolveWithObject for processed dimensions', async () => {
+      mockSharpInstance.toBuffer.mockImplementation((options?: { resolveWithObject?: boolean }) => {
+        const buffer = Buffer.alloc(5000);
+        if (options?.resolveWithObject) {
+          return Promise.resolve({
+            data: buffer,
+            info: { width: 640, height: 480 },
+          });
+        }
+        return Promise.resolve(buffer);
+      });
+
+      await processImageUpload(baseParams);
+
+      expect(vi.mocked(sharp)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(sharp).mock.calls[0][0]).toBe(baseParams.tempFilePath);
+      expect(Buffer.isBuffer(vi.mocked(sharp).mock.calls[1][0])).toBe(true);
+      expect(mockSharpInstance.clone).toHaveBeenCalledTimes(2);
+      expect(mockSharpInstance.metadata).toHaveBeenCalledTimes(1);
+      expect(mockSharpInstance.toBuffer).toHaveBeenCalledWith({ resolveWithObject: true });
+
+      const valuesCall = mockDb.insert.mock.results[0].value.values.mock.calls[0][0];
+      expect(valuesCall.width).toBe(640);
+      expect(valuesCall.height).toBe(480);
     });
 
     it('resizes images exceeding platform maxImageWidth/maxImageHeight before saving', async () => {
