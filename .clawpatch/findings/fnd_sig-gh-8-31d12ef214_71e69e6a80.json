@@ -1,1 +1,73 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-8-31d12ef214_71e69e6a80","featureId":"feat_gh-8_f945ab2980","title":"gh#8: Perf: Serial UPDATE loop in associateMediaToPost","category":"performance","severity":"medium","confidence":"high","triage":"risk","evidence":[{"path":"packages/api/src/services/media.service.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/8.\nBacklog section: Performance.\n\n## Problem\n\n`associateMediaToPost` runs N sequential UPDATE statements (one per mediaId). 4 round trips for Twitter images, up to 10 for Facebook carousel.\n\n## Identified by\n\nCode quality review Run 1 — performance-optimizer (perf-001)\n\n## Fix\n\nCollapse to a single UPDATE with a CASE expression for sortOrder.\n\n## Files\n\n- `packages/api/src/services/media.service.ts`","reproduction":"`associateMediaToPost` runs N sequential UPDATE statements (one per mediaId). 4 round trips for Twitter images, up to 10 for Facebook carousel.","recommendation":"Collapse to a single UPDATE with a CASE expression for sortOrder.","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":null,"minimumFixScope":"packages/api/src/services/media.service.ts","status":"open","history":[],"signature":"sig_gh-8_31d12ef214","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-8-31d12ef214_71e69e6a80",
+  "featureId": "feat_gh-8_f945ab2980",
+  "title": "gh#8: Perf: Serial UPDATE loop in associateMediaToPost",
+  "category": "performance",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/8.\nBacklog section: Performance.\n\n## Problem\n\n`associateMediaToPost` runs N sequential UPDATE statements (one per mediaId). 4 round trips for Twitter images, up to 10 for Facebook carousel.\n\n## Identified by\n\nCode quality review Run 1 — performance-optimizer (perf-001)\n\n## Fix\n\nCollapse to a single UPDATE with a CASE expression for sortOrder.\n\n## Files\n\n- `packages/api/src/services/media.service.ts`",
+  "reproduction": "`associateMediaToPost` runs N sequential UPDATE statements (one per mediaId). 4 round trips for Twitter images, up to 10 for Facebook carousel.",
+  "recommendation": "Collapse to a single UPDATE with a CASE expression for sortOrder.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/services/media.service.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260521T000432-8a4d36",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists. In packages/api/src/services/media.service.ts, associateMediaToPost is still at lines 292-326 and still performs a for loop over mediaIds with an awaited db.update(postMedia).set({ postId, sortOrder }).where(...) inside the loop at lines 316-326, so it remains N sequential UPDATE statements. The current unit test in packages/api/src/__tests__/services/media.test.ts lines 436-448 also asserts this behavior with expect(mockDb.update).toHaveBeenCalledTimes(3). A focused Vitest run could not complete because the read-only sandbox prevented Vite from writing its temporary config file, but the current code and tests are enough to determine the issue is still open.",
+      "commands": [
+        "rg -n \"associateMediaToPost|mediaId|sortOrder\" packages/api/src packages/api/test packages/api/tests || true",
+        "rg --files packages/api | rg \"media\\.service|media.*test|media.*spec\"",
+        "sed -n '285,335p' packages/api/src/services/media.service.ts",
+        "sed -n '430,470p' packages/api/src/__tests__/services/media.test.ts",
+        "rg -n 'CASE|case\\(|update\\(postMedia\\)|toHaveBeenCalledTimes\\(1\\)|bulk|associateMediaToPost' packages/api/src/services packages/api/src/__tests__",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/services/media.test.ts",
+        "nl -ba packages/api/src/services/media.service.ts | sed -n '292,326p'",
+        "nl -ba packages/api/src/__tests__/services/media.test.ts | sed -n '436,452p'"
+      ],
+      "createdAt": "2026-05-21T00:05:27.074Z"
+    },
+    {
+      "runId": "20260521T000759-f7a860",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists. In packages/api/src/services/media.service.ts, associateMediaToPost is still present at lines 292-332, but the prior sequential for loop with an awaited db.update(postMedia) per mediaId has been replaced by one db.update(postMedia) call using inArray(postMedia.id, mediaIds) and a SQL CASE expression built from sortOrderCases for sortOrder. The focused regression test in packages/api/src/__tests__/services/media.test.ts lines 436-454 has also been updated to assert mockDb.update is called once and that sortOrder is SQL-backed. A targeted Vitest run could not execute because the read-only sandbox prevented Vite from writing packages/api/node_modules/.vite-temp, but the current code and test expectations show the reported serial UPDATE loop has been removed.",
+      "commands": [
+        "rg -n \"associateMediaToPost|update\\(postMedia\\)|sortOrder|CASE|case\\(\" packages/api/src/services/media.service.ts packages/api/src/__tests__/services/media.test.ts packages/api/src 2>/dev/null || true",
+        "rg --files packages/api | rg \"media\\.service|media.*test|media.*spec\"",
+        "git status --short",
+        "nl -ba packages/api/src/services/media.service.ts | sed -n '292,334p'",
+        "nl -ba packages/api/src/__tests__/services/media.test.ts | sed -n '436,492p'",
+        "sed -n '1,80p' packages/api/src/services/media.service.ts",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/services/media.test.ts",
+        "rg -n \"for \\(|for await|forEach|Promise\\.all|update\\(postMedia\\)|sortOrderCases|sql\\.join\" packages/api/src/services/media.service.ts packages/api/src/__tests__/services/media.test.ts",
+        "git diff -- packages/api/src/services/media.service.ts packages/api/src/__tests__/services/media.test.ts",
+        "rg -n \"for \\(const .*mediaIds|for \\(let .*mediaIds|await db\\s*$|await db\\.[\\s\\S]*update\\(postMedia\\)\" packages/api/src/services/media.service.ts"
+      ],
+      "createdAt": "2026-05-21T00:08:40.634Z"
+    }
+  ],
+  "signature": "sig_gh-8_31d12ef214",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-8-31d12ef214-71e69e6a_20cda743d7"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-21T00:08:40.634Z"
+}
