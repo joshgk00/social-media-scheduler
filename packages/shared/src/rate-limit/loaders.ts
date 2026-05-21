@@ -82,10 +82,6 @@ function nextHourTop(now: Date): Date {
   return top;
 }
 
-function toPgTimestamptz(value: Date): string {
-  return value.toISOString();
-}
-
 /**
  * Load the live monthly usage counter for a single Twitter profile.
  *
@@ -103,7 +99,6 @@ export async function loadTwitterUsage(
       : DateTime.fromJSDate(now, { zone: 'utc' });
   const monthStart = nowUtc.startOf('month');
   const monthStartUtc = monthStart.toJSDate();
-  const monthStartPg = toPgTimestamptz(monthStartUtc);
   const monthResetAtUtc = monthStart.plus({ months: 1 }).toJSDate();
 
   const [profileRow] = await executeRows<TwitterProfileRow>(
@@ -127,7 +122,7 @@ export async function loadTwitterUsage(
       select count(*)::int as "publishedCount"
       from posts
       where profile_id = ${profileId}
-        and published_at >= ${monthStartPg}::timestamptz
+        and published_at >= ${monthStartUtc.toISOString()}::timestamptz
         and status in (${COUNTED_STATUSES_SQL})
     `,
   );
