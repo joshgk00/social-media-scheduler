@@ -419,5 +419,51 @@ describe('Auto-Destruct System', () => {
       expect(payload).not.toHaveProperty('reason');
       expect(payload).not.toHaveProperty('at');
     });
+
+    it('redacts token-shaped values and caps auto-destruct failed notification errors', async () => {
+      const { createAutoDestructWorker } = await import('../auto-destruct-worker.js');
+      const { autoDestructFailedNotificationSchema } = await import('@sms/shared');
+
+      const postId = '00000000-0000-4000-8000-000000000201';
+      const profileId = '00000000-0000-4000-8000-000000000202';
+      const add = vi.fn().mockResolvedValue(undefined);
+      const limit = vi.fn().mockResolvedValue([{ profileId }]);
+      const where = vi.fn().mockReturnValue({ limit });
+      const from = vi.fn().mockReturnValue({ where });
+      const db = {
+        select: vi.fn().mockReturnValue({ from }),
+      } as unknown as WorkerDb;
+
+      createAutoDestructWorker({
+        redis: {} as never,
+        db,
+        notificationQueue: { add } as unknown as Queue,
+        vault: createFakeVault().vault,
+      });
+
+      const failedListener = capturedListeners.failed?.[0];
+      expect(failedListener).toBeTypeOf('function');
+
+      const secret = 'tok_' + 'a'.repeat(80);
+      const longNonTokenMessage = Array.from({ length: 600 }, () => 'failure').join(' ');
+      await failedListener!(
+        {
+          data: {
+            postId,
+            platformPostId: 'tweet-123',
+            correlationId: 'corr-auto-destruct-redacted',
+          },
+          opts: { attempts: 4 },
+          attemptsMade: 4,
+        } as unknown as Job,
+        new Error(`Delete failed ${secret} ${longNonTokenMessage}`),
+      );
+
+      const payload = add.mock.calls[0]![1];
+      expect(payload.errorMessage).toContain('[redacted]');
+      expect(payload.errorMessage).not.toContain(secret);
+      expect(payload.errorMessage).toHaveLength(2000);
+      expect(autoDestructFailedNotificationSchema.safeParse(payload).success).toBe(true);
+    });
   });
 });
