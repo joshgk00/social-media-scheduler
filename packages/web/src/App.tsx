@@ -11,6 +11,7 @@ import { RedesignPlaceholderPage } from "./pages/redesign/RedesignPlaceholderPag
 const LoginPage = lazy(() => import("./pages/login/LoginPage"));
 const SetupPage = lazy(() => import("./pages/setup/SetupPage"));
 const RecoverPage = lazy(() => import("./pages/recover/RecoverPage"));
+const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage"));
 
 export function App() {
   return (
@@ -34,10 +35,7 @@ export function App() {
               }
             >
               <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route
-                path="/dashboard"
-                element={<RedesignPlaceholderPage title="Dashboard" />}
-              />
+              <Route path="/dashboard" element={<DashboardPage />} />
               <Route
                 path="/posts"
                 element={<RedesignPlaceholderPage title="Posts" />}
