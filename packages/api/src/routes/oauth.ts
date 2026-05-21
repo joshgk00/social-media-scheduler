@@ -107,7 +107,10 @@ const OAUTH_ERROR_HTTP_RESPONSES = {
 } satisfies Record<OAuthErrorCode, OAuthErrorHttpMapper>;
 
 function isOAuthErrorCode(code: string | undefined): code is OAuthErrorCode {
-  return code !== undefined && code in OAUTH_ERROR_HTTP_RESPONSES;
+  return (
+    code !== undefined &&
+    Object.prototype.hasOwnProperty.call(OAUTH_ERROR_HTTP_RESPONSES, code)
+  );
 }
 
 async function oauthErrorToHttpResponse(
