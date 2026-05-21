@@ -5,6 +5,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SidebarLayout } from "./components/layout/SidebarLayout";
 import { PageSkeleton } from "./components/PageSkeleton";
 import { lazy, Suspense } from "react";
+import { ComponentLibraryPage } from "./pages/redesign/ComponentLibraryPage";
 import { RedesignPlaceholderPage } from "./pages/redesign/RedesignPlaceholderPage";
 
 const LoginPage = lazy(() => import("./pages/login/LoginPage"));
@@ -98,6 +99,10 @@ export function App() {
               <Route
                 path="/settings/:tab"
                 element={<RedesignPlaceholderPage title="Settings" />}
+              />
+              <Route
+                path="/redesign/components"
+                element={<ComponentLibraryPage />}
               />
             </Route>
           </Routes>
