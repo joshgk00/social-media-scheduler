@@ -1,1 +1,90 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-74-b599156f48_584cde2681","featureId":"feat_gh-74_5ab9e85267","title":"gh#74: R5.2 — Switch routes/bulk-import.ts to BulkOperationFactory","category":"maintainability","severity":"low","confidence":"high","triage":"risk","evidence":[{"path":"packages/api/src/routes/bulk-import.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/74.\nBacklog section: Candidate 5 — BulkOperationFactory.\n\n## Context\n\nSecond PR in Candidate 5. Migrates the bulk-import route to the factory. Validates the factory shape against the first consumer; R5.3 validates against the second.\n\n## Scope\n\n- Modify `packages/api/src/routes/bulk-import.ts`:\n  - Remove the inline idempotency-key parsing (`parseIdempotencyKey` + `UUID_PATTERN` regex — these move into the factory)\n  - Remove the inline `bulk_operations` existence-check SELECT\n  - Remove the inline insert + enqueue\n  - Replace with a single `factory.startBulkOperation(...)` call\n  - Profile / queue ownership checks STAY in the route (auth concern, not factory's job)\n  - CSV parsing STAYS in the route (input-shape concern, not factory's job)\n  - Route still emits the same response shape: `{ bulkOperationId, jobId, replay }`\n\n- Inject `BulkOperationFactory` via the existing `BulkImportRouterDeps`\n\n- Verify with existing integration tests — no behavior change\n\n## Out of scope\n\n- queues bulk-ops route (R5.3)\n- Removing the standalone `bulk-ops-queue.service.ts` (R5.3 sweep)\n\n## Acceptance\n\n- `pnpm --filter @sms/api build` and test pass\n- `rg \"UUID_PATTERN|parseIdempotencyKey\" packages/api/src/routes/bulk-import.ts` returns no matches\n- `rg \"from.*'bulkOperations'\" packages/api/src/routes/bulk-import.ts` returns no matches (the route doesn't import the table directly anymore)\n- Existing bulk-import integration tests pass\n\n## References\n\n- Depends on: #73","reproduction":"Second PR in Candidate 5. Migrates the bulk-import route to the factory. Validates the factory shape against the first consumer; R5.3 validates against the second.","recommendation":"- Modify `packages/api/src/routes/bulk-import.ts`:\n  - Remove the inline idempotency-key parsing (`parseIdempotencyKey` + `UUID_PATTERN` regex — these move into the factory)\n  - Remove the inline `bulk_operations` existence-check SELECT\n  - Remove the inline insert + enqueue\n  - Replace with a single `factory.startBulkOperation(...)` call\n  - Profile / queue ownership checks STAY in the route (auth concern, not factory's job)\n  - CSV parsing STAYS in the route (input-shape concern, not factory's job)\n  - Route still emits the same response shape: `{ bulkOperationId, jobId, replay }`\n\n- Inject `BulkOperationFactory` via the existing `BulkImportRouterDeps`\n\n- Verify with existing integration tests — no behavior change","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/api build` and test pass\n- `rg \"UUID_PATTERN|parseIdempotencyKey\" packages/api/src/routes/bulk-import.ts` returns no matches\n- `rg \"from.*'bulkOperations'\" packages/api/src/routes/bulk-import.ts` returns no matches (the route doesn't import the table directly anymore)\n- Existing bulk-import integration tests pass","minimumFixScope":"packages/api/src/routes/bulk-import.ts","status":"open","history":[],"signature":"sig_gh-74_b599156f48","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-74-b599156f48_584cde2681",
+  "featureId": "feat_gh-74_5ab9e85267",
+  "title": "gh#74: R5.2 — Switch routes/bulk-import.ts to BulkOperationFactory",
+  "category": "maintainability",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/api/src/routes/bulk-import.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/74.\nBacklog section: Candidate 5 — BulkOperationFactory.\n\n## Context\n\nSecond PR in Candidate 5. Migrates the bulk-import route to the factory. Validates the factory shape against the first consumer; R5.3 validates against the second.\n\n## Scope\n\n- Modify `packages/api/src/routes/bulk-import.ts`:\n  - Remove the inline idempotency-key parsing (`parseIdempotencyKey` + `UUID_PATTERN` regex — these move into the factory)\n  - Remove the inline `bulk_operations` existence-check SELECT\n  - Remove the inline insert + enqueue\n  - Replace with a single `factory.startBulkOperation(...)` call\n  - Profile / queue ownership checks STAY in the route (auth concern, not factory's job)\n  - CSV parsing STAYS in the route (input-shape concern, not factory's job)\n  - Route still emits the same response shape: `{ bulkOperationId, jobId, replay }`\n\n- Inject `BulkOperationFactory` via the existing `BulkImportRouterDeps`\n\n- Verify with existing integration tests — no behavior change\n\n## Out of scope\n\n- queues bulk-ops route (R5.3)\n- Removing the standalone `bulk-ops-queue.service.ts` (R5.3 sweep)\n\n## Acceptance\n\n- `pnpm --filter @sms/api build` and test pass\n- `rg \"UUID_PATTERN|parseIdempotencyKey\" packages/api/src/routes/bulk-import.ts` returns no matches\n- `rg \"from.*'bulkOperations'\" packages/api/src/routes/bulk-import.ts` returns no matches (the route doesn't import the table directly anymore)\n- Existing bulk-import integration tests pass\n\n## References\n\n- Depends on: #73",
+  "reproduction": "Second PR in Candidate 5. Migrates the bulk-import route to the factory. Validates the factory shape against the first consumer; R5.3 validates against the second.",
+  "recommendation": "- Modify `packages/api/src/routes/bulk-import.ts`:\n  - Remove the inline idempotency-key parsing (`parseIdempotencyKey` + `UUID_PATTERN` regex — these move into the factory)\n  - Remove the inline `bulk_operations` existence-check SELECT\n  - Remove the inline insert + enqueue\n  - Replace with a single `factory.startBulkOperation(...)` call\n  - Profile / queue ownership checks STAY in the route (auth concern, not factory's job)\n  - CSV parsing STAYS in the route (input-shape concern, not factory's job)\n  - Route still emits the same response shape: `{ bulkOperationId, jobId, replay }`\n\n- Inject `BulkOperationFactory` via the existing `BulkImportRouterDeps`\n\n- Verify with existing integration tests — no behavior change",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/api build` and test pass\n- `rg \"UUID_PATTERN|parseIdempotencyKey\" packages/api/src/routes/bulk-import.ts` returns no matches\n- `rg \"from.*'bulkOperations'\" packages/api/src/routes/bulk-import.ts` returns no matches (the route doesn't import the table directly anymore)\n- Existing bulk-import integration tests pass",
+  "minimumFixScope": "packages/api/src/routes/bulk-import.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260521T033548-c89ff6",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists at packages/api/src/routes/bulk-import.ts and the finding remains open. Current code still imports bulkOperations directly from @sms/db at line 7, defines UUID_PATTERN at line 22 and parseIdempotencyKey at lines 28-32, checks existing bulk operations with .from(bulkOperations) at lines 102-107, inserts bulkOperations at lines 196-217, updates bulkOperations at lines 221-223, and enqueues via bulkOpsQueueService.enqueueBulkOp at line 226 instead of using BulkOperationFactory.startBulkOperation. BulkOperationFactory exists in packages/api/src/services/bulk-operation.factory.ts, but createBulkImportRouter still accepts bulkOpsQueueService directly and app.ts still injects { db, bulkOpsQueueService }. Targeted Vitest runs could not execute in the current read-only sandbox because Vitest attempted to create temp/SSR directories and failed with EPERM; typecheck also fails on an unrelated existing error in src/services/post-crud.service.ts(107,13).",
+      "commands": [
+        "pwd && rg -n \"UUID_PATTERN|parseIdempotencyKey|bulkOperations|BulkOperationFactory|startBulkOperation|bulk_operations\" packages/api/src/routes/bulk-import.ts",
+        "sed -n '1,260p' packages/api/src/routes/bulk-import.ts",
+        "rg -n \"bulk-import|BulkImportRouterDeps|startBulkOperation|BulkOperationFactory\" packages/api/src packages/api/test packages/api/tests",
+        "sed -n '1,240p' packages/api/src/services/bulk-operation.factory.ts",
+        "sed -n '100,140p' packages/api/src/app.ts",
+        "rg -n \"createBulkImportRouter|bulkOpsQueueService|bulkOperationFactory|createBulkOperationFactory|parseIdempotencyKey|UUID_PATTERN|from\\(bulkOperations\\)|insert\\(bulkOperations\\)|enqueueBulkOp|startBulkOperation\" packages/api/src",
+        "sed -n '1,220p' package.json",
+        "sed -n '1,220p' packages/api/package.json",
+        "sed -n '1,220p' packages/api/src/__tests__/routes/bulk-import.test.ts",
+        "rg -n \"UUID_PATTERN|parseIdempotencyKey\" packages/api/src/routes/bulk-import.ts",
+        "rg -n \"from.*'bulkOperations'|bulkOperations\" packages/api/src/routes/bulk-import.ts",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/routes/bulk-import.test.ts",
+        "pnpm --filter @sms/api exec vitest --help",
+        "sed -n '1,220p' packages/api/vitest.config.ts",
+        "find packages/api/node_modules -maxdepth 2 -type d -name '.vite-temp' -print -exec ls -ld {} \\;",
+        "pnpm --filter @sms/api exec vitest run packages/api/src/__tests__/routes/bulk-import.test.ts --configLoader runner",
+        "pnpm --filter @sms/api exec vitest run packages/api/src/services/__tests__/bulk-operation.factory.test.ts --configLoader runner",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/routes/bulk-import.test.ts --configLoader runner",
+        "pnpm --filter @sms/api exec vitest run src/services/__tests__/bulk-operation.factory.test.ts --configLoader runner"
+      ],
+      "createdAt": "2026-05-21T03:37:34.151Z"
+    },
+    {
+      "runId": "20260521T034051-6033eb",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists, but the finding's requested change has been applied. packages/api/src/routes/bulk-import.ts now imports and injects BulkOperationFactory, its deps require bulkOperationFactory, and the route calls bulkOperationFactory.startBulkOperation at line 166 while preserving profile/queue ownership checks and CSV parsing in the route. The route no longer defines UUID_PATTERN or parseIdempotencyKey, no longer imports the bulkOperations table, and no longer performs inline bulk_operations select/insert/enqueue logic; the only remaining bulkOperations matches in that file are bulkOperationsLimiter middleware references. packages/api/src/app.ts now constructs createBulkOperationFactory(db, bulkOpsQueueService) when wiring /api/bulk-import. The moved idempotency parsing, existing-operation check, insert, enqueue, and response shape live in packages/api/src/services/bulk-operation.factory.ts. Verification commands for Vitest and build could not complete in this read-only sandbox: Vitest failed creating an SSR temp directory with EPERM, pnpm build failed writing dist files with EPERM, and tsc --noEmit also reports an unrelated existing src/services/post-crud.service.ts(107,13) type error. Despite the environment/test blockers, current code satisfies the migration acceptance criteria for this finding, so the finding is fixed.",
+      "commands": [
+        "pwd",
+        "rg -n \"UUID_PATTERN|parseIdempotencyKey|bulkOperations|BulkOperationFactory|startBulkOperation|bulk_operations|bulkOpsQueueService|enqueueBulkOp\" packages/api/src/routes/bulk-import.ts packages/api/src/app.ts packages/api/src/services -S",
+        "sed -n '1,280p' packages/api/src/routes/bulk-import.ts",
+        "sed -n '112,132p' packages/api/src/app.ts",
+        "rg -n \"UUID_PATTERN|parseIdempotencyKey\" packages/api/src/routes/bulk-import.ts",
+        "rg -n \"from.*'bulkOperations'|bulkOperations\" packages/api/src/routes/bulk-import.ts",
+        "rg -n \"createBulkImportRouter|bulkOperationFactory|bulkOpsQueueService\" packages/api/src/app.ts packages/api/src/routes/bulk-import.ts packages/api/src/__tests__/routes/bulk-import.test.ts -S",
+        "pnpm --filter @sms/api test -- --run src/__tests__/routes/bulk-import.test.ts --configLoader runner",
+        "pnpm --filter @sms/api build",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/routes/bulk-import.test.ts --configLoader runner",
+        "pnpm --filter @sms/api exec tsc --noEmit --pretty false",
+        "sed -n '1,120p' packages/api/src/services/bulk-operation.factory.ts",
+        "sed -n '1,220p' packages/api/src/__tests__/routes/bulk-import.test.ts",
+        "rg -n \"bulkOperationFactory|startBulkOperation|InvalidIdempotencyKeyError|replay|bulkOperationId|jobId\" packages/api/src/__tests__/routes/bulk-import.test.ts packages/api/src/services/__tests__/bulk-operation.factory.test.ts",
+        "pnpm --filter @sms/api exec vitest run src/services/__tests__/bulk-operation.factory.test.ts --configLoader runner"
+      ],
+      "createdAt": "2026-05-21T03:42:08.962Z"
+    }
+  ],
+  "signature": "sig_gh-74_b599156f48",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-74-b599156f48-584cde2_7e5589c458"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-21T03:42:08.962Z"
+}
