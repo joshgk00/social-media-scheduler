@@ -12,6 +12,10 @@ const LoginPage = lazy(() => import("./pages/login/LoginPage"));
 const SetupPage = lazy(() => import("./pages/setup/SetupPage"));
 const RecoverPage = lazy(() => import("./pages/recover/RecoverPage"));
 const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage"));
+const PostsPage = lazy(() => import("./pages/posts/PostsPage"));
+const NewPostPage = lazy(() => import("./pages/posts/NewPostPage"));
+const EditPostPage = lazy(() => import("./pages/posts/EditPostPage"));
+const BulkImportPage = lazy(() => import("./pages/posts/BulkImportPage"));
 
 export function App() {
   return (
@@ -36,22 +40,10 @@ export function App() {
             >
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route
-                path="/posts"
-                element={<RedesignPlaceholderPage title="Posts" />}
-              />
-              <Route
-                path="/posts/new"
-                element={<RedesignPlaceholderPage title="New post" />}
-              />
-              <Route
-                path="/posts/import"
-                element={<RedesignPlaceholderPage title="Import CSV" />}
-              />
-              <Route
-                path="/posts/:id/edit"
-                element={<RedesignPlaceholderPage title="Edit post" />}
-              />
+              <Route path="/posts" element={<PostsPage />} />
+              <Route path="/posts/new" element={<NewPostPage />} />
+              <Route path="/posts/import" element={<BulkImportPage />} />
+              <Route path="/posts/:id/edit" element={<EditPostPage />} />
               <Route
                 path="/queues"
                 element={<RedesignPlaceholderPage title="Queues" />}

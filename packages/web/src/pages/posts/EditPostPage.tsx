@@ -535,7 +535,7 @@ export default function EditPostPage() {
   const previewVideoUrl = mediaItems.find((m) => m.mimeType.startsWith('video/'))?.thumbnailUrl ?? null;
 
   return (
-    <main>
+    <main className="px-4 py-6 sm:px-6 lg:px-8">
       <h1 className="text-2xl font-semibold mb-6">Edit Post</h1>
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Left column: form */}
