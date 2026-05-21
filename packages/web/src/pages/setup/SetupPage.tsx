@@ -1,31 +1,32 @@
-import { useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { setupSchema, type SetupInput } from '@sms/shared';
-import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { setupSchema, type SetupInput } from "@sms/shared";
+import { Loader2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 
-import { useSetup } from '@/hooks/use-auth';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Banner } from "@/components/ui/banner";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Form,
+  FormControl,
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
-} from '@/components/ui/form';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { useLogin, useSetup } from "@/hooks/use-auth";
+import { AuthShell, Brandmark } from "../auth/AuthShell";
 
-// Browser timezone detected via Intl.DateTimeFormat().resolvedOptions().timeZone
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 function getTimezoneList(): string[] {
   try {
-    return Intl.supportedValuesOf('timeZone');
+    return Intl.supportedValuesOf("timeZone");
   } catch {
     return [browserTimezone];
   }
@@ -34,179 +35,180 @@ function getTimezoneList(): string[] {
 export default function SetupPage() {
   const navigate = useNavigate();
   const setupMutation = useSetup();
+  const loginMutation = useLogin();
   const [serverError, setServerError] = useState<string | null>(null);
-  const [timezoneFilter, setTimezoneFilter] = useState('');
-
   const allTimezones = useMemo(() => getTimezoneList(), []);
-
-  const filteredTimezones = useMemo(() => {
-    if (!timezoneFilter) return allTimezones;
-    const lower = timezoneFilter.toLowerCase();
-    return allTimezones.filter((tz) => tz.toLowerCase().includes(lower));
-  }, [allTimezones, timezoneFilter]);
 
   const form = useForm<SetupInput>({
     resolver: zodResolver(setupSchema),
     defaultValues: {
-      email: '',
-      password: '',
-      confirmPassword: '',
+      email: "",
+      password: "",
+      confirmPassword: "",
       timezone: browserTimezone,
     },
-    mode: 'onBlur',
+    mode: "onBlur",
   });
 
-  const passwordValue = form.watch('password');
+  const passwordValue = form.watch("password");
   const passwordLength = passwordValue?.length ?? 0;
+  const isSubmitting = setupMutation.isPending || loginMutation.isPending;
 
   async function onSubmit(data: SetupInput) {
     setServerError(null);
     try {
       await setupMutation.mutateAsync(data);
-      toast.success('Account created. Sign in to continue.');
-      navigate('/login');
-    } catch (err: unknown) {
-      const error = err as { status?: number };
-      if (error.status === 403) {
-        setServerError('exists');
+      await loginMutation.mutateAsync({
+        email: data.email,
+        password: data.password,
+      });
+      toast.success("Account created. Welcome aboard.");
+      navigate("/dashboard", { replace: true });
+    } catch (error: unknown) {
+      const typedError = error as {
+        status?: number;
+        body?: { error?: string };
+      };
+      if (typedError.status === 403) {
+        setServerError("exists");
       } else {
-        setServerError('generic');
+        setServerError(
+          typedError.body?.error ?? "Something went wrong. Please try again.",
+        );
       }
     }
   }
 
   return (
-    <main>
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-[400px]">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold">
-              Welcome to Social Media Scheduler
-            </CardTitle>
-            <CardDescription>Create your account to get started.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {serverError === 'exists' && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>
-                  Account already exists.{' '}
-                  <Link to="/login" className="underline">
-                    Sign in instead.
-                  </Link>
-                </AlertDescription>
-              </Alert>
-            )}
-            {serverError === 'generic' && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>Something went wrong. Please try again.</AlertDescription>
-              </Alert>
-            )}
-
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" autoComplete="email" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input type="password" autoComplete="new-password" {...field} />
-                      </FormControl>
-                      <p
-                        className={`text-sm ${
-                          passwordLength >= 12 ? 'text-success' : 'text-muted-foreground'
-                        }`}
-                      >
-                        {passwordLength} / 12 minimum
-                      </p>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <Input type="password" autoComplete="new-password" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="timezone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Timezone</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input
-                            type="text"
-                            placeholder="Search timezones..."
-                            value={timezoneFilter}
-                            onChange={(e) => {
-                              setTimezoneFilter(e.target.value);
-                              const match = allTimezones.find(
-                                (tz) => tz.toLowerCase() === e.target.value.toLowerCase()
-                              );
-                              if (match) field.onChange(match);
-                            }}
-                            onFocus={() => setTimezoneFilter('')}
-                            list="timezone-list"
-                            autoComplete="off"
-                          />
-                          <datalist id="timezone-list">
-                            {filteredTimezones.slice(0, 50).map((tz) => (
-                              <option key={tz} value={tz} />
-                            ))}
-                          </datalist>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Selected: {field.value}
-                          </p>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={!form.formState.isValid || setupMutation.isPending}
-                  aria-busy={setupMutation.isPending}
-                >
-                  {setupMutation.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Create Account
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+    <AuthShell widthClassName="max-w-[460px]" showHeader={false}>
+      <div className="mb-4 flex justify-center">
+        <Brandmark className="h-14 w-14 text-lg" />
       </div>
-    </main>
+
+      <Card className="rounded-md border-border bg-card p-5 shadow-[var(--shadow-sm)]">
+        <h1 className="text-xl font-semibold">Welcome aboard</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          One-time setup. You own this deployment — no SaaS layer.
+        </p>
+
+        {serverError === "exists" && (
+          <Banner tone="danger" className="mt-4">
+            Account already exists.{" "}
+            <Link to="/login" className="font-medium underline">
+              Sign in instead.
+            </Link>
+          </Banner>
+        )}
+        {serverError && serverError !== "exists" && (
+          <Banner tone="danger" className="mt-4">
+            {serverError}
+          </Banner>
+        )}
+
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="mt-4 space-y-3"
+          >
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      autoComplete="email"
+                      disabled={isSubmitting}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      autoComplete="new-password"
+                      disabled={isSubmitting}
+                      {...field}
+                    />
+                  </FormControl>
+                  <p
+                    className={
+                      passwordLength >= 12
+                        ? "text-xs text-success"
+                        : "text-xs text-muted-foreground"
+                    }
+                  >
+                    12 character minimum
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Confirm password</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      autoComplete="new-password"
+                      disabled={isSubmitting}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="timezone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Timezone</FormLabel>
+                  <FormControl>
+                    <NativeSelect disabled={isSubmitting} {...field}>
+                      {allTimezones.map((timezone) => (
+                        <option key={timezone} value={timezone}>
+                          {timezone}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Button
+              type="submit"
+              variant="primary"
+              className="h-9 w-full"
+              disabled={!form.formState.isValid || isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              Create account
+            </Button>
+          </form>
+        </Form>
+      </Card>
+    </AuthShell>
   );
 }

@@ -1,40 +1,89 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  recoveryVerifyEmailSchema,
   recoveryResetPasswordSchema,
+  recoveryVerifyEmailSchema,
   SECURITY_QUESTIONS,
-  type RecoveryVerifyEmailInput,
   type RecoveryResetPasswordInput,
-} from '@sms/shared';
-import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+  type RecoveryVerifyEmailInput,
+} from "@sms/shared";
+import { Loader2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 
-import { apiClient } from '@/lib/api-client';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Label } from '@/components/ui/label';
+import { Banner } from "@/components/ui/banner";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Form,
+  FormControl,
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
-} from '@/components/ui/form';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { apiClient } from "@/lib/api-client";
+import { AuthShell } from "../auth/AuthShell";
 
-type Step = 'email' | 'questions' | 'reset';
+type Step = "email" | "questions" | "reset";
+
+const stepNumber: Record<Step, number> = {
+  email: 1,
+  questions: 2,
+  reset: 3,
+};
+
+function getStepCopy(step: Step) {
+  if (step === "email") {
+    return {
+      title: "Confirm your email",
+      subtitle: "We'll match this against your account.",
+    };
+  }
+  if (step === "questions") {
+    return {
+      title: "Answer security questions",
+      subtitle: "These answers verify that you own this deployment.",
+    };
+  }
+  return {
+    title: "Set a new password",
+    subtitle: "12+ characters. Choose something memorable.",
+  };
+}
+
+function getServerMessage(error: unknown, fallback: string): string {
+  const typedError = error as { body?: { error?: string } };
+  return typedError.body?.error ?? fallback;
+}
+
+function StepIndicator({ step }: { step: Step }) {
+  const activeStep = stepNumber[step];
+  return (
+    <div className="mb-4 grid grid-cols-3 gap-1">
+      {[1, 2, 3].map((segment) => (
+        <div
+          key={segment}
+          className={
+            segment <= activeStep
+              ? "h-1 rounded-full bg-[var(--brand-accent)]"
+              : "h-1 rounded-full bg-[var(--bg-active)]"
+          }
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function RecoverPage() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>('email');
-  const [email, setEmail] = useState('');
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
   const [questionIndices, setQuestionIndices] = useState<number[]>([]);
-  const [answers, setAnswers] = useState<string[]>(['', '', '']);
+  const [answers, setAnswers] = useState<string[]>(["", "", ""]);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
   const [resetError, setResetError] = useState<string | null>(null);
@@ -42,59 +91,56 @@ export default function RecoverPage() {
 
   const emailForm = useForm<RecoveryVerifyEmailInput>({
     resolver: zodResolver(recoveryVerifyEmailSchema),
-    defaultValues: { email: '' },
-    mode: 'onBlur',
+    defaultValues: { email: "" },
+    mode: "onBlur",
   });
 
   const resetForm = useForm<RecoveryResetPasswordInput>({
     resolver: zodResolver(recoveryResetPasswordSchema),
-    defaultValues: { newPassword: '', confirmNewPassword: '' },
-    mode: 'onBlur',
+    defaultValues: { newPassword: "", confirmNewPassword: "" },
+    mode: "onBlur",
   });
 
-  const newPasswordValue = resetForm.watch('newPassword');
+  const newPasswordValue = resetForm.watch("newPassword");
   const newPasswordLength = newPasswordValue?.length ?? 0;
+  const copy = getStepCopy(step);
 
   function resetToStep1(message?: string) {
-    setStep('email');
-    setEmail('');
+    setStep("email");
+    setEmail("");
     setQuestionIndices([]);
-    setAnswers(['', '', '']);
-    setEmailError(null);
+    setAnswers(["", "", ""]);
+    setEmailError(message ?? null);
     setQuestionsError(null);
     setResetError(null);
     emailForm.reset();
     resetForm.reset();
-    if (message) {
-      setEmailError(message);
-    }
   }
 
   async function onEmailSubmit(data: RecoveryVerifyEmailInput) {
     setEmailError(null);
     setIsSubmitting(true);
     try {
-      const result = await apiClient.post<{ questionsConfigured: boolean; questionIndices?: number[] }>(
-        '/api/auth/recover/verify-email',
-        data
-      );
+      const result = await apiClient.post<{
+        questionsConfigured: boolean;
+        questionIndices?: number[];
+      }>("/api/auth/recover/verify-email", data);
       if (!result.questionsConfigured) {
         setEmailError(
-          'No recovery method configured. Security questions must be set up in Settings before account recovery is available.'
+          "No recovery method configured. Security questions must be set up in Settings before account recovery is available.",
         );
-      } else if (result.questionIndices) {
+        return;
+      }
+      if (result.questionIndices) {
         setEmail(data.email);
         setQuestionIndices(result.questionIndices);
-        setAnswers(new Array(result.questionIndices.length).fill(''));
-        setStep('questions');
+        setAnswers(new Array(result.questionIndices.length).fill(""));
+        setStep("questions");
       }
-    } catch (err: unknown) {
-      const error = err as { status?: number };
-      if (error.status === 429) {
-        setEmailError('Too many failed attempts. Try again in 15 minutes.');
-      } else {
-        setEmailError('Something went wrong. Please try again.');
-      }
+    } catch (error: unknown) {
+      setEmailError(
+        getServerMessage(error, "Something went wrong. Please try again."),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -104,24 +150,25 @@ export default function RecoverPage() {
     setQuestionsError(null);
     setIsSubmitting(true);
     try {
-      await apiClient.post('/api/auth/recover/verify-answers', {
+      await apiClient.post("/api/auth/recover/verify-answers", {
         email,
         answers,
       });
-      setStep('reset');
-    } catch (err: unknown) {
-      const error = err as { status?: number; body?: { error?: string } };
+      setStep("reset");
+    } catch (error: unknown) {
+      const typedError = error as {
+        status?: number;
+        body?: { error?: string };
+      };
       if (
-        error.status === 401 &&
-        error.body?.error?.toLowerCase().includes('start over')
+        typedError.status === 401 &&
+        typedError.body?.error?.toLowerCase().includes("start over")
       ) {
-        resetToStep1('Recovery session expired. Please start over.');
-      } else if (error.status === 401) {
-        setQuestionsError('Incorrect answers. Please try again.');
-      } else if (error.status === 429) {
-        setQuestionsError('Too many failed attempts. Try again in 15 minutes.');
+        resetToStep1("Recovery session expired. Please start over.");
       } else {
-        setQuestionsError('Something went wrong. Please try again.');
+        setQuestionsError(
+          getServerMessage(error, "Something went wrong. Please try again."),
+        );
       }
     } finally {
       setIsSubmitting(false);
@@ -132,239 +179,231 @@ export default function RecoverPage() {
     setResetError(null);
     setIsSubmitting(true);
     try {
-      await apiClient.post('/api/auth/recover/reset-password', data);
-      toast.success(
-        'Password reset. 2FA has been disabled. Sign in with your new password.'
-      );
-      navigate('/login');
-    } catch (err: unknown) {
-      const error = err as { status?: number; body?: { error?: string } };
+      await apiClient.post("/api/auth/recover/reset-password", data);
+      toast.success("Password updated. Sign in with your new credentials.");
+      navigate("/login");
+    } catch (error: unknown) {
+      const typedError = error as {
+        status?: number;
+        body?: { error?: string };
+      };
       if (
-        error.status === 401 &&
-        error.body?.error?.toLowerCase().includes('start over')
+        typedError.status === 401 &&
+        typedError.body?.error?.toLowerCase().includes("start over")
       ) {
-        resetToStep1('Recovery session expired. Please start over.');
-      } else if (error.status === 429) {
-        setResetError('Too many failed attempts. Try again in 15 minutes.');
+        resetToStep1("Recovery session expired. Please start over.");
       } else {
-        setResetError('Something went wrong. Please try again.');
+        setResetError(
+          getServerMessage(error, "Something went wrong. Please try again."),
+        );
       }
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  function handleBack() {
+    if (step === "email") {
+      navigate("/login");
+      return;
+    }
+    if (step === "questions") {
+      setQuestionsError(null);
+      setStep("email");
+      return;
+    }
+    setResetError(null);
+    setStep("questions");
+  }
+
   return (
-    <main>
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-[400px]">
-          {step === 'email' && (
-            <>
-              <CardHeader>
-                <div aria-live="polite">
-                  <CardTitle className="text-2xl font-semibold">
-                    Account Recovery
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  Answer your security questions to reset your password.
-                </p>
-
-                {emailError && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertDescription>{emailError}</AlertDescription>
-                  </Alert>
-                )}
-
-                <Form {...emailForm}>
-                  <form
-                    onSubmit={emailForm.handleSubmit(onEmailSubmit)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={emailForm.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input type="email" autoComplete="email" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={isSubmitting}
-                      aria-busy={isSubmitting}
-                    >
-                      {isSubmitting && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      Continue
-                    </Button>
-                  </form>
-                </Form>
-
-                <div className="mt-4 text-center">
-                  <a
-                    href="/login"
-                    className="text-sm text-muted-foreground hover:text-foreground underline"
-                  >
-                    Back to login
-                  </a>
-                </div>
-              </CardContent>
-            </>
-          )}
-
-          {step === 'questions' && (
-            <>
-              <CardHeader>
-                <div aria-live="polite">
-                  <CardTitle className="text-2xl font-semibold">
-                    Security Questions
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {questionsError && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertDescription>{questionsError}</AlertDescription>
-                  </Alert>
-                )}
-
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    onQuestionsSubmit();
-                  }}
-                  className="space-y-4"
-                >
-                  {questionIndices.map((qIndex, i) => (
-                    <div key={qIndex} className="space-y-2">
-                      <Label className="text-sm font-medium">
-                        {SECURITY_QUESTIONS[qIndex]}
-                      </Label>
-                      <Input
-                        type="text"
-                        autoComplete="off"
-                        value={answers[i]}
-                        onChange={(e) => {
-                          const updated = [...answers];
-                          updated[i] = e.target.value;
-                          setAnswers(updated);
-                        }}
-                        required
-                      />
-                    </div>
-                  ))}
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isSubmitting || answers.some((a) => !a.trim())}
-                    aria-busy={isSubmitting}
-                  >
-                    {isSubmitting && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Verify Answers
-                  </Button>
-                </form>
-              </CardContent>
-            </>
-          )}
-
-          {step === 'reset' && (
-            <>
-              <CardHeader>
-                <div aria-live="polite">
-                  <CardTitle className="text-2xl font-semibold">
-                    Set New Password
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {resetError && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertDescription>{resetError}</AlertDescription>
-                  </Alert>
-                )}
-
-                <Form {...resetForm}>
-                  <form
-                    onSubmit={resetForm.handleSubmit(onResetSubmit)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={resetForm.control}
-                      name="newPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>New Password</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="password"
-                              autoComplete="new-password"
-                              {...field}
-                            />
-                          </FormControl>
-                          <p
-                            className={`text-sm ${
-                              newPasswordLength >= 12
-                                ? 'text-success'
-                                : 'text-muted-foreground'
-                            }`}
-                          >
-                            {newPasswordLength} / 12 minimum
-                          </p>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={resetForm.control}
-                      name="confirmNewPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Confirm New Password</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="password"
-                              autoComplete="new-password"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={!resetForm.formState.isValid || isSubmitting}
-                      aria-busy={isSubmitting}
-                    >
-                      {isSubmitting && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      Reset Password
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </>
-          )}
-        </Card>
+    <AuthShell widthClassName="max-w-[420px]" showHeader={false}>
+      <div className="mb-4 flex justify-center">
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground shadow-[var(--shadow-md)]">
+          C&amp;M
+        </div>
       </div>
-    </main>
+
+      <Card className="rounded-md border-border bg-card p-4 shadow-[var(--shadow-sm)]">
+        <StepIndicator step={step} />
+        <p className="mono text-[11px] font-medium uppercase text-muted-foreground">
+          Step {stepNumber[step]} of 3
+        </p>
+        <h1 className="mt-1 text-lg font-semibold">{copy.title}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
+
+        <div className="mt-4">
+          {step === "email" && (
+            <Form {...emailForm}>
+              <form
+                onSubmit={emailForm.handleSubmit(onEmailSubmit)}
+                className="space-y-4"
+              >
+                {emailError && <Banner tone="danger">{emailError}</Banner>}
+                <FormField
+                  control={emailForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          autoComplete="email"
+                          disabled={isSubmitting}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <RecoveryFooter
+                  onBack={handleBack}
+                  isSubmitting={isSubmitting}
+                  continueLabel="Continue"
+                />
+              </form>
+            </Form>
+          )}
+
+          {step === "questions" && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onQuestionsSubmit();
+              }}
+              className="space-y-4"
+            >
+              {questionsError && (
+                <Banner tone="danger">{questionsError}</Banner>
+              )}
+              {questionIndices.map((questionIndex, index) => (
+                <div key={questionIndex} className="space-y-1.5">
+                  <Label htmlFor={`answer-${questionIndex}`}>
+                    {SECURITY_QUESTIONS[questionIndex]}
+                  </Label>
+                  <Input
+                    id={`answer-${questionIndex}`}
+                    type="text"
+                    autoComplete="off"
+                    value={answers[index]}
+                    onChange={(event) => {
+                      const updatedAnswers = [...answers];
+                      updatedAnswers[index] = event.target.value;
+                      setAnswers(updatedAnswers);
+                    }}
+                    disabled={isSubmitting}
+                    required
+                  />
+                </div>
+              ))}
+              <RecoveryFooter
+                onBack={handleBack}
+                isSubmitting={isSubmitting}
+                continueLabel="Verify answers"
+                disabled={answers.some((answer) => !answer.trim())}
+              />
+            </form>
+          )}
+
+          {step === "reset" && (
+            <Form {...resetForm}>
+              <form
+                onSubmit={resetForm.handleSubmit(onResetSubmit)}
+                className="space-y-4"
+              >
+                {resetError && <Banner tone="danger">{resetError}</Banner>}
+                <FormField
+                  control={resetForm.control}
+                  name="newPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>New password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          autoComplete="new-password"
+                          disabled={isSubmitting}
+                          {...field}
+                        />
+                      </FormControl>
+                      <p
+                        className={
+                          newPasswordLength >= 12
+                            ? "text-xs text-success"
+                            : "text-xs text-muted-foreground"
+                        }
+                      >
+                        12 character minimum
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={resetForm.control}
+                  name="confirmNewPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm new password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          autoComplete="new-password"
+                          disabled={isSubmitting}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <RecoveryFooter
+                  onBack={handleBack}
+                  isSubmitting={isSubmitting}
+                  continueLabel="Reset password"
+                  disabled={!resetForm.formState.isValid}
+                />
+              </form>
+            </Form>
+          )}
+        </div>
+      </Card>
+    </AuthShell>
   );
 }
+
+interface RecoveryFooterProps {
+  onBack: () => void;
+  isSubmitting: boolean;
+  continueLabel: string;
+  disabled?: boolean;
+}
+
+function RecoveryFooter({
+  onBack,
+  isSubmitting,
+  continueLabel,
+  disabled = false,
+}: RecoveryFooterProps) {
+  return (
+    <div className="flex items-center justify-between pt-1">
+      <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+        Back
+      </Button>
+      <Button
+        type="submit"
+        variant="primary"
+        size="sm"
+        disabled={isSubmitting || disabled}
+        aria-busy={isSubmitting}
+      >
+        {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        {continueLabel}
+      </Button>
+    </div>
+  );
+}
+
+export { StepIndicator };
