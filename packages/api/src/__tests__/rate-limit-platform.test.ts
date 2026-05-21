@@ -35,9 +35,14 @@ function buildProfileMockDb(profile: {
     platform: profile.platform,
   };
 
+  const updateChain = {
+    set: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValue([]),
+  };
+
   const db: any = {
     execute: vi.fn().mockResolvedValue([aliasedRow]),
-    update: vi.fn(),
+    update: vi.fn().mockReturnValue(updateChain),
     transaction: vi
       .fn()
       .mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
