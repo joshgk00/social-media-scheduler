@@ -4,31 +4,23 @@ import multer from 'multer';
 import { DateTime } from 'luxon';
 import { and, eq } from 'drizzle-orm';
 import { bulkImportRequestSchema, csvQueueRowSchema, csvScheduledRowSchema, JOB_NAMES } from '@sms/shared';
-import { bulkOperations, queues, socialProfiles } from '@sms/db';
+import { queues, socialProfiles } from '@sms/db';
 import type { Db } from '@sms/db';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { bulkOperationsLimiter } from '../middleware/rate-limiter.js';
 import { csvUpload } from '../middleware/csv-upload.js';
 import { checkBulkBudgetWithDb } from '../services/rate-limit.service.js';
-import { CsvParseError, parseCsvBuffer, writeErrorReport } from '../services/bulk-import.service.js';
+import { CsvParseError, parseCsvBuffer } from '../services/bulk-import.service.js';
 import type { CsvRowError } from '../services/bulk-import.service.js';
-import type { BulkOpsQueueService } from '../services/bulk-ops-queue.service.js';
+import { InvalidIdempotencyKeyError, type BulkOperationFactory } from '../services/bulk-operation.factory.js';
 
 interface BulkImportRouterDeps {
   db: Db;
-  bulkOpsQueueService: BulkOpsQueueService;
+  bulkOperationFactory: BulkOperationFactory;
 }
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function requestCorrelationId(req: { id?: string }): string {
   return req.id ?? randomUUID();
-}
-
-function parseIdempotencyKey(rawHeader: string | undefined): string | null {
-  if (rawHeader === undefined) return randomUUID();
-  const idempotencyKey = rawHeader.trim();
-  return UUID_PATTERN.test(idempotencyKey) ? idempotencyKey : null;
 }
 
 function csvValidationDetails(errors: CsvRowError[]) {
@@ -70,7 +62,7 @@ function rejectInvalidCsv(res: Response, parsedCsv: { rows: unknown[]; errors: C
   return false;
 }
 
-export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRouterDeps): Router {
+export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportRouterDeps): Router {
   const router = Router();
 
   router.post(
@@ -79,11 +71,6 @@ export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRo
     bulkOperationsLimiter,
     csvUpload.single('file'),
     async (req, res) => {
-      if (!req.file) {
-        res.status(400).json({ error: 'CSV file is required' });
-        return;
-      }
-
       const parsedBody = bulkImportRequestSchema.safeParse(req.body);
       if (!parsedBody.success) {
         res.status(400).json({ error: 'Validation failed', details: parsedBody.error.issues });
@@ -92,25 +79,27 @@ export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRo
 
       const userId = req.session.userId!;
       const { target, profileId, queueId } = parsedBody.data;
-      const idempotencyKey = parseIdempotencyKey(req.get('Idempotency-Key'));
-      if (!idempotencyKey) {
-        res.status(400).json({ error: 'Invalid Idempotency-Key header' });
-        return;
+      const idempotencyKey = req.get('Idempotency-Key');
+
+      try {
+        const replayedBulkOperation = await bulkOperationFactory.findExistingBulkOperation({
+          userId,
+          idempotencyKey,
+        });
+        if (replayedBulkOperation) {
+          res.status(202).json(replayedBulkOperation);
+          return;
+        }
+      } catch (err) {
+        if (err instanceof InvalidIdempotencyKeyError) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        throw err;
       }
 
-      const [existingBulkOperation] = await db
-        .select({ id: bulkOperations.id })
-        .from(bulkOperations)
-        .where(and(
-          eq(bulkOperations.userId, userId),
-          eq(bulkOperations.idempotencyKey, idempotencyKey),
-        ));
-      if (existingBulkOperation) {
-        res.status(202).json({
-          bulkOperationId: existingBulkOperation.id,
-          jobId: null,
-          replay: true,
-        });
+      if (!req.file) {
+        res.status(400).json({ error: 'CSV file is required' });
         return;
       }
 
@@ -192,14 +181,14 @@ export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRo
         ? JOB_NAMES.bulkCsvImportScheduled
         : JOB_NAMES.bulkCsvImportQueue;
       const targetId = target === 'scheduled' ? profileId : queueId!;
-      const [bulkOperation] = await db
-        .insert(bulkOperations)
-        .values({
+
+      try {
+        const bulkOperation = await bulkOperationFactory.startBulkOperation({
           userId,
+          idempotencyKey,
           operationType,
           targetKind: target === 'scheduled' ? 'profile' : 'queue',
           targetId,
-          idempotencyKey,
           payload: {
             target,
             profileId,
@@ -208,44 +197,27 @@ export function createBulkImportRouter({ db, bulkOpsQueueService }: BulkImportRo
             parsedCount: parsedCsv.rows.length,
             errorCount: parsedCsv.errors.length,
           },
-        })
-        .returning();
-
-      const errorReportPath = await writeErrorReport(
-        process.env.MEDIA_DIR || './data/media',
-        bulkOperation.id,
-        parsedCsv.errors,
-      );
-      if (errorReportPath) {
-        await db
-          .update(bulkOperations)
-          .set({ errorReportPath, failureCount: parsedCsv.errors.length })
-          .where(eq(bulkOperations.id, bulkOperation.id));
-      }
-
-      const job = await bulkOpsQueueService.enqueueBulkOp(
-        operationType,
-        {
-          bulkOperationId: bulkOperation.id,
-          userId,
-          operationType,
-          targetKind: target === 'scheduled' ? 'profile' : 'queue',
-          targetId,
-          idempotencyKey,
           params: target === 'scheduled'
             ? { profileId, rows: parsedCsv.rows, errors: parsedCsv.errors }
             : { profileId, queueId, rows: parsedCsv.rows, errors: parsedCsv.errors },
           correlationId: requestCorrelationId(req as { id?: string }),
-        },
-        Math.floor(Date.now() / 1000),
-      );
+        });
 
-      res.status(202).json({
-        bulkOperationId: bulkOperation.id,
-        jobId: job.id,
-        parsedCount: parsedCsv.rows.length,
-        errorCount: parsedCsv.errors.length,
-      });
+        res.status(202).json(bulkOperation.replay
+          ? bulkOperation
+          : {
+              bulkOperationId: bulkOperation.bulkOperationId,
+              jobId: bulkOperation.jobId,
+              parsedCount: parsedCsv.rows.length,
+              errorCount: parsedCsv.errors.length,
+            });
+      } catch (err) {
+        if (err instanceof InvalidIdempotencyKeyError) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
     },
   );
 

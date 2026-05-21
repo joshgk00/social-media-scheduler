@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
+import { JOB_NAMES } from '@sms/shared';
 import { createApp } from '../../app.js';
 import { createMockRedis } from '../helpers/mock-redis.js';
 import type { RequestHandler } from 'express';
+import type { BulkOpsQueueService } from '../../services/bulk-ops-queue.service.js';
 
 const mockCreateQueue = vi.fn();
 const mockUpdateQueue = vi.fn();
@@ -145,7 +147,7 @@ function createMockSql() {
 function createMockDb() {
   const chainable = (terminal: unknown = []) => {
     const chain: Record<string, any> = {};
-    const methods = ['from', 'where', 'values', 'returning', 'set', 'limit', 'offset', 'orderBy', 'innerJoin', 'leftJoin', 'groupBy'];
+    const methods = ['from', 'where', 'values', 'onConflictDoNothing', 'returning', 'set', 'limit', 'offset', 'orderBy', 'innerJoin', 'leftJoin', 'groupBy'];
     for (const method of methods) {
       chain[method] = vi.fn().mockReturnValue(chain);
     }
@@ -162,17 +164,17 @@ function createMockDb() {
   } as any;
 }
 
-function createTestApp() {
+function createTestApp(args: { db?: any; bulkOpsQueueService?: BulkOpsQueueService } = {}) {
   return createApp({
     redis: createMockRedis(),
     sql: createMockSql(),
-    db: createMockDb(),
+    db: args.db ?? createMockDb(),
     sessionSecret: 'test-secret-that-is-long-enough-for-session',
+    bulkOpsQueueService: args.bulkOpsQueueService,
   });
 }
 
-async function authenticatedAgent() {
-  const app = createTestApp();
+async function authenticatedAgent(app = createTestApp()) {
   const agent = request.agent(app);
 
   mockUserExists.mockResolvedValueOnce(true);
@@ -248,6 +250,16 @@ const SAMPLE_QUEUE_LIST_ITEM = {
   notes: null,
   postCount: 3,
 };
+
+function resolvedChain<T>(terminal: T) {
+  const chain: Record<string, any> = {};
+  for (const method of ['from', 'where', 'values', 'onConflictDoNothing', 'returning']) {
+    chain[method] = vi.fn().mockReturnValue(chain);
+  }
+  chain.then = (resolve: (value: T) => void, reject?: (error: unknown) => void) =>
+    Promise.resolve(terminal).then(resolve, reject);
+  return chain;
+}
 
 describe('queues routes', () => {
   beforeEach(() => {
@@ -517,6 +529,86 @@ describe('queues routes', () => {
         QUEUE_ID,
         { search: 'announcement' },
       );
+    });
+  });
+
+  describe('queue bulk operations', () => {
+    it('uses the bulk operation factory path for randomize operations', async () => {
+      const bulkOperationId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const idempotencyKey = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const select = vi.fn()
+        .mockReturnValueOnce(resolvedChain([{ id: QUEUE_ID, name: SAMPLE_QUEUE.name, userId: 'user-1' }]))
+        .mockReturnValueOnce(resolvedChain([]));
+      const insertChain = resolvedChain([{ id: bulkOperationId }]);
+      const db = {
+        select,
+        insert: vi.fn().mockReturnValue(insertChain),
+        update: vi.fn().mockReturnValue(resolvedChain([])),
+        delete: vi.fn().mockReturnValue(resolvedChain([])),
+        transaction: vi.fn(),
+      };
+      const bulkOpsQueueService: BulkOpsQueueService = {
+        bulkOpsQueue: {} as never,
+        enqueueBulkOp: vi.fn().mockResolvedValue({ id: 'job-1' } as never),
+      };
+      const app = createTestApp({ db, bulkOpsQueueService });
+      const agent = await authenticatedAgent(app);
+
+      const res = await agent
+        .post(`/api/queues/${QUEUE_ID}/randomize`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send({});
+
+      expect(res.status).toBe(202);
+      expect(res.body).toEqual({ bulkOperationId, jobId: 'job-1', replay: false });
+      expect(db.insert).toHaveBeenCalledTimes(1);
+      expect(insertChain.values).toHaveBeenCalledWith({
+        userId: 'user-1',
+        operationType: JOB_NAMES.bulkQueueRandomize,
+        targetKind: 'queue',
+        targetId: QUEUE_ID,
+        idempotencyKey,
+        payload: {},
+      });
+      expect(bulkOpsQueueService.enqueueBulkOp).toHaveBeenCalledWith(
+        JOB_NAMES.bulkQueueRandomize,
+        expect.objectContaining({
+          bulkOperationId,
+          userId: 'user-1',
+          operationType: JOB_NAMES.bulkQueueRandomize,
+          targetKind: 'queue',
+          targetId: QUEUE_ID,
+          idempotencyKey,
+          params: {},
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('returns 400 when a queue bulk operation has an invalid idempotency key', async () => {
+      const db = {
+        select: vi.fn().mockReturnValueOnce(resolvedChain([{ id: QUEUE_ID, name: SAMPLE_QUEUE.name, userId: 'user-1' }])),
+        insert: vi.fn().mockReturnValue(resolvedChain([])),
+        update: vi.fn().mockReturnValue(resolvedChain([])),
+        delete: vi.fn().mockReturnValue(resolvedChain([])),
+        transaction: vi.fn(),
+      };
+      const bulkOpsQueueService: BulkOpsQueueService = {
+        bulkOpsQueue: {} as never,
+        enqueueBulkOp: vi.fn(),
+      };
+      const app = createTestApp({ db, bulkOpsQueueService });
+      const agent = await authenticatedAgent(app);
+
+      const res = await agent
+        .post(`/api/queues/${QUEUE_ID}/randomize`)
+        .set('Idempotency-Key', 'not-a-uuid')
+        .send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: 'Invalid Idempotency-Key header' });
+      expect(db.insert).not.toHaveBeenCalled();
+      expect(bulkOpsQueueService.enqueueBulkOp).not.toHaveBeenCalled();
     });
   });
 

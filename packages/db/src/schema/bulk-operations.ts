@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, uuid, text, varchar, timestamp, integer, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, pgEnum, uuid, text, varchar, timestamp, integer, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users.js';
 
@@ -38,7 +38,9 @@ export const bulkOperations = pgTable(
   (table) => [
     index('bulk_operations_user_status_idx').on(table.userId, table.status),
     index('bulk_operations_user_created_idx').on(table.userId, table.createdAt.desc()),
-    index('bulk_operations_idempotency_idx').on(table.idempotencyKey),
+    uniqueIndex('bulk_operations_user_idempotency_uniq')
+      .on(table.userId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
   ],
 );
 
