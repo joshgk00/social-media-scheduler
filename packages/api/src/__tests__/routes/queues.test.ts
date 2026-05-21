@@ -294,12 +294,12 @@ describe('queues routes', () => {
       expect(res.body).toHaveProperty('error', 'Validation failed');
     });
 
-    it('returns 400 when hourSlots has value outside 6-23 range', async () => {
+    it('returns 400 when hourSlots has value outside 0-23 range', async () => {
       const agent = await authenticatedAgent();
 
       const res = await agent
         .post('/api/queues')
-        .send({ ...VALID_QUEUE_INPUT, hourSlots: [5, 9, 12] });
+        .send({ ...VALID_QUEUE_INPUT, hourSlots: [9, 12, 24] });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error', 'Validation failed');

@@ -20,7 +20,7 @@ export const createQueueSchema = z.object({
   intervalValue: z.number().int().min(1).max(999),
   intervalUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months', 'years']),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'At least one day required'),
-  hourSlots: z.array(z.number().int().min(6).max(23)).min(1, 'At least one hour slot required'),
+  hourSlots: z.array(z.number().int().min(0).max(23)).min(1, 'At least one hour slot required'),
   startDate: startDateSchema.optional(),
   seasonalStart: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional(),
   seasonalEnd: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional(),
@@ -29,7 +29,9 @@ export const createQueueSchema = z.object({
   notes: z.string().max(10000).optional(),
 });
 
-export const updateQueueSchema = createQueueSchema.partial();
+export const updateQueueSchema = createQueueSchema.partial().extend({
+  isPaused: z.boolean().optional(),
+});
 
 export const queueQuerySchema = z.object({
   network: z.enum(['twitter', 'all']).default('all'),

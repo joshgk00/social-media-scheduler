@@ -131,6 +131,7 @@ export async function updateQueue(
   if (input.seasonalEnd !== undefined) queuePatch.seasonalEnd = input.seasonalEnd;
   if (input.seasonalRepeat !== undefined) queuePatch.seasonalRepeat = input.seasonalRepeat;
   if (input.isRecycling !== undefined) queuePatch.isRecycling = input.isRecycling;
+  if (input.isPaused !== undefined) queuePatch.isPaused = input.isPaused;
   if (input.notes !== undefined) queuePatch.notes = input.notes;
 
   const effectiveIntervalType = (input.intervalType ?? existingQueue.intervalType) as string;
@@ -198,7 +199,11 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
         name: queues.name,
         profileId: queues.profileId,
         profileName: socialProfiles.displayName,
+        profileHandle: socialProfiles.handle,
         network: socialProfiles.platform,
+        intervalType: queues.intervalType,
+        intervalValue: queues.intervalValue,
+        intervalUnit: queues.intervalUnit,
         isPaused: queues.isPaused,
         isRecycling: queues.isRecycling,
         lastPublishedAt: queues.lastPublishedAt,
@@ -245,7 +250,7 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
       const postCount = postCountMap.get(q.id) ?? 0;
       switch (filters.status) {
         case 'active':
-          return !q.isPaused && postCount > 0;
+          return !q.isPaused;
         case 'paused':
           return q.isPaused;
         case 'empty':
@@ -256,9 +261,9 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
     });
   }
 
-  return filteredQueues.map(({ profileName, network, ...q }) => ({
+  return filteredQueues.map(({ profileName, profileHandle, network, ...q }) => ({
     ...q,
-    profile: profileName ? { displayName: profileName, platform: network } : undefined,
+    profile: profileName ? { displayName: profileName, handle: profileHandle, platform: network } : undefined,
     postCount: postCountMap.get(q.id) ?? 0,
   }));
 }

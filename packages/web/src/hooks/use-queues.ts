@@ -5,6 +5,7 @@ import type { CreateQueueInput, UpdateQueueInput } from '@sms/shared';
 
 interface QueueProfile {
   displayName: string;
+  handle?: string | null;
   platform: string;
 }
 
@@ -94,6 +95,18 @@ export function useUpdateQueue() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateQueueInput }) =>
       apiClient.put<QueueDetail>(`/api/queues/${id}`, input),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['queues'] });
+      queryClient.invalidateQueries({ queryKey: ['queues', variables.id] });
+    },
+  });
+}
+
+export function useToggleQueuePaused() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isPaused }: { id: string; isPaused: boolean }) =>
+      apiClient.put<QueueDetail>(`/api/queues/${id}`, { isPaused }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
       queryClient.invalidateQueries({ queryKey: ['queues', variables.id] });

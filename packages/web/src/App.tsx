@@ -16,6 +16,10 @@ const PostsPage = lazy(() => import("./pages/posts/PostsPage"));
 const NewPostPage = lazy(() => import("./pages/posts/NewPostPage"));
 const EditPostPage = lazy(() => import("./pages/posts/EditPostPage"));
 const BulkImportPage = lazy(() => import("./pages/posts/BulkImportPage"));
+const QueuesPage = lazy(() => import("./pages/queues/QueuesPage"));
+const QueueFormPage = lazy(() => import("./pages/queues/QueueDetailPage"));
+const QueueOverviewPage = lazy(() => import("./pages/queues/QueueOverviewPage"));
+const QueuePostsPage = lazy(() => import("./pages/queues/QueuePostsPage"));
 
 export function App() {
   return (
@@ -46,23 +50,23 @@ export function App() {
               <Route path="/posts/:id/edit" element={<EditPostPage />} />
               <Route
                 path="/queues"
-                element={<RedesignPlaceholderPage title="Queues" />}
+                element={<QueuesPage />}
               />
               <Route
                 path="/queues/new"
-                element={<RedesignPlaceholderPage title="Create queue" />}
+                element={<QueueFormPage />}
               />
               <Route
                 path="/queues/:id"
-                element={<RedesignPlaceholderPage title="Queue detail" />}
+                element={<QueueOverviewPage />}
               />
               <Route
                 path="/queues/:id/edit"
-                element={<RedesignPlaceholderPage title="Edit queue" />}
+                element={<QueueFormPage />}
               />
               <Route
                 path="/queues/:id/posts"
-                element={<RedesignPlaceholderPage title="Queue posts" />}
+                element={<QueuePostsPage />}
               />
               <Route
                 path="/calendar"

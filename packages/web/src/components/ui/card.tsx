@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 const Card = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & {
+  Omit<React.HTMLAttributes<HTMLDivElement>, "title"> & {
     title?: React.ReactNode;
     action?: React.ReactNode;
     padded?: boolean;

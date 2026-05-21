@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { MoreVertical, List, Pencil, Copy, StickyNote, Trash2 } from 'lucide-react';
+import { MoreVertical, List, Pencil, Copy, Pause, Play, Trash2 } from 'lucide-react';
 import type { QueueListItem } from '../../hooks/use-queues';
 import { Button } from '../ui/button';
 import {
@@ -23,12 +23,12 @@ interface QueueActionsMenuProps {
   queue: QueueListItem;
   onDelete: () => void;
   onCopyConfig: () => void;
+  onTogglePause?: () => void;
 }
 
-export function QueueActionsMenu({ queue, onDelete, onCopyConfig }: QueueActionsMenuProps) {
+export function QueueActionsMenu({ queue, onDelete, onCopyConfig, onTogglePause }: QueueActionsMenuProps) {
   const navigate = useNavigate();
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const hasNotes = !!queue.notes;
 
   return (
     <>
@@ -41,19 +41,23 @@ export function QueueActionsMenu({ queue, onDelete, onCopyConfig }: QueueActions
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => navigate(`/queues/${queue.id}/posts`)}>
             <List className="mr-2 h-4 w-4" />
-            View Posts
+            View posts
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => navigate(`/queues/${queue.id}/edit`)}>
             <Pencil className="mr-2 h-4 w-4" />
-            Edit Queue
+            Edit queue
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onCopyConfig}>
             <Copy className="mr-2 h-4 w-4" />
-            Copy Configuration
+            Copy configuration
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={!hasNotes}>
-            <StickyNote className="mr-2 h-4 w-4" />
-            View Notes
+          <DropdownMenuItem onClick={onTogglePause}>
+            {queue.isPaused ? (
+              <Play className="mr-2 h-4 w-4" />
+            ) : (
+              <Pause className="mr-2 h-4 w-4" />
+            )}
+            {queue.isPaused ? 'Resume queue' : 'Pause queue'}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -61,7 +65,7 @@ export function QueueActionsMenu({ queue, onDelete, onCopyConfig }: QueueActions
             onClick={() => setIsDeleteOpen(true)}
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            Delete Queue
+            Delete queue
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
