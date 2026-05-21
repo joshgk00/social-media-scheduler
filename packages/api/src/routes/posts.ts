@@ -191,11 +191,10 @@ export function createPostsRouter({
     return bulkOperationFactory.startBulkOperation({
       userId: args.userId,
       idempotencyKey: args.idempotencyKey,
-      type: args.operationType,
+      operationType: args.operationType,
       targetKind: args.targetKind ?? 'scheduled-list',
       targetId: args.targetId ?? null,
       params: args.params,
-      jobName: args.operationType,
       correlationId: args.correlationId,
     });
   }

@@ -71,11 +71,6 @@ export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportR
     bulkOperationsLimiter,
     csvUpload.single('file'),
     async (req, res) => {
-      if (!req.file) {
-        res.status(400).json({ error: 'CSV file is required' });
-        return;
-      }
-
       const parsedBody = bulkImportRequestSchema.safeParse(req.body);
       if (!parsedBody.success) {
         res.status(400).json({ error: 'Validation failed', details: parsedBody.error.issues });
@@ -84,6 +79,29 @@ export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportR
 
       const userId = req.session.userId!;
       const { target, profileId, queueId } = parsedBody.data;
+      const idempotencyKey = req.get('Idempotency-Key');
+
+      try {
+        const replayedBulkOperation = await bulkOperationFactory.findExistingBulkOperation({
+          userId,
+          idempotencyKey,
+        });
+        if (replayedBulkOperation) {
+          res.status(202).json(replayedBulkOperation);
+          return;
+        }
+      } catch (err) {
+        if (err instanceof InvalidIdempotencyKeyError) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+
+      if (!req.file) {
+        res.status(400).json({ error: 'CSV file is required' });
+        return;
+      }
 
       const [profile] = await db
         .select({ id: socialProfiles.id, platform: socialProfiles.platform })
@@ -165,14 +183,13 @@ export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportR
       try {
         const bulkOperation = await bulkOperationFactory.startBulkOperation({
           userId,
-          idempotencyKey: req.get('Idempotency-Key'),
-          type: operationType,
+          idempotencyKey,
+          operationType,
           targetKind: target === 'scheduled' ? 'profile' : 'queue',
           targetId,
           params: target === 'scheduled'
             ? { profileId, rows: parsedCsv.rows, errors: parsedCsv.errors }
             : { profileId, queueId, rows: parsedCsv.rows, errors: parsedCsv.errors },
-          jobName: operationType,
           correlationId: requestCorrelationId(req as { id?: string }),
         });
 

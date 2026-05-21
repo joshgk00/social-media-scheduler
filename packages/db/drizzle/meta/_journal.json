@@ -78,6 +78,13 @@
       "when": 1778933495000,
       "tag": "0010_post-media-user-id",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779364448000,
+      "tag": "0011_bulk-operation-idempotency-unique",
+      "breakpoints": true
     }
   ]
 }

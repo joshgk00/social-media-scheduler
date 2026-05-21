@@ -88,11 +88,10 @@ export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependenc
     return bulkOperationFactory.startBulkOperation({
       userId: args.userId,
       idempotencyKey: args.idempotencyKey,
-      type: args.operationType,
+      operationType: args.operationType,
       targetKind: 'queue',
       targetId: args.queueId,
       params: args.params,
-      jobName: args.operationType,
       correlationId: args.correlationId,
     });
   }

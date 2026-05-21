@@ -147,7 +147,7 @@ function createMockSql() {
 function createMockDb() {
   const chainable = (terminal: unknown = []) => {
     const chain: Record<string, any> = {};
-    const methods = ['from', 'where', 'values', 'returning', 'set', 'limit', 'offset', 'orderBy', 'innerJoin', 'leftJoin', 'groupBy'];
+    const methods = ['from', 'where', 'values', 'onConflictDoNothing', 'returning', 'set', 'limit', 'offset', 'orderBy', 'innerJoin', 'leftJoin', 'groupBy'];
     for (const method of methods) {
       chain[method] = vi.fn().mockReturnValue(chain);
     }
@@ -253,7 +253,7 @@ const SAMPLE_QUEUE_LIST_ITEM = {
 
 function resolvedChain<T>(terminal: T) {
   const chain: Record<string, any> = {};
-  for (const method of ['from', 'where', 'values', 'returning']) {
+  for (const method of ['from', 'where', 'values', 'onConflictDoNothing', 'returning']) {
     chain[method] = vi.fn().mockReturnValue(chain);
   }
   chain.then = (resolve: (value: T) => void) => resolve(terminal);

@@ -15,11 +15,10 @@ const correlationId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const baseArgs: StartBulkOperationArgs = {
   userId,
   idempotencyKey,
-  type: JOB_NAMES.bulkQueueRandomize,
+  operationType: JOB_NAMES.bulkQueueRandomize,
   targetKind: 'queue',
   targetId,
   params: { mode: 'shuffle' },
-  jobName: JOB_NAMES.bulkQueueRandomize,
   correlationId,
 };
 
@@ -30,24 +29,32 @@ function selectChain(rows: Array<{ id: string }>) {
   return chain;
 }
 
-function insertChain(row: { id: string }, calls: string[]) {
+function insertChain(rows: Array<{ id: string }>, calls: string[]) {
   const chain: Record<string, any> = {};
   chain.values = vi.fn().mockReturnValue(chain);
+  chain.onConflictDoNothing = vi.fn().mockReturnValue(chain);
   chain.returning = vi.fn().mockImplementation(() => {
     calls.push('insert:returning');
-    return Promise.resolve([row]);
+    return Promise.resolve(rows);
   });
   return chain;
 }
 
 function createDb(args: {
   existingRows?: Array<{ id: string }>;
-  insertedRow?: { id: string };
+  existingRowBatches?: Array<Array<{ id: string }>>;
+  insertedRows?: Array<{ id: string }>;
   calls?: string[];
 }) {
+  let selectCalls = 0;
+  const existingRowBatches = args.existingRowBatches ?? [args.existingRows ?? []];
   return {
-    select: vi.fn().mockReturnValue(selectChain(args.existingRows ?? [])),
-    insert: vi.fn().mockReturnValue(insertChain(args.insertedRow ?? { id: bulkOperationId }, args.calls ?? [])),
+    select: vi.fn().mockImplementation(() => {
+      const batch = existingRowBatches[Math.min(selectCalls, existingRowBatches.length - 1)] ?? [];
+      selectCalls += 1;
+      return selectChain(batch);
+    }),
+    insert: vi.fn().mockReturnValue(insertChain(args.insertedRows ?? [{ id: bulkOperationId }], args.calls ?? [])),
     transaction: vi.fn(),
   };
 }
@@ -128,6 +135,42 @@ describe('createBulkOperationFactory', () => {
       jobId: null,
       replay: true,
     });
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(queueService.enqueueBulkOp).not.toHaveBeenCalled();
+  });
+
+  it('returns replay metadata when a concurrent insert wins the idempotency race', async () => {
+    const db = createDb({
+      existingRowBatches: [[], [{ id: bulkOperationId }]],
+      insertedRows: [],
+    });
+    const queueService = createQueueService();
+    const factory = createBulkOperationFactory(db as never, queueService);
+
+    await expect(factory.startBulkOperation(baseArgs)).resolves.toEqual({
+      bulkOperationId,
+      jobId: null,
+      replay: true,
+    });
+
+    expect(db.select).toHaveBeenCalledTimes(2);
+    expect(db.insert).toHaveBeenCalledTimes(1);
+    expect(db.insert.mock.results[0]?.value.onConflictDoNothing).toHaveBeenCalledTimes(1);
+    expect(queueService.enqueueBulkOp).not.toHaveBeenCalled();
+  });
+
+  it('looks up replay metadata without creating a generated idempotency key', async () => {
+    const db = createDb({ existingRows: [{ id: bulkOperationId }] });
+    const queueService = createQueueService();
+    const factory = createBulkOperationFactory(db as never, queueService);
+
+    await expect(factory.findExistingBulkOperation({ userId, idempotencyKey })).resolves.toEqual({
+      bulkOperationId,
+      jobId: null,
+      replay: true,
+    });
+    await expect(factory.findExistingBulkOperation({ userId, idempotencyKey: undefined })).resolves.toBeNull();
+
     expect(db.insert).not.toHaveBeenCalled();
     expect(queueService.enqueueBulkOp).not.toHaveBeenCalled();
   });

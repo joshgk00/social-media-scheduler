@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { bulkOperations, type Db } from '@sms/db';
 import type { JobName } from '@sms/shared';
 import type { BulkOpsQueueService } from './bulk-ops-queue.service.js';
@@ -18,11 +18,10 @@ export class InvalidIdempotencyKeyError extends Error {
 export interface StartBulkOperationArgs {
   userId: string;
   idempotencyKey: string | undefined;
-  type: string;
+  operationType: JobName;
   targetKind: BulkOperationTargetKind;
   targetId: string | null;
   params: Record<string, unknown>;
-  jobName: JobName;
   correlationId?: string;
 }
 
@@ -33,11 +32,12 @@ export interface StartBulkOperationResult {
 }
 
 export interface BulkOperationFactory {
+  findExistingBulkOperation(args: Pick<StartBulkOperationArgs, 'userId' | 'idempotencyKey'>): Promise<StartBulkOperationResult | null>;
   startBulkOperation(args: StartBulkOperationArgs): Promise<StartBulkOperationResult>;
 }
 
-function parseIdempotencyKey(rawHeader: string | undefined): string {
-  if (rawHeader === undefined) return randomUUID();
+function parseClientIdempotencyKey(rawHeader: string | undefined): string | null {
+  if (rawHeader === undefined) return null;
   const idempotencyKey = rawHeader.trim();
   if (!UUID_PATTERN.test(idempotencyKey)) {
     throw new InvalidIdempotencyKeyError();
@@ -45,21 +45,45 @@ function parseIdempotencyKey(rawHeader: string | undefined): string {
   return idempotencyKey;
 }
 
+function parseOrGenerateIdempotencyKey(rawHeader: string | undefined): string {
+  return parseClientIdempotencyKey(rawHeader) ?? randomUUID();
+}
+
 export function createBulkOperationFactory(
   db: Db,
   bulkOpsQueueService: BulkOpsQueueService,
 ): BulkOperationFactory {
-  return {
-    async startBulkOperation(args): Promise<StartBulkOperationResult> {
-      const idempotencyKey = parseIdempotencyKey(args.idempotencyKey);
+  async function findExistingBulkOperationRow(userId: string, idempotencyKey: string) {
+    const [existingBulkOperation] = await db
+      .select({ id: bulkOperations.id })
+      .from(bulkOperations)
+      .where(and(
+        eq(bulkOperations.userId, userId),
+        eq(bulkOperations.idempotencyKey, idempotencyKey),
+      ));
 
-      const [existingBulkOperation] = await db
-        .select({ id: bulkOperations.id })
-        .from(bulkOperations)
-        .where(and(
-          eq(bulkOperations.userId, args.userId),
-          eq(bulkOperations.idempotencyKey, idempotencyKey),
-        ));
+    return existingBulkOperation ?? null;
+  }
+
+  return {
+    async findExistingBulkOperation(args): Promise<StartBulkOperationResult | null> {
+      const idempotencyKey = parseClientIdempotencyKey(args.idempotencyKey);
+      if (!idempotencyKey) return null;
+
+      const existingBulkOperation = await findExistingBulkOperationRow(args.userId, idempotencyKey);
+      if (!existingBulkOperation) return null;
+
+      return {
+        bulkOperationId: existingBulkOperation.id,
+        jobId: null,
+        replay: true,
+      };
+    },
+
+    async startBulkOperation(args): Promise<StartBulkOperationResult> {
+      const idempotencyKey = parseOrGenerateIdempotencyKey(args.idempotencyKey);
+
+      const existingBulkOperation = await findExistingBulkOperationRow(args.userId, idempotencyKey);
       if (existingBulkOperation) {
         return {
           bulkOperationId: existingBulkOperation.id,
@@ -72,20 +96,36 @@ export function createBulkOperationFactory(
         .insert(bulkOperations)
         .values({
           userId: args.userId,
-          operationType: args.type,
+          operationType: args.operationType,
           targetKind: args.targetKind,
           targetId: args.targetId,
           idempotencyKey,
           payload: args.params,
         })
+        .onConflictDoNothing({
+          target: [bulkOperations.userId, bulkOperations.idempotencyKey],
+          where: sql`${bulkOperations.idempotencyKey} is not null`,
+        })
         .returning();
 
+      if (!bulkOperation) {
+        const conflictedBulkOperation = await findExistingBulkOperationRow(args.userId, idempotencyKey);
+        if (conflictedBulkOperation) {
+          return {
+            bulkOperationId: conflictedBulkOperation.id,
+            jobId: null,
+            replay: true,
+          };
+        }
+        throw new Error('Bulk operation insert conflict could not be reloaded');
+      }
+
       const job = await bulkOpsQueueService.enqueueBulkOp(
-        args.jobName,
+        args.operationType,
         {
           bulkOperationId: bulkOperation.id,
           userId: args.userId,
-          operationType: args.type,
+          operationType: args.operationType,
           targetKind: args.targetKind,
           targetId: args.targetId,
           idempotencyKey,
