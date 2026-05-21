@@ -92,6 +92,7 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
       timezone: user.timezone,
       dateFormat: user.dateFormat,
       entriesPerPage: user.entriesPerPage,
+      defaultLandingPage: user.defaultLandingPage ?? '/dashboard',
     });
   });
 
@@ -102,15 +103,16 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
       return;
     }
 
-    const { timezone, dateFormat, entriesPerPage } = parsed.data;
+    const { timezone, dateFormat, entriesPerPage, defaultLandingPage } = parsed.data;
     await db.update(users).set({
       timezone,
       dateFormat,
       entriesPerPage,
+      defaultLandingPage,
       updatedAt: new Date(),
     }).where(eq(users.id, req.session.userId!));
 
-    res.json({ timezone, dateFormat, entriesPerPage });
+    res.json({ timezone, dateFormat, entriesPerPage, defaultLandingPage });
   });
 
   router.put('/api/settings/password', requireAuth, async (req, res) => {

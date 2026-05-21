@@ -56,7 +56,6 @@ export function SnippetFormDialog({ open, onOpenChange, snippet }: SnippetFormDi
   useEffect(() => {
     if (!open) {
       reset(INITIAL_VALUES);
-      activeMutation.reset();
       return;
     }
 
@@ -70,7 +69,7 @@ export function SnippetFormDialog({ open, onOpenChange, snippet }: SnippetFormDi
     }
 
     reset(INITIAL_VALUES);
-  }, [activeMutation, open, reset, snippet]);
+  }, [open, reset, snippet]);
 
   async function onSubmit(values: CreateSnippetInput) {
     try {

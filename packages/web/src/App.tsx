@@ -23,6 +23,7 @@ const QueuePostsPage = lazy(() => import("./pages/queues/QueuePostsPage"));
 const CalendarPage = lazy(() => import("./pages/calendar/CalendarPage"));
 const ProfilesPage = lazy(() => import("./pages/profiles/ProfilesPage"));
 const NotificationsPage = lazy(() => import("./pages/notifications/NotificationsPage"));
+const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
 
 export function App() {
   return (
@@ -95,7 +96,7 @@ export function App() {
               />
               <Route
                 path="/settings/:tab"
-                element={<RedesignPlaceholderPage title="Settings" />}
+                element={<SettingsPage />}
               />
               <Route
                 path="/redesign/components"

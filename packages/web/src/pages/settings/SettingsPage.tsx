@@ -1,37 +1,58 @@
-import { useAuth } from '../../hooks/use-auth';
-import { Link, useSearchParams } from 'react-router';
-import { ProfileSection } from './components/ProfileSection';
-import { PreferencesSection } from './components/PreferencesSection';
-import { SecuritySection } from './components/SecuritySection';
-import { StorageUsageCard } from './components/StorageUsageCard';
-import { NotificationsTab } from './components/NotificationsTab';
+import {
+  Bell,
+  Database,
+  FlaskConical,
+  Settings2,
+  Shield,
+  SlidersHorizontal,
+  UserRound,
+} from 'lucide-react';
+import { Navigate, NavLink, useParams } from 'react-router';
 import { Skeleton } from '../../components/ui/skeleton';
-import * as TabsUi from '../../components/ui/tabs';
+import { useAuth } from '../../hooks/use-auth';
+import { cn } from '../../lib/utils';
+import { AdvancedSection } from './components/AdvancedSection';
+import { NotificationsTab } from './components/NotificationsTab';
+import { PreferencesSection } from './components/PreferencesSection';
+import { ProfileSection } from './components/ProfileSection';
+import { SecuritySection } from './components/SecuritySection';
+import { SnippetsSection } from './components/SnippetsSection';
+import { StorageUsageCard } from './components/StorageUsageCard';
 
-const settingsTabs = ['profile', 'preferences', 'security', 'notifications', 'storage'] as const;
-type SettingsTab = (typeof settingsTabs)[number];
+const settingsTabs = [
+  { value: 'profile', label: 'Profile', icon: UserRound },
+  { value: 'preferences', label: 'Preferences', icon: SlidersHorizontal },
+  { value: 'security', label: 'Security', icon: Shield },
+  { value: 'notifications', label: 'Notifications', icon: Bell },
+  { value: 'snippets', label: 'Snippets', icon: FlaskConical },
+  { value: 'storage', label: 'Storage', icon: Database },
+  { value: 'advanced', label: 'Advanced', icon: Settings2 },
+] as const;
 
-function isSettingsTab(value: string | null): value is SettingsTab {
-  return settingsTabs.includes(value as SettingsTab);
+type SettingsTab = (typeof settingsTabs)[number]['value'];
+
+function isSettingsTab(value: string | undefined): value is SettingsTab {
+  return settingsTabs.some((tab) => tab.value === value);
 }
 
 export default function SettingsPage() {
   const { data: user, isLoading } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedTab = searchParams.get('tab');
-  const activeTab: SettingsTab = isSettingsTab(requestedTab) ? requestedTab : 'profile';
+  const params = useParams();
+  const activeTab = params.tab;
 
-  function handleTabChange(value: string) {
-    setSearchParams({ tab: value });
+  if (!isSettingsTab(activeTab)) {
+    return <Navigate to="/settings/profile" replace />;
   }
 
   if (isLoading) {
     return (
-      <main className="mx-auto max-w-[960px] space-y-8 p-6">
-        <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-        <Skeleton className="h-[300px]" />
-        <Skeleton className="h-[200px]" />
-        <Skeleton className="h-[400px]" />
+      <main className="mx-auto max-w-[1120px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Manage account, application, and operator preferences.</p>
+        </div>
+        <Skeleton className="h-10" />
+        <Skeleton className="h-[360px]" />
       </main>
     );
   }
@@ -39,32 +60,43 @@ export default function SettingsPage() {
   if (!user) return null;
 
   return (
-    <main className="mx-auto max-w-[960px] space-y-8 p-6">
-      <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-      <TabsUi.Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsUi.TabsList className="flex h-auto flex-wrap justify-start">
-          <TabsUi.TabsTrigger value="profile">Profile</TabsUi.TabsTrigger>
-          <TabsUi.TabsTrigger value="preferences">Preferences</TabsUi.TabsTrigger>
-          <TabsUi.TabsTrigger value="security">Security</TabsUi.TabsTrigger>
-          <TabsUi.TabsTrigger value="notifications">Notifications</TabsUi.TabsTrigger>
-          <TabsUi.TabsTrigger value="storage">Storage</TabsUi.TabsTrigger>
-        </TabsUi.TabsList>
+    <main className="mx-auto max-w-[1120px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Manage account, application, and operator preferences.</p>
+      </div>
 
-        <nav aria-label="Settings sub-pages">
-          <Link
-            to="/settings/snippets"
-            className="inline-flex items-center justify-center rounded-sm border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Snippets
-          </Link>
-        </nav>
+      <nav
+        aria-label="Settings sections"
+        className="flex gap-1 overflow-x-auto border-b border-border"
+      >
+        {settingsTabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <NavLink
+              key={tab.value}
+              to={`/settings/${tab.value}`}
+              className={({ isActive }) =>
+                cn(
+                  'inline-flex h-10 shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]',
+                  isActive && 'border-[var(--brand-accent)] text-foreground',
+                )
+              }
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              {tab.label}
+            </NavLink>
+          );
+        })}
+      </nav>
 
-        <TabsUi.TabsContent value="profile"><ProfileSection user={user} /></TabsUi.TabsContent>
-        <TabsUi.TabsContent value="preferences"><PreferencesSection user={user} /></TabsUi.TabsContent>
-        <TabsUi.TabsContent value="security"><SecuritySection user={user} /></TabsUi.TabsContent>
-        <TabsUi.TabsContent value="notifications"><NotificationsTab /></TabsUi.TabsContent>
-        <TabsUi.TabsContent value="storage"><StorageUsageCard /></TabsUi.TabsContent>
-      </TabsUi.Tabs>
+      {activeTab === 'profile' && <ProfileSection user={user} />}
+      {activeTab === 'preferences' && <PreferencesSection user={user} />}
+      {activeTab === 'security' && <SecuritySection user={user} />}
+      {activeTab === 'notifications' && <NotificationsTab />}
+      {activeTab === 'snippets' && <SnippetsSection />}
+      {activeTab === 'storage' && <StorageUsageCard />}
+      {activeTab === 'advanced' && <AdvancedSection />}
     </main>
   );
 }

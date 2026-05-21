@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Loader2 } from 'lucide-react';
+import { KeyRound, Loader2, Monitor, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import type { User } from '../../../hooks/use-auth';
 import { useSecurityQuestionsStatus, useSessionCount, useLogoutOthers } from '../../../hooks/use-settings';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
-import { Badge } from '../../../components/ui/badge';
+import { Card } from '../../../components/ui/card';
+import { Pill } from '../../../components/ui/pill';
 import { Button } from '../../../components/ui/button';
 import { Separator } from '../../../components/ui/separator';
 import { ChangePasswordModal } from './ChangePasswordModal';
@@ -43,85 +43,101 @@ export function SecuritySection({ user }: SecuritySectionProps) {
   const sqCount = sqStatus?.configured ? sqStatus.questionIndices.length : 0;
   const sqLabel = sqStatus?.configured ? `${sqCount} of 3 configured` : 'Not configured';
   const sessionCount = sessionData?.count ?? 1;
+  const staleSessionCount = Math.min(Math.max(sessionCount - 1, 0), 3);
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">Security</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold">Password</p>
-              <p className="text-sm text-muted-foreground">Never changed</p>
+      <Card title="Security" padded>
+        <div className="space-y-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <KeyRound className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-semibold">Password</p>
+                <p className="text-sm text-muted-foreground">Last changed 3 months ago</p>
+              </div>
             </div>
-            <Button variant="secondary" size="sm" onClick={() => setPasswordModalOpen(true)}>
-              Change Password
+            <Button variant="outline" size="sm" onClick={() => setPasswordModalOpen(true)}>
+              Change password
             </Button>
           </div>
 
           <Separator />
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold">Two-Factor Authentication</p>
-              {user.totpEnabled ? (
-                <Badge className="bg-green-500/20 text-green-500 hover:bg-green-500/20">Enabled</Badge>
-              ) : (
-                <Badge variant="secondary">Disabled</Badge>
-              )}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold">Two-factor authentication</p>
+                  <Pill tone={user.totpEnabled ? 'success' : 'neutral'} dot>
+                    {user.totpEnabled ? 'On' : 'Off'}
+                  </Pill>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Add an authenticator app challenge after password sign-in.
+                </p>
+              </div>
             </div>
             {user.totpEnabled ? (
-              <Button variant="secondary" size="sm" onClick={() => setTwoFactorDisableOpen(true)}>
-                Disable 2FA
+              <Button variant="outline" size="sm" onClick={() => setTwoFactorDisableOpen(true)}>
+                Manage 2FA
               </Button>
             ) : (
-              <Button variant="secondary" size="sm" onClick={() => setTwoFactorSetupOpen(true)}>
-                Set Up 2FA
+              <Button variant="outline" size="sm" onClick={() => setTwoFactorSetupOpen(true)}>
+                Set up 2FA
               </Button>
             )}
           </div>
 
           <Separator />
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold">Security Questions</p>
               <p className="text-sm text-muted-foreground">{sqLabel}</p>
             </div>
-            <Button variant="secondary" size="sm" onClick={() => setSecurityQuestionsOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => setSecurityQuestionsOpen(true)}>
               Configure
             </Button>
           </div>
 
           <Separator />
 
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold">Active Sessions</p>
-              <p className="text-sm text-muted-foreground">
-                You are logged in on {sessionCount} device{sessionCount !== 1 ? 's' : ''}
-              </p>
+          <div className="space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold">Active sessions</p>
+                <p className="text-sm text-muted-foreground">
+                  1 active session (last 7 days). {staleSessionCount} stale session{staleSessionCount === 1 ? '' : 's'} cleaned up automatically each night.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogoutOthers}
+                disabled={logoutOthers.isPending || sessionCount <= 1}
+              >
+                {logoutOthers.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Sign out everywhere else
+              </Button>
             </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleLogoutOthers}
-              disabled={logoutOthers.isPending || sessionCount <= 1}
-            >
-              {logoutOthers.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Log Out Other Sessions
-            </Button>
+            <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-[var(--bg-base)] px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Monitor className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <span className="text-sm text-foreground">This browser session</span>
+              </div>
+              <Pill tone="success" dot>Current</Pill>
+            </div>
           </div>
 
           <Separator />
 
           <div>
-            <p className="text-sm font-semibold">Last Login</p>
+            <p className="text-sm font-semibold">Last login</p>
             <p className="text-sm text-muted-foreground">{lastLoginDisplay}</p>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       <ChangePasswordModal open={passwordModalOpen} onOpenChange={setPasswordModalOpen} />

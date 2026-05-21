@@ -11,6 +11,7 @@ interface User {
   timezone: string;
   dateFormat: string;
   entriesPerPage: number;
+  defaultLandingPage: string;
   totpEnabled: boolean;
   lastLoginAt: string | null;
 }

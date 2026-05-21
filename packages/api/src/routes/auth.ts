@@ -144,6 +144,7 @@ export function createAuthRouter({ db }: AuthDependencies) {
       timezone: user.timezone,
       dateFormat: user.dateFormat,
       entriesPerPage: user.entriesPerPage,
+      defaultLandingPage: user.defaultLandingPage ?? '/dashboard',
       totpEnabled: user.totpEnabled,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,

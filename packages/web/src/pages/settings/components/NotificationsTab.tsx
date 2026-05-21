@@ -7,11 +7,13 @@ import { z } from 'zod';
 import {
   ALWAYS_ON_EVENT_TYPES,
   NOTIFICATION_EVENTS,
+  type NotificationEventSpec,
   type NotificationEventType,
   notificationEventTypeSchema,
 } from '@sms/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import {
   Table,
@@ -27,6 +29,7 @@ import {
   useUpdateNotificationPrefs,
   type NotificationPrefRow,
 } from '@/hooks/use-notifications';
+import { cn } from '@/lib/utils';
 
 export interface NotificationsTabProps {
   smtpStatus?: { configured: boolean };
@@ -45,6 +48,32 @@ const notificationPrefsFormSchema = z.object({
 });
 
 type NotificationPrefsFormValues = z.infer<typeof notificationPrefsFormSchema>;
+
+const SETTINGS_NOTIFICATION_EVENT_LABELS: Partial<Record<NotificationEventType, string>> = {
+  queue_empty: 'Queue finished',
+  bulk_completed: 'Bulk import complete',
+};
+
+const SETTINGS_NOTIFICATION_EVENT_TYPES: NotificationEventType[] = [
+  'publish_failed',
+  'token_expiring_soon',
+  'token_reauth_required',
+  'token_revoked',
+  'rate_limit_reached',
+  'queue_empty',
+  'bulk_completed',
+];
+
+function settingsEventSpecs(): Array<NotificationEventSpec & { displayLabel: string }> {
+  return SETTINGS_NOTIFICATION_EVENT_TYPES.map((eventType) => {
+    const eventSpec = NOTIFICATION_EVENTS.find((candidate) => candidate.eventType === eventType);
+    if (!eventSpec) throw new Error(`Unknown settings notification event: ${eventType}`);
+    return {
+      ...eventSpec,
+      displayLabel: SETTINGS_NOTIFICATION_EVENT_LABELS[eventType] ?? eventSpec.label,
+    };
+  });
+}
 
 function defaultPrefs(): NotificationPrefRow[] {
   return NOTIFICATION_EVENTS.map((eventSpec) => ({
@@ -116,13 +145,14 @@ function NotificationsTabView({
   }
 
   return (
-    <section className="space-y-4" aria-label="Notification preferences">
+    <Card title="Notifications" padded>
+      <section className="space-y-4" aria-label="Notification preferences">
       {isSmtpOff && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Email notifications are off</AlertTitle>
           <AlertDescription>
-            Email notifications are off — SMTP isn&apos;t configured. Add SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM env vars to enable. In-app notifications still work.
+            Email notifications are off — SMTP isn&apos;t configured. Add SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM env vars to enable.
           </AlertDescription>
         </Alert>
       )}
@@ -137,7 +167,7 @@ function NotificationsTabView({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {NOTIFICATION_EVENTS.map((eventSpec) => {
+            {settingsEventSpecs().map((eventSpec) => {
               const prefRow = draftPrefs.find((candidatePrefRow) => candidatePrefRow.eventType === eventSpec.eventType);
               const isAlwaysOn = ALWAYS_ON_EVENT_TYPES.has(eventSpec.eventType);
               const isDeferred = eventSpec.deferred === true;
@@ -148,13 +178,13 @@ function NotificationsTabView({
                 <TableRow key={eventSpec.eventType}>
                   <TableCell>
                     <div className="space-y-1">
-                      <p className="font-medium">{eventSpec.label}</p>
+                      <p className="font-medium">{eventSpec.displayLabel}</p>
                       {!isDeferred && <p className="text-sm text-muted-foreground">{eventSpec.helpText}</p>}
                       {isAlwaysOn && (
-                        <p className="text-xs text-muted-foreground">Required notification — cannot be disabled</p>
+                        <p className="text-xs text-muted-foreground">Required event — cannot be disabled in-app</p>
                       )}
                       {isDeferred && (
-                        <p className="text-xs text-muted-foreground">Available when bulk operations ship in Phase 10.</p>
+                        <p className="text-xs text-muted-foreground">Available when bulk import notifications are enabled.</p>
                       )}
                       {!eventSpec.supportsEmail && !isDeferred && (
                         <p className="text-xs text-muted-foreground">In-app only — no email for this event.</p>
@@ -163,15 +193,15 @@ function NotificationsTabView({
                   </TableCell>
                   <TableCell>
                     <Switch
-                      aria-label={`${eventSpec.label} in-app notifications`}
+                      aria-label={`${eventSpec.displayLabel} in-app notifications`}
                       checked={isAlwaysOn || (prefRow?.inAppEnabled ?? true)}
                       disabled={isInAppDisabled}
                       onCheckedChange={(checked) => updatePref(eventSpec.eventType, 'inAppEnabled', checked)}
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className={cn(isSmtpOff && 'opacity-60')}>
                     <Switch
-                      aria-label={`${eventSpec.label} email notifications`}
+                      aria-label={`${eventSpec.displayLabel} email notifications`}
                       checked={isAlwaysOn || (eventSpec.supportsEmail && !isDeferred && (prefRow?.emailEnabled ?? true))}
                       disabled={isEmailDisabled}
                       onCheckedChange={(checked) => updatePref(eventSpec.eventType, 'emailEnabled', checked)}
@@ -211,13 +241,14 @@ function NotificationsTabView({
           >
             Discard changes
           </Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={!isDirty || isSaving}>
+          <Button type="button" variant="primary" onClick={() => void handleSave()} disabled={!isDirty || isSaving}>
             {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
             Save preferences
           </Button>
         </div>
       </div>
-    </section>
+      </section>
+    </Card>
   );
 }
 
