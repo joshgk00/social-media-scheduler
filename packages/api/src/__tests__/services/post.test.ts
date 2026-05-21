@@ -622,6 +622,26 @@ describe('post.service', () => {
       }
     });
 
+    it('rejects invalid scheduledAt values with 400', async () => {
+      const db = createPostUpdateMockDb({
+        updateResult: [],
+        existingPost: { id: 'post-1', status: 'draft', postVersion: 1, scheduledAt: null },
+      });
+
+      try {
+        await updatePost(db, 'user-1', 'post-1', {
+          status: 'scheduled',
+          scheduledAt: 'not-a-date',
+          postVersion: 1,
+        });
+        expect.unreachable('should have thrown');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(AppError);
+        expect(err.message).toContain('valid datetime');
+        expect(err.statusCode).toBe(400);
+      }
+    });
+
     it('rejects updates to posts in auto_destructing state', async () => {
       const db = createPostUpdateMockDb({
         updateResult: [],
