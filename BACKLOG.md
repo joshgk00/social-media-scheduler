@@ -109,6 +109,7 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 ### Bugs
 
 - [ ] **gh#87** — nginx: add real_ip module support so rate limits + audit logs key on real client IP behind layered proxies *(surfaced in #86 review — limitation of #25's rate-limit zones + #50's XFF overwrite)*
+- [ ] **gh#112** — queue-empty notification payload doesn't match `queueEmptyNotificationSchema` — 8,297 silent failures accumulated *(sibling of gh#85, surfaced during 2026-05-21 Bull Board screenshot pass)*
 - [ ] **gh#85** — Auto-destruct failure notification payload doesn't match `autoDestructFailedNotificationSchema` *(surfaced in #84 review — pre-existing, predates #15)*
 - [ ] **gh#52** — Date picker icon barely visible on new-post page in dark mode
 - [ ] **gh#50** — Secure cookies + CSRF fail behind reverse proxy (trust proxy + nginx X-Forwarded-Proto) — *partial fix already merged in `0824e22`*
