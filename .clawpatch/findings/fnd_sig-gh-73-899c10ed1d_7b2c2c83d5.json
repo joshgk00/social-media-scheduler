@@ -1,1 +1,97 @@
-{"schemaVersion":1,"findingId":"fnd_sig-gh-73-899c10ed1d_7b2c2c83d5","featureId":"feat_gh-73_1c5c4c8dc2","title":"gh#73: R5.1 — Add BulkOperationFactory; absorb idempotency + insert + enqueue chain","category":"maintainability","severity":"low","confidence":"high","triage":"risk","evidence":[{"path":"packages/api/src/services/bulk-operation.factory.ts","startLine":null,"endLine":null,"symbol":null,"quote":null},{"path":"packages/shared/src/index.ts","startLine":null,"endLine":null,"symbol":null,"quote":null}],"reasoning":"Imported from https://github.com/joshgk00/social-media-scheduler/issues/73.\nBacklog section: Candidate 5 — BulkOperationFactory.\n\n## Context\n\nFirst PR in Candidate 5. The current `bulk-ops-queue.service.ts` is a 36-line BullMQ wrapper. The real orchestration (idempotency-key parsing + bulk_operations existence check + insert + enqueue) lives in each route that needs bulk ops — currently `routes/bulk-import.ts` and the bulk-ops branch of `routes/queues.ts`. Future endpoints (e.g., bulk delete posts) would copy the same dance.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 5.\n\n## Scope\n\n- Add `packages/api/src/services/bulk-operation.factory.ts` (or a similar location) exporting:\n  ```ts\n  interface BulkOperationFactory {\n    startBulkOperation(args: {\n      userId: string;\n      idempotencyKey: string | undefined;\n      type: 'import_scheduled' | 'import_queue' | 'queue_bulk_op_X' | ...;\n      params: Record<string, unknown>;  // job payload\n      jobName: JobName;\n    }): Promise<{\n      bulkOperationId: string;\n      jobId: string | null;\n      replay: boolean;\n    }>;\n  }\n  ```\n- Move the full chain into the factory:\n  - Parse + validate `Idempotency-Key` header (UUID validation)\n  - Lookup existing `bulk_operations` row by (userId, idempotencyKey)\n  - If exists: return `{ bulkOperationId, jobId: null, replay: true }`\n  - Otherwise: insert new `bulk_operations` row, enqueue job, return `{ bulkOperationId, jobId, replay: false }`\n- Inject `BulkOpsQueueService` + `Db` via the factory constructor\n- Unit tests covering: new operation path, replay path, invalid idempotency key, transaction rollback if insert + enqueue is non-atomic (verify the ordering matches existing semantics)\n- Keep the existing `bulk-ops-queue.service.ts` for now — R5.2 / R5.3 switch consumers, then R5.3 sweep removes the standalone service if subsumed\n\n## Out of scope\n\n- Switching consumers (R5.2, R5.3)\n- Removing the existing `bulk-ops-queue.service.ts` (R5.3 sweep)\n- Moving the factory into `@sms/shared` — keep in api package since both consumers are routes; cross-package isn't needed\n\n## Acceptance\n\n- `pnpm --filter @sms/api build` and test pass\n- Factory unit tests achieve full branch coverage\n- No existing callers changed\n\n## References\n\n- Depends on: nothing (first in Candidate 5 series)","reproduction":"First PR in Candidate 5. The current `bulk-ops-queue.service.ts` is a 36-line BullMQ wrapper. The real orchestration (idempotency-key parsing + bulk_operations existence check + insert + enqueue) lives in each route that needs bulk ops — currently `routes/bulk-import.ts` and the bulk-ops branch of `routes/queues.ts`. Future endpoints (e.g., bulk delete posts) would copy the same dance.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 5.","recommendation":"- Add `packages/api/src/services/bulk-operation.factory.ts` (or a similar location) exporting:\n  ```ts\n  interface BulkOperationFactory {\n    startBulkOperation(args: {\n      userId: string;\n      idempotencyKey: string | undefined;\n      type: 'import_scheduled' | 'import_queue' | 'queue_bulk_op_X' | ...;\n      params: Record<string, unknown>;  // job payload\n      jobName: JobName;\n    }): Promise<{\n      bulkOperationId: string;\n      jobId: string | null;\n      replay: boolean;\n    }>;\n  }\n  ```\n- Move the full chain into the factory:\n  - Parse + validate `Idempotency-Key` header (UUID validation)\n  - Lookup existing `bulk_operations` row by (userId, idempotencyKey)\n  - If exists: return `{ bulkOperationId, jobId: null, replay: true }`\n  - Otherwise: insert new `bulk_operations` row, enqueue job, return `{ bulkOperationId, jobId, replay: false }`\n- Inject `BulkOpsQueueService` + `Db` via the factory constructor\n- Unit tests covering: new operation path, replay path, invalid idempotency key, transaction rollback if insert + enqueue is non-atomic (verify the ordering matches existing semantics)\n- Keep the existing `bulk-ops-queue.service.ts` for now — R5.2 / R5.3 switch consumers, then R5.3 sweep removes the standalone service if subsumed","whyTestsDoNotAlreadyCoverThis":"Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.","suggestedRegressionTest":"- `pnpm --filter @sms/api build` and test pass\n- Factory unit tests achieve full branch coverage\n- No existing callers changed","minimumFixScope":"packages/api/src/services/bulk-operation.factory.ts, packages/shared/src/index.ts","status":"open","history":[],"signature":"sig_gh-73_899c10ed1d","linkedPatchAttemptIds":[],"createdByRunId":"20260519T201935-c24f6a","createdAt":"2026-05-19T20:19:35.980Z","updatedAt":"2026-05-19T20:19:35.980Z"}
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-73-899c10ed1d_7b2c2c83d5",
+  "featureId": "feat_gh-73_1c5c4c8dc2",
+  "title": "gh#73: R5.1 — Add BulkOperationFactory; absorb idempotency + insert + enqueue chain",
+  "category": "maintainability",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/api/src/services/bulk-operation.factory.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/73.\nBacklog section: Candidate 5 — BulkOperationFactory.\n\n## Context\n\nFirst PR in Candidate 5. The current `bulk-ops-queue.service.ts` is a 36-line BullMQ wrapper. The real orchestration (idempotency-key parsing + bulk_operations existence check + insert + enqueue) lives in each route that needs bulk ops — currently `routes/bulk-import.ts` and the bulk-ops branch of `routes/queues.ts`. Future endpoints (e.g., bulk delete posts) would copy the same dance.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 5.\n\n## Scope\n\n- Add `packages/api/src/services/bulk-operation.factory.ts` (or a similar location) exporting:\n  ```ts\n  interface BulkOperationFactory {\n    startBulkOperation(args: {\n      userId: string;\n      idempotencyKey: string | undefined;\n      type: 'import_scheduled' | 'import_queue' | 'queue_bulk_op_X' | ...;\n      params: Record<string, unknown>;  // job payload\n      jobName: JobName;\n    }): Promise<{\n      bulkOperationId: string;\n      jobId: string | null;\n      replay: boolean;\n    }>;\n  }\n  ```\n- Move the full chain into the factory:\n  - Parse + validate `Idempotency-Key` header (UUID validation)\n  - Lookup existing `bulk_operations` row by (userId, idempotencyKey)\n  - If exists: return `{ bulkOperationId, jobId: null, replay: true }`\n  - Otherwise: insert new `bulk_operations` row, enqueue job, return `{ bulkOperationId, jobId, replay: false }`\n- Inject `BulkOpsQueueService` + `Db` via the factory constructor\n- Unit tests covering: new operation path, replay path, invalid idempotency key, transaction rollback if insert + enqueue is non-atomic (verify the ordering matches existing semantics)\n- Keep the existing `bulk-ops-queue.service.ts` for now — R5.2 / R5.3 switch consumers, then R5.3 sweep removes the standalone service if subsumed\n\n## Out of scope\n\n- Switching consumers (R5.2, R5.3)\n- Removing the existing `bulk-ops-queue.service.ts` (R5.3 sweep)\n- Moving the factory into `@sms/shared` — keep in api package since both consumers are routes; cross-package isn't needed\n\n## Acceptance\n\n- `pnpm --filter @sms/api build` and test pass\n- Factory unit tests achieve full branch coverage\n- No existing callers changed\n\n## References\n\n- Depends on: nothing (first in Candidate 5 series)",
+  "reproduction": "First PR in Candidate 5. The current `bulk-ops-queue.service.ts` is a 36-line BullMQ wrapper. The real orchestration (idempotency-key parsing + bulk_operations existence check + insert + enqueue) lives in each route that needs bulk ops — currently `routes/bulk-import.ts` and the bulk-ops branch of `routes/queues.ts`. Future endpoints (e.g., bulk delete posts) would copy the same dance.\n\nSee [BACKLOG.md](../blob/main/BACKLOG.md) → Architectural Deepening → Candidate 5.",
+  "recommendation": "- Add `packages/api/src/services/bulk-operation.factory.ts` (or a similar location) exporting:\n  ```ts\n  interface BulkOperationFactory {\n    startBulkOperation(args: {\n      userId: string;\n      idempotencyKey: string | undefined;\n      type: 'import_scheduled' | 'import_queue' | 'queue_bulk_op_X' | ...;\n      params: Record<string, unknown>;  // job payload\n      jobName: JobName;\n    }): Promise<{\n      bulkOperationId: string;\n      jobId: string | null;\n      replay: boolean;\n    }>;\n  }\n  ```\n- Move the full chain into the factory:\n  - Parse + validate `Idempotency-Key` header (UUID validation)\n  - Lookup existing `bulk_operations` row by (userId, idempotencyKey)\n  - If exists: return `{ bulkOperationId, jobId: null, replay: true }`\n  - Otherwise: insert new `bulk_operations` row, enqueue job, return `{ bulkOperationId, jobId, replay: false }`\n- Inject `BulkOpsQueueService` + `Db` via the factory constructor\n- Unit tests covering: new operation path, replay path, invalid idempotency key, transaction rollback if insert + enqueue is non-atomic (verify the ordering matches existing semantics)\n- Keep the existing `bulk-ops-queue.service.ts` for now — R5.2 / R5.3 switch consumers, then R5.3 sweep removes the standalone service if subsumed",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/api build` and test pass\n- Factory unit tests achieve full branch coverage\n- No existing callers changed",
+  "minimumFixScope": "packages/api/src/services/bulk-operation.factory.ts, packages/shared/src/index.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260521T032700-de859f",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The requested factory still has not been added: packages/api/src/services/bulk-operation.factory.ts is absent, and searches found no BulkOperationFactory or startBulkOperation implementation/export. The original shared barrel path packages/shared/src/index.ts still exists, but it does not export any factory. The orchestration remains inline in current route code: bulk-import still parses Idempotency-Key, checks bulk_operations, inserts, and enqueues at packages/api/src/routes/bulk-import.ts:28,101,195,226; queues does the same through enqueueQueueBulkOperation at packages/api/src/routes/queues.ts:41,82,93,104,115; posts has another copy at packages/api/src/routes/posts.ts:134,184,196,207,218. Regression coverage is also not present: the only matching idempotency test is a todo. I attempted tests/typecheck: Vitest could not start in the read-only sandbox because Vite tried to write .vite-temp, and typecheck fails on an unrelated existing TS error in post-crud.service.ts. Current code evidence is sufficient that the maintainability issue remains open.",
+      "commands": [
+        "pwd && rg --files | rg 'packages/(api/src/services/bulk-operation.factory.ts|shared/src/index.ts|api/src/routes/(bulk-import|queues)\\.ts|api/src/services/bulk-ops-queue.service.ts|api/.*bulk.*factory|api/.*bulk.*operation)'",
+        "git status --short",
+        "sed -n '1,240p' packages/api/src/services/bulk-ops-queue.service.ts",
+        "sed -n '1,260p' packages/api/src/routes/bulk-import.ts",
+        "sed -n '1,320p' packages/api/src/routes/queues.ts",
+        "sed -n '1,200p' packages/shared/src/index.ts",
+        "sed -n '320,760p' packages/api/src/routes/queues.ts",
+        "rg -n \"BulkOperationFactory|bulk-operation.factory|startBulkOperation|parseIdempotencyKey|enqueueQueueBulkOperation|bulkOperations.*idempotencyKey|enqueueBulkOp\" packages/api/src packages/api/test packages/api/tests packages/shared/src 2>/dev/null",
+        "rg --files packages/api | rg '(test|spec)\\.(ts|tsx)$|__tests__'",
+        "find packages/api/src/services -maxdepth 1 -type f -print | sort",
+        "nl -ba packages/api/src/routes/bulk-import.ts | sed -n '20,245p'",
+        "nl -ba packages/api/src/routes/queues.ts | sed -n '35,130p;235,380p'",
+        "nl -ba packages/api/src/routes/posts.ts | sed -n '120,230p;470,565p'",
+        "test -f packages/api/src/services/bulk-operation.factory.ts; printf 'bulk-operation.factory.ts exists: %s\\n' \"$?\"; find packages/api/src -path '*bulk-operation*factory*' -o -path '*BulkOperationFactory*'",
+        "sed -n '1,220p' packages/api/package.json",
+        "rg -n \"bulk-operation\\.factory|BulkOperationFactory|startBulkOperation|idempotency|enqueueBulkOp|bulkOperationId|replay\" packages/api/src/__tests__ packages/api/src/services/__tests__ packages/api/src/routes/__tests__",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/routes/bulk-idempotency.test.ts",
+        "sed -n '1,220p' packages/api/tsconfig.json",
+        "rg -n \"incremental|tsBuildInfo|noEmit\" tsconfig.json packages/api/tsconfig.json packages/*/tsconfig.json",
+        "pnpm --filter @sms/api typecheck"
+      ],
+      "createdAt": "2026-05-21T03:28:15.305Z"
+    },
+    {
+      "runId": "20260521T033221-626f28",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths now exist in the current working tree: packages/api/src/services/bulk-operation.factory.ts is present and exports BulkOperationFactory plus createBulkOperationFactory. The factory validates or generates the idempotency key, checks bulk_operations by userId/idempotencyKey, returns replay metadata for existing rows, inserts a new row, enqueues via BulkOpsQueueService, and returns the job id. Focused tests exist at packages/api/src/services/__tests__/bulk-operation.factory.test.ts covering the new operation path, generated/missing idempotency key path, replay path, invalid idempotency key, and insert-before-enqueue failure ordering. packages/shared/src/index.ts still exists; it was not changed, but the issue explicitly said to keep the factory in the api package and not move it into @sms/shared. Existing route orchestration remains inline in bulk-import/queues/posts, but consumer switching was explicitly out of scope for this R5.1 finding. Verification: a focused tsc check of bulk-operation.factory.ts passed. Full api typecheck is still blocked by an unrelated existing error in post-crud.service.ts, and Vitest could not run in the read-only sandbox because Vite tried to create temp/cache files.",
+      "commands": [
+        "pwd",
+        "git status --short",
+        "rg --files | rg 'packages/(api/src/services/bulk-operation.factory.ts|shared/src/index.ts|api/src/routes/(bulk-import|queues|posts)\\.ts|api/src/services/bulk-ops-queue.service.ts|api/src/.*bulk.*operation|api/src/.*bulk.*factory)'",
+        "rg -n \"BulkOperationFactory|bulk-operation\\.factory|startBulkOperation|parseIdempotencyKey|enqueueQueueBulkOperation|enqueueBulkOp|bulkOperations.*idempotencyKey|idempotencyKey\" packages/api/src packages/shared/src packages/api/test packages/api/tests 2>/dev/null",
+        "nl -ba packages/api/src/services/bulk-operation.factory.ts | sed -n '1,180p'",
+        "nl -ba packages/api/src/services/__tests__/bulk-operation.factory.test.ts | sed -n '1,240p'",
+        "nl -ba packages/shared/src/index.ts | sed -n '1,220p'",
+        "nl -ba packages/api/src/routes/bulk-import.ts | sed -n '20,245p'",
+        "nl -ba packages/api/src/routes/queues.ts | sed -n '35,390p'",
+        "nl -ba packages/api/src/routes/posts.ts | sed -n '120,230p;470,585p'",
+        "cat packages/api/package.json",
+        "cat packages/api/vitest.config.ts",
+        "pnpm --filter @sms/api exec tsc --noEmit --pretty false -p tsconfig.json",
+        "pnpm --filter @sms/api exec tsc --noEmit --pretty false --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck src/services/bulk-operation.factory.ts",
+        "pnpm --filter @sms/api exec vitest run src/services/__tests__/bulk-operation.factory.test.ts --configLoader runner --no-cache"
+      ],
+      "createdAt": "2026-05-21T03:34:13.751Z"
+    }
+  ],
+  "signature": "sig_gh-73_899c10ed1d",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-73-899c10ed1d-7b2c2c8_aa34773ae7"
+  ],
+  "createdByRunId": "20260519T201935-c24f6a",
+  "createdAt": "2026-05-19T20:19:35.980Z",
+  "updatedAt": "2026-05-21T03:34:13.751Z"
+}
