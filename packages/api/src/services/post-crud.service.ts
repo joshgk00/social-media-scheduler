@@ -101,6 +101,7 @@ function toPostAppError(err: PostInvariantError): AppError {
     case 'not_scheduled':
       return new AppError(err.message, 409);
     case 'scheduled_at_required':
+    case 'scheduled_at_invalid':
     case 'scheduled_at_must_be_future':
       return new AppError(err.message, 400);
     default: {
