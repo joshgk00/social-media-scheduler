@@ -214,10 +214,7 @@ function NotificationsTabView({
         </Table>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button asChild variant="outline">
-          <a href="/settings/email-logs">Email logs</a>
-        </Button>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="flex items-center gap-3">
           {savedMessage && (
             <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
