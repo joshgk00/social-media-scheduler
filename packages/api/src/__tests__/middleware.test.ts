@@ -253,10 +253,12 @@ describe('production nginx security controls (issue #25)', () => {
 
   it('adds security headers at the reverse proxy and static asset layers', () => {
     expect(prodConfig.match(/add_header X-Frame-Options "DENY" always;/g)).toHaveLength(4);
-    expect(prodConfig.match(/add_header X-Content-Type-Options "nosniff" always;/g)).toHaveLength(4);
-    expect(prodConfig.match(/add_header Referrer-Policy "strict-origin-when-cross-origin" always;/g)).toHaveLength(4);
+    expect(prodConfig).toContain('add_header X-Frame-Options "SAMEORIGIN" always;');
+    expect(prodConfig.match(/add_header X-Content-Type-Options "nosniff" always;/g)).toHaveLength(5);
+    expect(prodConfig.match(/add_header Referrer-Policy "strict-origin-when-cross-origin" always;/g)).toHaveLength(5);
     expect(prodConfig.match(/add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'" always;/g)).toHaveLength(4);
-    expect(prodConfig.match(/add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;/g)).toHaveLength(4);
+    expect(prodConfig).toContain("add_header Content-Security-Policy \"default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'\" always;");
+    expect(prodConfig.match(/add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;/g)).toHaveLength(5);
     expect(prodConfig).toContain('add_header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()" always;');
   });
 

@@ -164,6 +164,15 @@ describe('GET /admin/queues', () => {
     expect(res.text).toContain('bull-board');
   });
 
+  it('allows same-origin embedding for the settings wrapper', async () => {
+    const agent = await authenticatedAgent();
+
+    const res = await agent.get('/admin/queues');
+
+    expect(res.headers['x-frame-options']).toBe('SAMEORIGIN');
+    expect(res.headers['content-security-policy']).toContain("frame-ancestors 'self'");
+  });
+
   it('serves sub-paths under the /admin/queues base path', async () => {
     const agent = await authenticatedAgent();
 

@@ -17,6 +17,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': apiProxyTarget,
+      '/admin': apiProxyTarget,
     },
   },
 });

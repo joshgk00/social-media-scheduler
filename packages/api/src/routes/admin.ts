@@ -43,6 +43,13 @@ export function createAdminRouter({
   });
 
   const router = Router();
-  router.use('/admin/queues', requireAuth, serverAdapter.getRouter());
+  router.use('/admin/queues', (_req, res, next) => {
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'self'",
+    );
+    next();
+  }, requireAuth, serverAdapter.getRouter());
   return router;
 }
