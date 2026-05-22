@@ -119,8 +119,7 @@ export async function markAllRead(db: Db, userId: string): Promise<number> {
 }
 
 export async function clearRead(db: Db, userId: string): Promise<number> {
-  const deleteQuery = db.delete?.(notifications);
-  if (!deleteQuery || typeof (deleteQuery as { where?: unknown }).where !== 'function') {
+  if (typeof db.delete !== 'function') {
     return 0;
   }
 

@@ -250,7 +250,7 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
       const postCount = postCountMap.get(q.id) ?? 0;
       switch (filters.status) {
         case 'active':
-          return !q.isPaused;
+          return !q.isPaused && postCount > 0;
         case 'paused':
           return q.isPaused;
         case 'empty':

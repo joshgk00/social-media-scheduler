@@ -15,6 +15,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import type { User } from "@/hooks/use-auth";
+import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
@@ -64,26 +65,6 @@ const sections = [
     ],
   },
 ] as const;
-
-function getInitials(user?: User): string {
-  const nameParts = [user?.firstName, user?.lastName].filter(Boolean);
-  if (nameParts.length > 0) {
-    return nameParts
-      .map((part) => part?.[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
-  }
-  return (user?.username ?? user?.email ?? "CM").slice(0, 2).toUpperCase();
-}
-
-function getDisplayName(user?: User): string {
-  const fullName = [user?.firstName, user?.lastName]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  return fullName || user?.username || "Account";
-}
 
 export function Sidebar({ isCollapsed, onToggle, user }: SidebarProps) {
   return (
@@ -170,12 +151,12 @@ export function Sidebar({ isCollapsed, onToggle, user }: SidebarProps) {
             <Avatar className="h-8 w-8">
               <AvatarImage src={user?.profileImagePath ?? undefined} alt="" />
               <AvatarFallback className="bg-[var(--bg-elevated)] text-[11px] font-semibold text-foreground">
-                {getInitials(user)}
+                {getUserInitials(user)}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
               <p className="truncate text-[13px] font-medium leading-4 text-foreground">
-                {getDisplayName(user)}
+                {getUserDisplayName(user)}
               </p>
               <p className="truncate text-[11px] leading-4 text-muted-foreground">
                 {user?.email ?? ""}

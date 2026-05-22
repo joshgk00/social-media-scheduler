@@ -1,10 +1,10 @@
-import { Router } from 'express';
-import { createBullBoard } from '@bull-board/api';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
-import { ExpressAdapter } from '@bull-board/express';
-import type { Queue } from 'bullmq';
+import { Router } from "express";
+import { createBullBoard } from "@bull-board/api";
+import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
+import { ExpressAdapter } from "@bull-board/express";
+import type { Queue } from "bullmq";
 
-import { requireAuth } from '../middleware/auth-guard.js';
+import { requireAuth } from "../middleware/auth-guard.js";
 
 export interface AdminRouterDeps {
   publishQueue: Queue;
@@ -31,7 +31,7 @@ export function createAdminRouter({
   bulkOpsQueue,
 }: AdminRouterDeps): Router {
   const serverAdapter = new ExpressAdapter();
-  serverAdapter.setBasePath('/admin/queues');
+  serverAdapter.setBasePath("/admin/queues");
 
   createBullBoard({
     queues: [
@@ -43,13 +43,37 @@ export function createAdminRouter({
   });
 
   const router = Router();
-  router.use('/admin/queues', (_req, res, next) => {
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-    res.setHeader(
-      'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'self'",
-    );
-    next();
-  }, requireAuth, serverAdapter.getRouter());
+  router.get("/admin/queue-health", requireAuth, async (_req, res, next) => {
+    try {
+      const [publish, notification, bulkOps] = await Promise.all([
+        publishQueue.getJobCounts("active", "completed", "failed"),
+        notificationQueue.getJobCounts("active", "completed", "failed"),
+        bulkOpsQueue?.getJobCounts("active", "completed", "failed") ??
+          Promise.resolve({ active: 0, completed: 0, failed: 0 }),
+      ]);
+
+      res.json({
+        publish,
+        notification,
+        bulk_ops: bulkOps,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.use(
+    "/admin/queues",
+    (_req, res, next) => {
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'self'",
+      );
+      next();
+    },
+    requireAuth,
+    serverAdapter.getRouter(),
+  );
   return router;
 }

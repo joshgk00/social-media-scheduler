@@ -21,7 +21,7 @@ const severityDotClass: Record<NotificationRowData['severity'], string> = {
 };
 
 function isSafeLinkPath(linkPath: string | null): linkPath is string {
-  return Boolean(linkPath && linkPath.startsWith('/') && !linkPath.startsWith('//'));
+  return Boolean(linkPath && /^\/(?:posts|profiles|queues|notifications)(?:\/[a-z0-9-]+)*(?:\?[a-z0-9=&_-]+)?$/i.test(linkPath));
 }
 
 function getErrorReportUrl(payload: Record<string, unknown>): string | null {

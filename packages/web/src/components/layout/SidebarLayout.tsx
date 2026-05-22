@@ -11,22 +11,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { useAuth, useLogout, type User } from "@/hooks/use-auth";
+import { useAuth, useLogout } from "@/hooks/use-auth";
+import { getUserInitials } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./NotificationBell";
 import { Sidebar } from "./Sidebar";
-
-function getInitials(user?: User): string {
-  const nameParts = [user?.firstName, user?.lastName].filter(Boolean);
-  if (nameParts.length > 0) {
-    return nameParts
-      .map((part) => part?.[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
-  }
-  return (user?.username ?? user?.email ?? "CM").slice(0, 2).toUpperCase();
-}
 
 export function SidebarLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -138,7 +127,7 @@ export function SidebarLayout() {
                     alt=""
                   />
                   <AvatarFallback className="bg-[var(--bg-elevated)] text-[11px] font-semibold text-foreground">
-                    {getInitials(user)}
+                    {getUserInitials(user)}
                   </AvatarFallback>
                 </Avatar>
               </Button>
