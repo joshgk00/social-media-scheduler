@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router";
 import { LogOut, Menu, PenSquare, Search, UserRound } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,9 +31,22 @@ function getInitials(user?: User): string {
 export function SidebarLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { data: user } = useAuth();
   const logout = useLogout();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    function handleGlobalShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalShortcut);
+    return () => window.removeEventListener("keydown", handleGlobalShortcut);
+  }, []);
 
   async function handleSignOut() {
     await logout.mutateAsync();
@@ -87,7 +100,9 @@ export function SidebarLayout() {
             <span className="sr-only">Search posts, queues, profiles</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
+              ref={searchInputRef}
               type="search"
+              aria-keyshortcuts="Meta+K Control+K"
               placeholder="Search posts, queues, profiles… ⌘ K"
               className="h-8 w-full rounded-md border border-input bg-[var(--bg-canvas)] pl-9 pr-3 text-[13px] text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:shadow-[var(--shadow-focus)]"
             />
