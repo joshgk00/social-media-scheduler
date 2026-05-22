@@ -22,6 +22,7 @@ describe('handleBulkCompletedNotification', () => {
 
     expect(store.insertNotification).toHaveBeenCalledWith(expect.objectContaining({
       eventType: 'bulk_completed',
+      linkPath: '/posts?bulkOp=55555555-5555-4555-8555-555555555555',
       title: 'Randomize queue complete',
     }));
     expect(store.insertEmailLog).not.toHaveBeenCalled();

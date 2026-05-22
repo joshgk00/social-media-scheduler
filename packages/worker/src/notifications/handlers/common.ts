@@ -119,7 +119,9 @@ export function truncateNotificationText(input: string, maxLength = 1000): strin
 
 function safeLinkPath(linkPath: string | null): string | null {
   if (!linkPath) return null;
-  if (!/^\/(?:posts|profiles|queues)(?:\/[a-z0-9-]+)?$/i.test(linkPath)) {
+  const safeEntityPath = /^\/(?:posts|profiles|queues)(?:\/[a-z0-9-]+)?$/i;
+  const safeBulkOpPath = /^\/posts\?bulkOp=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!safeEntityPath.test(linkPath) && !safeBulkOpPath.test(linkPath)) {
     return null;
   }
   return linkPath;

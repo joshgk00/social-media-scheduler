@@ -146,10 +146,12 @@ describe('PostsPage URL-state', () => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(setSearchParams).toHaveBeenLastCalledWith(
-      { search: 'announcement' },
-      { replace: true },
-    );
+    const [updateParams, options] = setSearchParams.mock.lastCall ?? [];
+    expect(options).toEqual({ replace: true });
+    expect(updateParams).toBeInstanceOf(Function);
+    const nextParams = updateParams(new URLSearchParams('bulkOp=55555555-5555-4555-8555-555555555555'));
+    expect(nextParams.get('search')).toBe('announcement');
+    expect(nextParams.get('bulkOp')).toBe('55555555-5555-4555-8555-555555555555');
   });
 
   it('removes the search param when the input is cleared', () => {
@@ -165,7 +167,12 @@ describe('PostsPage URL-state', () => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(setSearchParams).toHaveBeenLastCalledWith({}, { replace: true });
+    const [updateParams, options] = setSearchParams.mock.lastCall ?? [];
+    expect(options).toEqual({ replace: true });
+    expect(updateParams).toBeInstanceOf(Function);
+    const nextParams = updateParams(new URLSearchParams('bulkOp=55555555-5555-4555-8555-555555555555&search=announcement'));
+    expect(nextParams.has('search')).toBe(false);
+    expect(nextParams.get('bulkOp')).toBe('55555555-5555-4555-8555-555555555555');
   });
 
   it('shows every lifecycle status filter from the shared status model', () => {

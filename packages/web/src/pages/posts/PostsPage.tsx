@@ -270,7 +270,15 @@ export default function PostsPage() {
     const timer = setTimeout(() => {
       const trimmedSearch = searchInput.trim();
       setFilters((prev) => ({ ...prev, search: trimmedSearch || undefined, page: 1 }));
-      setSearchParams(trimmedSearch ? { search: trimmedSearch } : {}, { replace: true });
+      setSearchParams((currentParams) => {
+        const nextParams = new URLSearchParams(currentParams);
+        if (trimmedSearch) {
+          nextParams.set("search", trimmedSearch);
+        } else {
+          nextParams.delete("search");
+        }
+        return nextParams;
+      }, { replace: true });
     }, 300);
     return () => clearTimeout(timer);
   }, [searchInput, setSearchParams]);
