@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { SnippetFormDialog } from '../../../components/snippets/SnippetFormDialog';
 import { SnippetsSection } from '../components/SnippetsSection';
 
 globalThis.ResizeObserver = class ResizeObserver {
@@ -34,14 +36,40 @@ vi.mock('../../../hooks/use-snippets', () => ({
 }));
 
 describe('SnippetsSection', () => {
-  it('opens the create modal when New snippet is clicked', async () => {
-    const user = userEvent.setup();
-    render(<SnippetsSection />);
+  it('opens, closes, and reopens the create modal with reset form state', async () => {
+    function SnippetDialogHarness() {
+      const [isOpen, setIsOpen] = useState(false);
 
-    await user.click(screen.getByRole('button', { name: 'New snippet' }));
+      return (
+        <>
+          <button type="button" onClick={() => setIsOpen(true)}>
+            New snippet
+          </button>
+          <SnippetFormDialog open={isOpen} onOpenChange={setIsOpen} />
+        </>
+      );
+    }
+
+    render(<SnippetDialogHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'New snippet' }));
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Temporary snippet' },
+    });
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Create snippet' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('Temporary snippet');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New snippet' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Create snippet' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('');
   });
 
   it('opens the edit modal when a row is clicked', async () => {
