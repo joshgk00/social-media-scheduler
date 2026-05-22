@@ -73,8 +73,7 @@ export function SnippetFormDialog({ open, onOpenChange, snippet }: SnippetFormDi
     }
 
     reset(INITIAL_VALUES);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mutation objects change identity; including reset functions can loop while closing/reopening the dialog.
-  }, [open, reset, snippet]);
+  }, [open, reset, snippet]); // eslint-disable-line react-hooks/exhaustive-deps -- mutation objects change identity; including reset functions can loop while closing/reopening the dialog.
 
   async function onSubmit(values: CreateSnippetInput) {
     try {
