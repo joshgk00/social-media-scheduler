@@ -1,38 +1,64 @@
-import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  endOfDay,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+  subWeeks,
+} from "date-fns";
+import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
+import type { CalendarEvent, CalendarQuery } from "@sms/shared";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { PageHeader } from "@/components/ui/page-header";
+import { PlatformGlyph, type Platform } from "@/components/ui/platform-glyph";
+import { Segmented } from "@/components/ui/segmented";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useCalendarPosts } from "@/hooks/use-calendar-posts";
+import { useProfiles } from "@/hooks/use-profiles";
+import { useTags } from "@/hooks/use-tags";
+import { cn } from "@/lib/utils";
 
-import { useEffect, useMemo, useState } from 'react';
-import { format } from 'date-fns';
-import { DateTime } from 'luxon';
-import { Calendar, type EventProps, type SlotInfo, type View } from 'react-big-calendar';
-import { useNavigate, useSearchParams } from 'react-router';
-import type { CalendarEvent as CalendarApiEvent, CalendarQuery } from '@sms/shared';
-import { Skeleton } from '../../components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
-import { useCalendarPosts } from '../../hooks/use-calendar-posts';
-import { calendarLocalizer } from '../../lib/calendar-localizer';
-import { cn } from '../../lib/utils';
-import { CalendarFilterBar } from './CalendarFilterBar';
-import { CalendarToolbar } from './CalendarToolbar';
-
-type CalendarFilterState = Pick<CalendarQuery, 'scope' | 'platforms' | 'profileIds' | 'tagIds' | 'search'>;
+type CalendarView = "month" | "week" | "day";
+type CalendarScope = CalendarQuery["scope"];
+type CalendarPlatform = NonNullable<CalendarQuery["platforms"]>[number];
 
 interface CalendarEventViewModel {
   id: string;
-  start: Date;
-  end: Date;
-  title: string;
-  platform: CalendarApiEvent['platform'];
-  hasConflict: boolean;
+  platform: Platform;
+  profileId: string;
+  profileDisplayName: string;
+  status: CalendarEvent["status"];
+  scheduledAt: Date;
   textPreview: string;
-  scheduledAt: string;
+  hasConflict: boolean;
 }
 
-function initMonthRange(reference = DateTime.local()): { from: string; to: string } {
-  return {
-    from: reference.startOf('month').minus({ days: 7 }).toUTC().toISO()!,
-    to: reference.endOf('month').plus({ days: 7 }).toUTC().toISO()!,
-  };
-}
+const showOptions: ReadonlyArray<{ value: CalendarScope; label: string }> = [
+  { value: "scheduled", label: "Scheduled" },
+  { value: "queued", label: "Queued" },
+  { value: "both", label: "Both" },
+];
+
+const viewOptions: ReadonlyArray<{ value: CalendarView; label: string }> = [
+  { value: "month", label: "Month" },
+  { value: "week", label: "Week" },
+  { value: "day", label: "Day" },
+];
+
+const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const weekHours = Array.from({ length: 24 }, (_, index) => index);
+const dayHours = Array.from({ length: 24 }, (_, index) => index);
 
 export function normalizeRange(input: Date | Date[] | { start: Date; end: Date }): { from: string; to: string } {
   if (input instanceof Date) {
@@ -47,119 +73,488 @@ export function normalizeRange(input: Date | Date[] | { start: Date; end: Date }
   return { from: input.start.toISOString(), to: input.end.toISOString() };
 }
 
-function platformAbbreviation(platform: CalendarApiEvent['platform']): string {
-  if (platform === 'twitter') return 'TW';
-  if (platform === 'linkedin') return 'LI';
-  return 'FB';
-}
-
-function hasActiveCalendarFilters(filters: CalendarFilterState): boolean {
-  return filters.scope !== 'both'
-    || Boolean(filters.search)
-    || Boolean(filters.platforms?.length)
-    || Boolean(filters.profileIds?.length)
-    || Boolean(filters.tagIds?.length);
-}
-
-function CalendarEventContent({ event }: EventProps<CalendarEventViewModel>) {
-  const conflictMessage = `Another post on this profile is scheduled within 5 minutes of this time: "${event.textPreview}" at ${format(new Date(event.scheduledAt), 'MMM d, yyyy h:mm a')}.`;
-  const describedById = event.hasConflict ? `calendar-conflict-${event.id}` : undefined;
-  const content = (
-    <span aria-describedby={describedById} className="block text-sm">
-      {event.title}
-    </span>
-  );
-
-  if (!event.hasConflict) {
-    return content;
+function getVisibleRange(cursorDate: Date, view: CalendarView): { from: Date; to: Date } {
+  if (view === "month") {
+    const firstVisibleDay = startOfWeek(startOfMonth(cursorDate), { weekStartsOn: 0 });
+    return {
+      from: startOfDay(firstVisibleDay),
+      to: endOfDay(addDays(firstVisibleDay, 41)),
+    };
   }
 
+  if (view === "week") {
+    return {
+      from: startOfDay(startOfWeek(cursorDate, { weekStartsOn: 0 })),
+      to: endOfDay(endOfWeek(cursorDate, { weekStartsOn: 0 })),
+    };
+  }
+
+  return { from: startOfDay(cursorDate), to: endOfDay(cursorDate) };
+}
+
+function getRangeLabel(cursorDate: Date, view: CalendarView): string {
+  if (view === "month") return format(cursorDate, "MMMM yyyy");
+  if (view === "week") return `Week of ${format(startOfWeek(cursorDate, { weekStartsOn: 0 }), "MMM d")}`;
+  return format(cursorDate, "EEEE, MMMM d");
+}
+
+function shiftDate(cursorDate: Date, view: CalendarView, direction: "previous" | "next"): Date {
+  if (view === "month") return direction === "previous" ? subMonths(cursorDate, 1) : addMonths(cursorDate, 1);
+  if (view === "week") return direction === "previous" ? subWeeks(cursorDate, 1) : addWeeks(cursorDate, 1);
+  return addDays(cursorDate, direction === "previous" ? -1 : 1);
+}
+
+function getMonthDays(cursorDate: Date): Date[] {
+  const firstVisibleDay = startOfWeek(startOfMonth(cursorDate), { weekStartsOn: 0 });
+  return Array.from({ length: 42 }, (_, index) => addDays(firstVisibleDay, index));
+}
+
+function getWeekDays(cursorDate: Date): Date[] {
+  const firstVisibleDay = startOfWeek(cursorDate, { weekStartsOn: 0 });
+  return Array.from({ length: 7 }, (_, index) => addDays(firstVisibleDay, index));
+}
+
+function dateKey(date: Date): string {
+  return format(date, "yyyy-MM-dd");
+}
+
+function hourKey(date: Date): string {
+  return `${dateKey(date)}-${format(date, "H")}`;
+}
+
+function formatHour(hour: number): string {
+  return format(new Date(2026, 0, 1, hour), "ha").toLowerCase();
+}
+
+function scheduledParam(day: Date, hour = 9): string {
+  const scheduledAt = new Date(day);
+  scheduledAt.setHours(hour, 0, 0, 0);
+  return encodeURIComponent(scheduledAt.toISOString());
+}
+
+function sortEvents(events: CalendarEventViewModel[]): CalendarEventViewModel[] {
+  return [...events].sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime());
+}
+
+function normalizeEvent(event: CalendarEvent): CalendarEventViewModel {
+  return {
+    id: event.id,
+    platform: event.platform,
+    profileId: event.profileId,
+    profileDisplayName: event.profileDisplayName,
+    status: event.status,
+    scheduledAt: new Date(event.scheduledAt),
+    textPreview: event.textPreview,
+    hasConflict: event.hasConflict,
+  };
+}
+
+function eventTone(event: CalendarEventViewModel): string {
+  if (event.hasConflict) {
+    return "border-destructive bg-destructive/15 text-foreground";
+  }
+
+  if (event.status === "queued") {
+    return "border-border bg-[var(--bg-elevated)] text-foreground hover:bg-accent";
+  }
+
+  return "border-[color-mix(in_srgb,var(--brand-accent)_35%,transparent)] bg-[var(--brand-accent-soft)] text-foreground hover:bg-[color-mix(in_srgb,var(--brand-accent-soft)_80%,var(--bg-hover))]";
+}
+
+function EventChip({
+  event,
+  compact = false,
+  onClick,
+}: {
+  event: CalendarEventViewModel;
+  compact?: boolean;
+  onClick: (eventId: string) => void;
+}) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {content}
-      </TooltipTrigger>
-      <TooltipContent id={describedById}>
-        {conflictMessage}
-      </TooltipContent>
-    </Tooltip>
+    <button
+      type="button"
+      onClick={(clickEvent) => {
+        clickEvent.stopPropagation();
+        onClick(event.id);
+      }}
+      title={`${format(event.scheduledAt, "h:mm a")} ${event.textPreview}`}
+      className={cn(
+        "flex min-w-0 items-center gap-1.5 rounded-sm border px-1.5 text-left text-[11px] leading-5 transition-colors",
+        eventTone(event),
+        compact ? "h-6 w-full" : "h-5 w-full",
+      )}
+    >
+      <PlatformGlyph platform={event.platform} size={11} />
+      <span className="mono shrink-0 text-[10px] text-muted-foreground">{format(event.scheduledAt, "h:mm")}</span>
+      <span className="truncate">{event.textPreview}</span>
+    </button>
+  );
+}
+
+function groupEventsByDay(events: CalendarEventViewModel[]): Map<string, CalendarEventViewModel[]> {
+  const grouped = new Map<string, CalendarEventViewModel[]>();
+  for (const event of events) {
+    const key = dateKey(event.scheduledAt);
+    grouped.set(key, [...(grouped.get(key) ?? []), event]);
+  }
+
+  for (const [key, value] of grouped.entries()) {
+    grouped.set(key, sortEvents(value));
+  }
+
+  return grouped;
+}
+
+function groupEventsByHour(events: CalendarEventViewModel[]): Map<string, CalendarEventViewModel[]> {
+  const grouped = new Map<string, CalendarEventViewModel[]>();
+  for (const event of events) {
+    const key = hourKey(event.scheduledAt);
+    grouped.set(key, [...(grouped.get(key) ?? []), event]);
+  }
+
+  for (const [key, value] of grouped.entries()) {
+    grouped.set(key, sortEvents(value));
+  }
+
+  return grouped;
+}
+
+function MonthView({
+  cursorDate,
+  events,
+  onOpenEvent,
+}: {
+  cursorDate: Date;
+  events: CalendarEventViewModel[];
+  onOpenEvent: (eventId: string) => void;
+}) {
+  const today = new Date();
+  const monthDays = getMonthDays(cursorDate);
+  const eventsByDay = useMemo(() => groupEventsByDay(events), [events]);
+
+  return (
+    <section className="overflow-hidden rounded-md border bg-card" aria-label="Month calendar">
+      <div className="grid grid-cols-7 border-b bg-[var(--bg-elevated)]">
+        {dayNames.map((dayName) => (
+          <div key={dayName} className="border-r px-2 py-2 text-[10px] font-semibold uppercase text-muted-foreground last:border-r-0">
+            {dayName}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 auto-rows-[minmax(96px,auto)]" role="grid" aria-label="Month days">
+        {monthDays.map((day) => {
+          const dayEvents = eventsByDay.get(dateKey(day)) ?? [];
+          const isToday = isSameDay(day, today);
+          const isOutsideMonth = !isSameMonth(day, cursorDate);
+
+          return (
+            <div
+              key={day.toISOString()}
+              role="gridcell"
+              aria-label={format(day, "EEEE, MMMM d")}
+              className={cn(
+                "min-h-24 border-r border-b p-2 last:border-r-0 [&:nth-child(7n)]:border-r-0",
+                isOutsideMonth && "opacity-[.35]",
+                isToday && "bg-[color-mix(in_srgb,var(--brand-accent-soft)_70%,transparent)]",
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={cn(
+                    "inline-flex h-5 min-w-5 items-center justify-center rounded-full text-xs font-medium",
+                    isToday && "bg-[var(--brand-accent)] px-1 text-[var(--text-on-brand)]",
+                  )}
+                >
+                  {format(day, "d")}
+                </span>
+                {dayEvents.length > 0 ? (
+                  <span className="mono text-[10px] text-muted-foreground">{dayEvents.length}</span>
+                ) : null}
+              </div>
+              <div className="mt-3 space-y-1">
+                {dayEvents.slice(0, 4).map((event) => (
+                  <EventChip key={event.id} event={event} onClick={onOpenEvent} />
+                ))}
+                {dayEvents.length > 4 ? (
+                  <div className="mono truncate text-[10px] text-muted-foreground">+{dayEvents.length - 4} more</div>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function WeekView({
+  cursorDate,
+  events,
+  onOpenEvent,
+  onCreatePost,
+}: {
+  cursorDate: Date;
+  events: CalendarEventViewModel[];
+  onOpenEvent: (eventId: string) => void;
+  onCreatePost: (day: Date, hour: number) => void;
+}) {
+  const today = new Date();
+  const weekDays = getWeekDays(cursorDate);
+  const eventsByHour = useMemo(() => groupEventsByHour(events), [events]);
+
+  return (
+    <section className="overflow-hidden rounded-md border bg-card" aria-label="Week calendar">
+      <div className="grid border-b bg-[var(--bg-elevated)]" style={{ gridTemplateColumns: "60px repeat(7, minmax(0, 1fr))" }}>
+        <div className="border-r" />
+        {weekDays.map((day) => (
+          <div
+            key={day.toISOString()}
+            className={cn(
+              "border-r px-2 py-2 text-center last:border-r-0",
+              isSameDay(day, today) && "bg-[var(--brand-accent-soft)]",
+            )}
+          >
+            <div className="text-[10px] font-semibold uppercase text-muted-foreground">{format(day, "EEE")}</div>
+            <div className="text-sm font-semibold">{format(day, "d")}</div>
+          </div>
+        ))}
+      </div>
+      {weekHours.map((hour) => (
+        <div
+          key={hour}
+          className="grid min-h-11 border-b last:border-b-0"
+          style={{ gridTemplateColumns: "60px repeat(7, minmax(0, 1fr))" }}
+        >
+          <div className="border-r px-2 py-2 text-right text-[11px] text-muted-foreground">{formatHour(hour)}</div>
+          {weekDays.map((day) => {
+            const cellEvents = eventsByHour.get(`${dateKey(day)}-${hour}`) ?? [];
+            return (
+              <div
+                key={`${day.toISOString()}-${hour}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`Create post on ${format(day, "EEEE, MMMM d")} at ${formatHour(hour)}`}
+                onClick={() => onCreatePost(day, hour)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") onCreatePost(day, hour);
+                }}
+                className={cn(
+                  "min-w-0 border-r p-1 last:border-r-0 focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
+                  isSameDay(day, today) && "bg-[color-mix(in_srgb,var(--brand-accent-soft)_45%,transparent)]",
+                )}
+              >
+                <div className="space-y-1">
+                  {cellEvents.map((event) => (
+                    <EventChip key={event.id} event={event} compact onClick={onOpenEvent} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function DayView({
+  cursorDate,
+  events,
+  onOpenEvent,
+  onCreatePost,
+}: {
+  cursorDate: Date;
+  events: CalendarEventViewModel[];
+  onOpenEvent: (eventId: string) => void;
+  onCreatePost: (day: Date, hour: number) => void;
+}) {
+  const eventsByHour = useMemo(() => groupEventsByHour(events), [events]);
+
+  return (
+    <section className="overflow-hidden rounded-md border bg-card" aria-label="Day calendar">
+      {dayHours.map((hour) => {
+        const cellEvents = eventsByHour.get(`${dateKey(cursorDate)}-${hour}`) ?? [];
+        const isActiveHour = hour >= 8 && hour <= 20;
+
+        return (
+          <div key={hour} className="grid min-h-11 border-b last:border-b-0" style={{ gridTemplateColumns: "80px minmax(0, 1fr)" }}>
+            <div className="border-r px-3 py-2 text-right text-[11px] text-muted-foreground">{formatHour(hour)}</div>
+            <div className="min-w-0 p-1.5">
+              {cellEvents.length > 0 ? (
+                <div className="space-y-1">
+                  {cellEvents.map((event) => (
+                    <EventChip key={event.id} event={event} compact onClick={onOpenEvent} />
+                  ))}
+                </div>
+              ) : isActiveHour ? (
+                <button
+                  type="button"
+                  aria-label={`Create post at ${formatHour(hour)}`}
+                  onClick={() => onCreatePost(cursorDate, hour)}
+                  className="h-6 w-full rounded-sm border border-dashed border-border transition-colors hover:border-[var(--brand-accent)] hover:bg-[var(--brand-accent-soft)] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
+                />
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
 export default function CalendarPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [view, setView] = useState<View>('month');
-  const [range, setRange] = useState<{ from: string; to: string }>(() => initMonthRange());
-  const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
-  const [filters, setFilters] = useState<CalendarFilterState>({
-    scope: 'both',
-    search: searchParams.get('search')?.trim() || undefined,
-  });
+  const [view, setView] = useState<CalendarView>("month");
+  const [cursorDate, setCursorDate] = useState(() => new Date());
+  const [scope, setScope] = useState<CalendarScope>("both");
+  const [profileId, setProfileId] = useState("all");
+  const [platform, setPlatform] = useState<"all" | CalendarPlatform>("all");
+  const [tagId, setTagId] = useState("all");
+  const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
+  const visibleRange = useMemo(() => getVisibleRange(cursorDate, view), [cursorDate, view]);
+  const { data: profiles } = useProfiles();
+  const { data: tags } = useTags();
 
   useEffect(() => {
     const timer = setTimeout(() => {
       const trimmedSearch = searchInput.trim();
       setSearchParams(trimmedSearch ? { search: trimmedSearch } : {}, { replace: true });
-      setFilters((previousFilters) => ({
-        ...previousFilters,
-        search: trimmedSearch || undefined,
-      }));
     }, 250);
-
     return () => clearTimeout(timer);
   }, [searchInput, setSearchParams]);
 
   const query = useMemo<CalendarQuery>(
     () => ({
-      from: range.from,
-      to: range.to,
-      scope: filters.scope,
-      platforms: filters.platforms,
-      profileIds: filters.profileIds,
-      tagIds: filters.tagIds,
-      search: filters.search,
+      from: visibleRange.from.toISOString(),
+      to: visibleRange.to.toISOString(),
+      scope,
+      platforms: platform === "all" ? undefined : [platform],
+      profileIds: profileId === "all" ? undefined : [profileId],
+      tagIds: tagId === "all" ? undefined : [tagId],
+      search: searchInput.trim() || undefined,
     }),
-    [filters, range.from, range.to],
+    [platform, profileId, scope, searchInput, tagId, visibleRange.from, visibleRange.to],
   );
   const { data, isLoading, isError } = useCalendarPosts(query);
 
-  const events = useMemo<CalendarEventViewModel[]>(
-    () =>
-      (data?.events ?? []).map((event) => ({
-        id: event.id,
-        start: new Date(event.scheduledAt),
-        end: new Date(event.scheduledAt),
-        title: `${platformAbbreviation(event.platform)} · ${event.textPreview}`,
-        platform: event.platform,
-        hasConflict: event.hasConflict,
-        textPreview: event.textPreview,
-        scheduledAt: event.scheduledAt,
-      })),
+  const events = useMemo(
+    () => sortEvents((data?.events ?? []).map(normalizeEvent)),
     [data?.events],
   );
-  const isFilterActive = hasActiveCalendarFilters(filters);
+
+  function openEvent(eventId: string) {
+    navigate(`/posts/${eventId}/edit`);
+  }
+
+  function createPost(day: Date, hour: number) {
+    navigate(`/posts/new?scheduledAt=${scheduledParam(day, hour)}`);
+  }
 
   return (
-    <main className="space-y-6 p-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Calendar</h1>
-        <p className="text-sm text-muted-foreground">
-          Scheduled posts and queue runs across all profiles.
-        </p>
-      </header>
-
-      <CalendarFilterBar
-        filters={filters}
-        searchInput={searchInput}
-        onSearchInputChange={setSearchInput}
-        onFiltersChange={setFilters}
+    <main className="p-6">
+      <PageHeader
+        title="Calendar"
+        subtitle="Scheduled posts and queue runs across all profiles."
+        actions={
+          <Button asChild variant="accent">
+            <Link to="/posts/new">
+              <Plus aria-hidden="true" />
+              New post
+            </Link>
+          </Button>
+        }
       />
+
+      <section aria-label="Calendar controls" className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" aria-label={`Previous ${view}`} onClick={() => setCursorDate((date) => shiftDate(date, view, "previous"))}>
+            <ChevronLeft aria-hidden="true" />
+          </Button>
+          <Button size="sm" onClick={() => setCursorDate(new Date())}>
+            Today
+          </Button>
+          <Button variant="outline" size="sm" aria-label={`Next ${view}`} onClick={() => setCursorDate((date) => shiftDate(date, view, "next"))}>
+            <ChevronRight aria-hidden="true" />
+          </Button>
+          <h2 className="min-w-0 text-lg font-semibold leading-tight">{getRangeLabel(cursorDate, view)}</h2>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="relative min-w-48 flex-1">
+            <Search
+              className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              aria-label="Search calendar posts"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search posts..."
+              className="h-[30px] pl-8 text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium">Show:</span>
+            <Segmented label="Show calendar items" value={scope} options={showOptions} onChange={setScope} />
+          </div>
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span>Platform:</span>
+            <NativeSelect
+              aria-label="Platform filter"
+              value={platform}
+              onChange={(event) => setPlatform(event.target.value as "all" | CalendarPlatform)}
+              className="h-[30px] w-36 text-xs"
+            >
+              <option value="all">All platforms</option>
+              <option value="twitter">Twitter/X</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="facebook">Facebook</option>
+            </NativeSelect>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span>Profile:</span>
+            <NativeSelect
+              aria-label="Profile filter"
+              value={profileId}
+              onChange={(event) => setProfileId(event.target.value)}
+              className="h-[30px] w-40 text-xs"
+            >
+              <option value="all">All profiles</option>
+              {(profiles ?? []).map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.displayName}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span>Tag:</span>
+            <NativeSelect
+              aria-label="Tag filter"
+              value={tagId}
+              onChange={(event) => setTagId(event.target.value)}
+              className="h-[30px] w-36 text-xs"
+            >
+              <option value="all">All tags</option>
+              {(tags ?? []).map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium">View:</span>
+            <Segmented label="Calendar view" value={view} options={viewOptions} onChange={setView} />
+          </div>
+        </div>
+      </section>
 
       {isLoading ? (
         <div className="space-y-3">
-          <span className="sr-only">Loading calendar…</span>
-          <Skeleton className="h-[640px] w-full rounded-md" />
+          <span className="sr-only">Loading calendar</span>
+          <Skeleton className="h-[560px] w-full rounded-md" />
         </div>
       ) : null}
 
@@ -170,49 +565,15 @@ export default function CalendarPage() {
       ) : null}
 
       {!isLoading && !isError ? (
-        <TooltipProvider>
-          <div className="relative rounded-lg border bg-card p-4">
-            {events.length === 0 ? (
-              <div className="pointer-events-none absolute inset-x-4 top-24 z-10 flex justify-center">
-                <div className="rounded-md border bg-background px-4 py-3 text-center shadow-sm">
-                  {isFilterActive ? (
-                    <p className="text-sm text-muted-foreground">
-                      No posts match the current filters. Try clearing a filter to see more.
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No posts in this {view}.
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : null}
-            <Calendar
-              localizer={calendarLocalizer}
-              events={events}
-              startAccessor="start"
-              endAccessor="end"
-              views={['month', 'week', 'day']}
-              view={view}
-              onView={(nextView) => setView(nextView)}
-              components={{ toolbar: CalendarToolbar, event: CalendarEventContent }}
-              eventPropGetter={(event) => ({
-                className: cn(
-                  'border-l-4 px-2 py-1',
-                  event.platform === 'twitter' && 'border-platform-twitter bg-platform-twitter/10',
-                  event.platform === 'linkedin' && 'border-platform-linkedin bg-platform-linkedin/10',
-                  event.platform === 'facebook' && 'border-platform-facebook bg-platform-facebook/10',
-                  event.hasConflict && '!border-l-destructive',
-                ),
-              })}
-              onRangeChange={(input) => setRange(normalizeRange(input as Date | Date[] | { start: Date; end: Date }))}
-              onSelectEvent={(event) => navigate(`/posts/${event.id}/edit`)}
-              onSelectSlot={(slotInfo: SlotInfo) => navigate(`/posts/new?scheduledAt=${encodeURIComponent(slotInfo.start.toISOString())}`)}
-              selectable
-              popup
-            />
-          </div>
-        </TooltipProvider>
+        <>
+          {view === "month" ? <MonthView cursorDate={cursorDate} events={events} onOpenEvent={openEvent} /> : null}
+          {view === "week" ? (
+            <WeekView cursorDate={cursorDate} events={events} onOpenEvent={openEvent} onCreatePost={createPost} />
+          ) : null}
+          {view === "day" ? (
+            <DayView cursorDate={cursorDate} events={events} onOpenEvent={openEvent} onCreatePost={createPost} />
+          ) : null}
+        </>
       ) : null}
     </main>
   );

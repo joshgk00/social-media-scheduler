@@ -5,6 +5,7 @@ import type { CreateQueueInput, UpdateQueueInput } from '@sms/shared';
 
 interface QueueProfile {
   displayName: string;
+  handle?: string | null;
   platform: string;
 }
 
@@ -12,6 +13,7 @@ export interface QueueListItem {
   id: string;
   name: string;
   profileId: string;
+  scheduleMode: 'specific' | 'fixed' | 'variable';
   intervalType: string;
   intervalValue: number;
   intervalUnit: string;
@@ -37,6 +39,9 @@ interface QueueDetail extends QueueListItem {
 }
 
 interface QueueConfig {
+  name: string;
+  profileId: string;
+  scheduleMode: 'specific' | 'fixed' | 'variable';
   intervalType: string;
   intervalValue: number;
   intervalUnit: string;
@@ -47,6 +52,7 @@ interface QueueConfig {
   seasonalEnd: string | null;
   seasonalRepeat: boolean;
   isRecycling: boolean;
+  notes: string | null;
 }
 
 export interface QueueFilters {
@@ -94,6 +100,18 @@ export function useUpdateQueue() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateQueueInput }) =>
       apiClient.put<QueueDetail>(`/api/queues/${id}`, input),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['queues'] });
+      queryClient.invalidateQueries({ queryKey: ['queues', variables.id] });
+    },
+  });
+}
+
+export function useToggleQueuePaused() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isPaused }: { id: string; isPaused: boolean }) =>
+      apiClient.put<QueueDetail>(`/api/queues/${id}`, { isPaused }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['queues'] });
       queryClient.invalidateQueries({ queryKey: ['queues', variables.id] });

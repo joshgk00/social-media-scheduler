@@ -48,12 +48,12 @@ export function NotificationDropdownContent({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold text-foreground">Recent notifications</h2>
+        <h2 className="text-sm font-semibold text-foreground">Notifications</h2>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-8 px-2 text-xs"
+          className="h-7 px-2 text-xs"
           onClick={() => void handleMarkAllRead()}
           disabled={unreadCount === 0}
         >
@@ -71,7 +71,12 @@ export function NotificationDropdownContent({
         {!isLoading && notifications.length > 0 ? (
           <div className="divide-y divide-border">
             {notifications.map((notification) => (
-              <NotificationRow key={notification.id} notification={notification} onMarkRead={onMarkRead} />
+              <NotificationRow
+                key={notification.id}
+                notification={notification}
+                compact
+                onMarkRead={onMarkRead}
+              />
             ))}
           </div>
         ) : null}
@@ -80,7 +85,7 @@ export function NotificationDropdownContent({
       <div className="border-t border-border px-4 py-2">
         <Button asChild variant="ghost" size="sm" className="h-8 w-full justify-between px-2">
           <a href="/notifications">
-            View all notifications
+            View all
             <ArrowRight className="h-4 w-4" />
           </a>
         </Button>

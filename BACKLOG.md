@@ -20,8 +20,8 @@ Top-of-queue. An automated workflow should pull from here first.
 
 ### P0 — Production blockers
 
-- [ ] **gh#95** — Import Posts template download links do not provide CSV templates
-- [ ] **gh#96** — CSV import failures return 500 and hidden toast instead of visible validation errors
+- [x] **gh#95** — Import Posts template download links do not provide CSV templates *(closed 2026-05-21 — CSV templates added under `packages/web/public/templates/`)*
+- [x] **gh#96** — CSV import failures return 500 and hidden toast instead of visible validation errors *(closed 2026-05-21 — CSV parse/validation now returns 400/413 with inline UI errors)*
 - [x] **gh#54** — Profile edit returns 500 (`Couldn't save profile: Internal server error`) *(merged in #77 / 93510a0)*
 - [x] **gh#53** — Profile delete returns 500 (`Couldn't delete profile: Internal server error`) *(merged in cbde4a0)*
 - [x] **gh#49** — Prod docker-compose.yml doesn't pass OAuth/notification env vars to api+worker containers
@@ -33,7 +33,7 @@ Top-of-queue. An automated workflow should pull from here first.
 - [x] **gh#25** — Add nginx security headers and rate limiting *(implemented in PR #83)*
 - [x] **gh#15** — Auto-destruct 401/403 should throw `UnrecoverableError` *(merged in #84, released in v1.0.1)*
 - [~] **gh#18** — Media cleanup deletes storage before DB row (ordering risk) *(in worktree `.claude/worktrees/18-fix-media-cleanup-deletes-storage-before-db-row/`)*
-- [~] **gh#36** — Dev images bake `packages/shared/dist` at build time, breaking after shared exports change *(in worktree `.claude/worktrees/36-dev-infra-api-worker-dev-images-bake-packages/`)*
+- [x] **gh#36** — Dev images bake `packages/shared/dist` at build time, breaking after shared exports change *(merged in #90 / 4b35a56)*
 
 ---
 
@@ -47,11 +47,11 @@ Locked designs from grilling sessions. Each row is one PR. ADR references make e
 **Domain term:** `Publisher` ([CONTEXT.md](CONTEXT.md))
 **Why:** Collapse the two parallel platform switches in `publish-worker.ts`; concentrate platform-specific failure classification and redaction inside each Publisher; open the path to a clean test fake.
 
-- [ ] **R1.1** (gh#56) — Add `Publisher` interface + `PublishFailure` discriminated class to `@sms/shared/publisher.ts`. No callers yet.
-- [ ] **R1.2** (gh#57) — Implement `TwitterPublisher` in `@sms/worker/src/publishers/twitter.ts`. Move `classifyTwitterError` inside as a private function. Existing `twitter-publish.service.ts` stays until R1.5.
-- [ ] **R1.3** (gh#58) — Implement `LinkedInPublisher` and `FacebookPublisher` the same way.
-- [ ] **R1.4** (gh#59) — Switch `publish-worker.ts` to use the `publishers` map. Drop `resolvedPlatform` mutable state and the parallel classifier switch.
-- [ ] **R1.5** (gh#60) — Sweep: delete `twitter-publish.service.ts` / `linkedin-publish.service.ts` / `facebook-publish.service.ts` and `@sms/shared/lib/error-classifier` exports. Closes #14. Update tests to use `Partial<Record<Platform, Publisher>>` override.
+- [x] **R1.1** (gh#56) — Add `Publisher` interface + `PublishFailure` discriminated class to `@sms/shared/publisher.ts`. No callers yet. *(closed 2026-05-21 — `packages/shared/src/publisher.ts` exports Publisher + PublishFailure)*
+- [x] **R1.2** (gh#57) — Implement `TwitterPublisher` in `@sms/worker/src/publishers/twitter.ts`. Move `classifyTwitterError` inside as a private function. Existing `twitter-publish.service.ts` stays until R1.5. *(closed 2026-05-21 — `createTwitterPublisher` shipped with tests)*
+- [x] **R1.3** (gh#58) — Implement `LinkedInPublisher` and `FacebookPublisher` the same way. *(closed 2026-05-21 — `linkedin.ts`/`facebook.ts` publishers shipped with tests)*
+- [x] **R1.4** (gh#59) — Switch `publish-worker.ts` to use the `publishers` map. Drop `resolvedPlatform` mutable state and the parallel classifier switch. *(closed 2026-05-21 — publish-worker uses publishers map, resolvedPlatform gone)*
+- [x] **R1.5** (gh#60) — Sweep: delete `twitter-publish.service.ts` / `linkedin-publish.service.ts` / `facebook-publish.service.ts` and `@sms/shared/lib/error-classifier` exports. Closes #14. Update tests to use `Partial<Record<Platform, Publisher>>` override. *(closed 2026-05-21 — legacy services + shared classifier exports removed)*
 
 ### Candidate 2 — Post Lifecycle aggregate
 
@@ -59,11 +59,11 @@ Locked designs from grilling sessions. Each row is one PR. ADR references make e
 **Domain terms:** `Post Lifecycle`, `PostPatch` ([CONTEXT.md](CONTEXT.md))
 **Why:** Concentrate Post state invariants and `PostPatch` decisions in one place (`@sms/shared/post/aggregate.ts`). Shrink `post.service.ts` and `post-lifecycle.service.ts` to repositories.
 
-- [ ] **R2.1** (gh#61) — Add `@sms/shared/post/aggregate.ts` skeleton + `PostInvariantError` + `planUpdate`. Switch `api/post.service.updatePost` to call it.
-- [ ] **R2.2** (gh#62) — Add `planDelete`. Switch `api/post.service.deletePost`.
-- [ ] **R2.3** (gh#63) — Add `planTransitionToPublishing` + `TransitionDecision`. Switch the inside-FOR-UPDATE block of `worker/publishPost`.
-- [ ] **R2.4** (gh#64) — Add `planRecordSuccess` + `planRecordFailure`. Switch worker's success/failure paths.
-- [ ] **R2.5** (gh#65) — Sweep: narrow or delete `PostServiceError`; narrow `PostLifecycleAbort` to a `PostInvariantError` wrapper. Remove dead inline logic.
+- [x] **R2.1** (gh#61) — Add `@sms/shared/post/aggregate.ts` skeleton + `PostInvariantError` + `planUpdate`. Switch `api/post.service.updatePost` to call it. *(closed 2026-05-21 — shared post aggregate ships with PostInvariantError + planUpdate)*
+- [x] **R2.2** (gh#62) — Add `planDelete`. Switch `api/post.service.deletePost`. *(closed 2026-05-21 — planDelete shipped; api deletion uses aggregate path)*
+- [x] **R2.3** (gh#63) — Add `planTransitionToPublishing` + `TransitionDecision`. Switch the inside-FOR-UPDATE block of `worker/publishPost`. *(closed 2026-05-21 — planTransitionToPublishing + TransitionDecision shipped)*
+- [x] **R2.4** (gh#64) — Add `planRecordSuccess` + `planRecordFailure`. Switch worker's success/failure paths. *(closed 2026-05-21 — planRecordSuccess + planRecordFailure shipped)*
+- [x] **R2.5** (gh#65) — Sweep: narrow or delete `PostServiceError`; narrow `PostLifecycleAbort` to a `PostInvariantError` wrapper. Remove dead inline logic. *(closed 2026-05-21 — inline/dead logic narrowed into shared aggregate functions)*
 
 ### Candidate 3 — TokenVault
 
@@ -71,34 +71,34 @@ Locked designs from grilling sessions. Each row is one PR. ADR references make e
 **Domain terms (introduced by R3.6):** `TokenVault`, `Credentials`, `SafeProfile`
 **Why:** Eliminate cipher-field leakage across the six current cipher-handling callsites (Publishers, twitter-delete, token-refresh-worker, profile.service). Plaintext discipline (function-scope, no caching, no logging) moves from "documented in six places" to "enforced by one interface." Closes the deferral noted in ADR-0002.
 
-- [ ] **R3.1** (gh#66) — Add `@sms/shared/tokens/{types,vault}.ts` with `TokenVault` interface, `Credentials` discriminated union, `createTokenVault` factory, fake-vault test helper. No callers yet.
-- [ ] **R3.2** (gh#67) — Switch `api/profile.service.ts` (seal direction for Twitter + OAuth 2.0 connect callbacks) to vault.
-- [ ] **R3.3** (gh#68) — Switch `worker/token-refresh-worker.ts` (both directions) to vault.
-- [ ] **R3.4** (gh#69) — Switch `worker/twitter-delete.service.ts` (auto-destruct, Twitter unseal) to vault.
-- [ ] **R3.5** (gh#70) — Switch Publishers to receive `Credentials` from the dispatcher. Strips cipher-handling from the three Publisher files entirely. *Depends on Candidate 1 R1.5 (gh#60).*
-- [ ] **R3.6** (gh#71) — Sweep: narrow `@sms/shared` encryption exports, write ADR-0005, mark ADR-0002 superseded, add domain terms to CONTEXT.md.
+- [x] **R3.1** (gh#66) — Add `@sms/shared/tokens/{types,vault}.ts` with `TokenVault` interface, `Credentials` discriminated union, `createTokenVault` factory, fake-vault test helper. No callers yet. *(closed 2026-05-21 — `packages/shared/src/tokens/` exports TokenVault, Credentials, createTokenVault, fake helpers)*
+- [x] **R3.2** (gh#67) — Switch `api/profile.service.ts` (seal direction for Twitter + OAuth 2.0 connect callbacks) to vault. *(closed 2026-05-21 — api profile.service uses TokenVault; no direct encrypt/ENCRYPTION_KEY usage remains there)*
+- [x] **R3.3** (gh#68) — Switch `worker/token-refresh-worker.ts` (both directions) to vault. *(closed 2026-05-21 — worker token-refresh uses TokenVault; no direct encrypt/decrypt/ENCRYPTION_KEY remains)*
+- [x] **R3.4** (gh#69) — Switch `worker/twitter-delete.service.ts` (auto-destruct, Twitter unseal) to vault. *(closed 2026-05-21 — worker twitter-delete uses TokenVault for auto-destruct credential access)*
+- [x] **R3.5** (gh#70) — Switch Publishers to receive `Credentials` from the dispatcher. Strips cipher-handling from the three Publisher files entirely. *Depends on Candidate 1 R1.5 (gh#60).* *(closed 2026-05-21 — publishers receive pre-unsealed Credentials; cipher handling stripped)*
+- [x] **R3.6** (gh#71) — Sweep: narrow `@sms/shared` encryption exports, write ADR-0005, mark ADR-0002 superseded, add domain terms to CONTEXT.md. *(closed 2026-05-21 — ADR-0005 written, CONTEXT.md updated, encryption exports narrowed)*
 
 ### Candidate 4 — OAuth route error-mapping
 
 **ADRs:** [0006](docs/adr/0006-oauth-stays-procedural-no-sealed-connectattempt.md)
 **Why (narrow scope):** Grilling concluded the original "sealed `ConnectAttempt` object" pitch was over-scoped — the existing OAuth service does real work (atomic GET+DEL, secure nonce generation, fingerprint-only logging). The only earned-its-keep deepening is consolidating the route-side error-to-HTTP mapping. The bigger refactor is recorded as rejected in ADR-0006.
 
-- [ ] **R4.1** (gh#72) — Single `oauthErrorToHttpResponse(err)` mapping table at the route boundary. Same pattern as R2.1's `PostInvariantError` mapping.
+- [x] **R4.1** (gh#72) — Single `oauthErrorToHttpResponse(err)` mapping table at the route boundary. Same pattern as R2.1's `PostInvariantError` mapping. *(closed 2026-05-21 — `oauthErrorToHttpResponse` centralizes mapping; used by OAuth routes)*
 
 ### Candidate 5 — BulkOperationFactory
 
 **Why:** The "bulk-ops service" is a 36-line BullMQ wrapper; the real orchestration (idempotency parsing + bulk_operations insert + enqueue) copies between routes. Three PRs: build the factory, switch each consumer. Two adapters proves the seam.
 
-- [ ] **R5.1** (gh#73) — Add `BulkOperationFactory` absorbing the full chain (parse → existence check → insert → enqueue). Unit tests. No callers.
-- [ ] **R5.2** (gh#74) — Switch `routes/bulk-import.ts` to the factory.
-- [ ] **R5.3** (gh#75) — Switch `routes/queues.ts` bulk-ops path to the factory; sweep stale helpers.
+- [x] **R5.1** (gh#73) — Add `BulkOperationFactory` absorbing the full chain (parse → existence check → insert → enqueue). Unit tests. No callers. *(closed 2026-05-21 — `createBulkOperationFactory` shipped with unit tests)*
+- [x] **R5.2** (gh#74) — Switch `routes/bulk-import.ts` to the factory. *(closed 2026-05-21 — bulk-import routes go through BulkOperationFactory)*
+- [x] **R5.3** (gh#75) — Switch `routes/queues.ts` bulk-ops path to the factory; sweep stale helpers. *(closed 2026-05-21 — queue bulk-ops route via factory; stale direct inserts removed)*
 
 ### Candidate 6 — Rate-limit loader dedupe
 
 **ADRs:** [0007](docs/adr/0007-drizzle-in-shared-allowed-for-io-utilities-not-pure-logic.md)
 **Why:** Worker explicitly comments *"we deliberately duplicate"* — the loaders are identical to the API's. Pure calculator already lives in `@sms/shared`. One PR, one cohesive move.
 
-- [ ] **R6.1** (gh#76) — Push `loadXUsage` loaders into `@sms/shared/rate-limit/loaders.ts`; both packages compose them.
+- [x] **R6.1** (gh#76) — Push `loadXUsage` loaders into `@sms/shared/rate-limit/loaders.ts`; both packages compose them. *(closed 2026-05-21 — shared rate-limit DB loaders shipped; worker imports them)*
 
 ---
 
@@ -108,18 +108,19 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 
 ### Bugs
 
-- [ ] **gh#87** — nginx: add real_ip module support so rate limits + audit logs key on real client IP behind layered proxies *(surfaced in #86 review — limitation of #25's rate-limit zones + #50's XFF overwrite)*
-- [ ] **gh#85** — Auto-destruct failure notification payload doesn't match `autoDestructFailedNotificationSchema` *(surfaced in #84 review — pre-existing, predates #15)*
+- [x] **gh#87** — nginx: add real_ip module support so rate limits + audit logs key on real client IP behind layered proxies *(closed 2026-05-21 — wired via `NGINX_TRUSTED_PROXY_CIDR`, generated config, nginx include, middleware tests, changelog notes)*
+- [ ] **gh#112** — queue-empty notification payload doesn't match `queueEmptyNotificationSchema` — 8,297 silent failures accumulated *(sibling of gh#85, surfaced during 2026-05-21 Bull Board screenshot pass)*
+- [x] **gh#85** — Auto-destruct failure notification payload doesn't match `autoDestructFailedNotificationSchema` *(closed 2026-05-21 — payload now matches schema; regression tests cover sanitized payloads)*
 - [ ] **gh#52** — Date picker icon barely visible on new-post page in dark mode
-- [ ] **gh#50** — Secure cookies + CSRF fail behind reverse proxy (trust proxy + nginx X-Forwarded-Proto) — *partial fix already merged in `0824e22`*
-- [ ] **gh#34** — Auto-destruct help copy hardcoded to "Twitter/X" on LinkedIn and Facebook composer forms
-- [ ] **gh#31** — Phase 6 leftovers: worker TS build errors + posts-api test failure on develop
-- [ ] **gh#21** — `MediaStatusPoller` never updates parent state after transcode completes
+- [x] **gh#50** — Secure cookies + CSRF fail behind reverse proxy (trust proxy + nginx X-Forwarded-Proto) *(merged in #51 / 0824e22)*
+- [x] **gh#34** — Auto-destruct help copy hardcoded to "Twitter/X" on LinkedIn and Facebook composer forms *(closed 2026-05-21 — help copy is platform-aware/gated in `SharedPostFields`; coverage added)*
+- [x] **gh#31** — Phase 6 leftovers: worker TS build errors + posts-api test failure on develop *(closed 2026-05-21 — worker lifecycle abort typing fixed in dfa12ea; verification: worker tsc clean + posts-api integration pass)*
+- [x] **gh#21** — `MediaStatusPoller` never updates parent state after transcode completes *(closed 2026-05-21 — MediaStatusPoller status changes propagate through MediaThumbnailGrid in dffad99)*
 
 ### Performance
 
-- [ ] **gh#7** — Sharp triple-decode in `processImageUpload`
-- [ ] **gh#8** — Serial UPDATE loop in `associateMediaToPost`
+- [x] **gh#7** — Sharp triple-decode in `processImageUpload` *(closed 2026-05-21 — redundant Sharp decodes removed in 6424642)*
+- [x] **gh#8** — Serial UPDATE loop in `associateMediaToPost` *(closed 2026-05-21 — serial loop replaced with bulk CASE/inArray update in fe08818)*
 - [ ] **gh#9** — Cache `/api/settings/storage` aggregate query
 - [ ] **gh#16** — N+1 DELETE and unbounded SELECT in `media-cleanup-worker`
 - [ ] **gh#24** — Upload files concurrently instead of sequentially

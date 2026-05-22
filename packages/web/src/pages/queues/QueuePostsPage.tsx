@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Plus, ListOrdered, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, ListOrdered, Search } from 'lucide-react';
 
 import { useQueue, useQueues } from '../../hooks/use-queues';
 import {
@@ -11,11 +11,9 @@ import {
   useRemoveFromQueue,
   type QueuePost,
 } from '../../hooks/use-queue-posts';
-import { PostStatusBadge } from '../../components/posts/PostStatusBadge';
 import { PostHistoryDialog } from '../../components/posts/PostHistoryDialog';
 import { PostFullTextDialog } from '../../components/posts/PostFullTextDialog';
 import { QueuePostActionsMenu } from '../../components/queues/QueuePostActionsMenu';
-import { QueueStatusBadge } from '../../components/queues/QueueStatusBadge';
 import { SpinnableVariantsDialog } from '../../components/queues/SpinnableVariantsDialog';
 import { BulkActionsDropdown } from '../../components/bulk/BulkActionsDropdown';
 import { CopyQueueDialog } from '../../components/bulk/CopyQueueDialog';
@@ -31,10 +29,12 @@ import {
   useQueuePurge,
   useQueueRandomize,
 } from '../../hooks/use-bulk-ops';
-import type { PostStatus } from '@sms/shared';
 
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import { Card } from '../../components/ui/card';
+import { PageHeader } from '../../components/ui/page-header';
+import { StatusPill, type StatusPillStatus } from '../../components/ui/pill';
 import { Skeleton } from '../../components/ui/skeleton';
 import {
   Table,
@@ -54,6 +54,13 @@ import { Input } from '../../components/ui/input';
 
 import { cn } from '../../lib/utils';
 import { renderHeadline } from '../../lib/headline-to-mark';
+
+function statusForPill(status: string): StatusPillStatus {
+  if (status === 'scheduled' || status === 'queued' || status === 'draft' || status === 'published' || status === 'failed') {
+    return status;
+  }
+  return 'queued';
+}
 
 export default function QueuePostsPage() {
   const { id: queueId } = useParams<{ id: string }>();
@@ -141,8 +148,8 @@ export default function QueuePostsPage() {
 
   if (isError) {
     return (
-      <main className="space-y-4 p-6">
-        <h1 className="text-2xl font-semibold">Queue Posts</h1>
+      <main className="space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+        <h1 className="text-2xl font-semibold">Queue posts</h1>
         <div className="text-center py-12">
           <h2 className="text-lg font-semibold mb-2">Failed to load posts</h2>
           <p className="text-muted-foreground">
@@ -154,33 +161,22 @@ export default function QueuePostsPage() {
   }
 
   return (
-    <main className="space-y-4 p-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">
-            {isQueueLoading ? (
-              <Skeleton className="h-8 w-48" />
-            ) : (
-              `${queue?.name ?? 'Queue'} -- Posts`
-            )}
-          </h1>
-          {queue && (
-            <QueueStatusBadge
-              isPaused={queue.isPaused}
-              postCount={totalPosts}
-              seasonalStart={queue.seasonalStart}
-              seasonalEnd={queue.seasonalEnd}
-            />
-          )}
-        </div>
-        <Button asChild>
-          <Link to={`/posts/new?queueId=${queueId}`}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Post
-          </Link>
-        </Button>
-      </div>
+    <main className="space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+      <PageHeader
+        breadcrumb={`Queues / ${queue?.name ?? 'Queue'} / Posts`}
+        title={isQueueLoading ? 'Queue posts' : `${queue?.name ?? 'Queue'} posts`}
+        actions={
+          <>
+            {queue && <StatusPill status={queue.isPaused ? 'paused' : 'active'} />}
+            <Button asChild>
+              <Link to={`/posts/new?queueId=${queueId}`}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add post
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
@@ -230,7 +226,6 @@ export default function QueuePostsPage() {
         </div>
       )}
 
-      {/* Posts table */}
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, index) => (
@@ -238,29 +233,31 @@ export default function QueuePostsPage() {
           ))}
         </div>
       ) : totalPosts === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <ListOrdered className="h-12 w-12 text-muted-foreground mb-4" />
-          <h2 className="text-lg font-semibold mb-1">
-            No posts in this queue
-          </h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Add posts to start publishing on schedule.
-          </p>
-          <Button asChild>
-            <Link to={`/posts/new?queueId=${queueId}`}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Post
-            </Link>
-          </Button>
-        </div>
+        <Card padded>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <ListOrdered className="h-12 w-12 text-muted-foreground mb-4" />
+            <h2 className="text-lg font-semibold mb-1">
+              No posts in this queue
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Add posts to start publishing on schedule.
+            </p>
+            <Button asChild>
+              <Link to={`/posts/new?queueId=${queueId}`}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add post
+              </Link>
+            </Button>
+          </div>
+        </Card>
       ) : (
-        <div className="rounded-md border">
+        <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead style={{ width: 60 }}>Position</TableHead>
+                <TableHead style={{ width: 60 }}>#</TableHead>
                 <TableHead style={{ width: 80 }}>Reorder</TableHead>
-                <TableHead>Text</TableHead>
+                <TableHead>Post</TableHead>
                 <TableHead style={{ width: 100 }}>Status</TableHead>
                 <TableHead style={{ width: 60 }}>Spin</TableHead>
                 <TableHead style={{ width: 100 }}>Auto-Destruct</TableHead>
@@ -305,18 +302,7 @@ export default function QueuePostsPage() {
                           aria-label={`Move post to position ${position - 1}`}
                           aria-disabled={isDisabled || isFirst}
                         >
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="m18 15-6-6-6 6" />
-                          </svg>
+                          <ChevronUp className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -327,18 +313,7 @@ export default function QueuePostsPage() {
                           aria-label={`Move post to position ${position + 1}`}
                           aria-disabled={isDisabled || isLast}
                         >
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="m6 9 6 6 6-6" />
-                          </svg>
+                          <ChevronDown className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </TableCell>
@@ -348,9 +323,7 @@ export default function QueuePostsPage() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <PostStatusBadge
-                        status={post.status as PostStatus}
-                      />
+                      <StatusPill status={statusForPill(post.status)} />
                     </TableCell>
                     <TableCell>
                       {post.hasSpinnableText && (
@@ -392,7 +365,7 @@ export default function QueuePostsPage() {
               })}
             </TableBody>
           </Table>
-        </div>
+        </Card>
       )}
 
       <PostHistoryDialog

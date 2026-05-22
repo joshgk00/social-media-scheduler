@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileDropZone } from '../../components/bulk/FileDropZone';
 import { Button } from '../../components/ui/button';
@@ -14,6 +14,8 @@ import { useQueues } from '../../hooks/use-queues';
 import { useBulkImport } from '../../hooks/use-bulk-ops';
 import { getQueueTemplateUrl, getScheduledTemplateUrl } from '../../hooks/use-csv-templates';
 import { cn } from '../../lib/utils';
+import { PageHeader } from '../../components/ui/page-header';
+import { Pill } from '../../components/ui/pill';
 
 interface ImportErrorMessage {
   title: string;
@@ -67,6 +69,7 @@ export default function BulkImportPage() {
   const [profileId, setProfileId] = useState('');
   const [queueId, setQueueId] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [validRowCount, setValidRowCount] = useState(0);
   const [budgetError, setBudgetError] = useState<{ budget: number; currentCount: number; attemptedAdditional: number } | null>(null);
   const [importError, setImportError] = useState<ImportErrorMessage | null>(null);
   const filteredQueues = queues?.filter((queue) => !profileId || queue.profileId === profileId) ?? [];
@@ -102,69 +105,108 @@ export default function BulkImportPage() {
   const projected = budgetError ? budgetError.currentCount + budgetError.attemptedAdditional : 0;
   const overage = budgetError ? Math.max(0, projected - budgetError.budget) : 0;
 
+  async function handleFileChange(nextFile: File | null) {
+    setFile(nextFile);
+    setBudgetError(null);
+    setImportError(null);
+    if (!nextFile) {
+      setValidRowCount(0);
+      return;
+    }
+
+    const text =
+      typeof nextFile.text === 'function'
+        ? await nextFile.text().catch(() => '')
+        : '';
+    const rows = text
+      .split(/\r?\n/)
+      .map((row) => row.trim())
+      .filter(Boolean);
+    setValidRowCount(Math.max(0, rows.length - 1));
+  }
+
   return (
-    <main className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Import Posts</h1>
-        <p className="text-sm text-muted-foreground">Upload a CSV to create scheduled posts or add posts to an existing queue.</p>
-      </div>
+    <main className="mx-auto max-w-[760px] px-4 py-6 sm:px-6 lg:px-8">
+      <PageHeader
+        breadcrumb={<Link to="/posts" className="hover:underline">Posts</Link>}
+        title="Import posts from CSV"
+        subtitle="Upload a CSV to create scheduled posts or append posts to an existing queue."
+      />
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold">1. Target</h2>
-          <p className="text-sm text-muted-foreground">Where should imported posts go?</p>
-        </div>
-        <RadioGroup value={target} onValueChange={(value) => setTarget(value as 'scheduled' | 'queue')} className="grid gap-3 md:grid-cols-2">
-          <Label className={cn('flex items-start gap-3 rounded-md border p-4 font-normal', target === 'scheduled' && 'border-2 border-primary')}>
-            <RadioGroupItem value="scheduled" />
-            <span className="space-y-1">
-              <span className="block text-sm font-semibold">Scheduled posts</span>
-              <span className="block text-sm text-muted-foreground">Each row becomes a scheduled post with its own publish time.</span>
-            </span>
-          </Label>
-          <Label className={cn('flex items-start gap-3 rounded-md border p-4 font-normal', target === 'queue' && 'border-2 border-primary')}>
-            <RadioGroupItem value="queue" />
-            <span className="space-y-1">
-              <span className="block text-sm font-semibold">Queue</span>
-              <span className="block text-sm text-muted-foreground">Each row joins the end of an existing queue, in CSV order.</span>
-            </span>
-          </Label>
-        </RadioGroup>
-      </section>
-
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold">2. Profile</h2>
-          <p className="text-sm text-muted-foreground">Which connected profile publishes these posts?</p>
-        </div>
-        <Select value={profileId} onValueChange={setProfileId}>
-          <SelectTrigger className="max-w-md"><SelectValue placeholder="Select a profile" /></SelectTrigger>
-          <SelectContent>{profiles?.map((profile) => <SelectItem key={profile.id} value={profile.id}>@{profile.handle}</SelectItem>)}</SelectContent>
-        </Select>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">{target === 'queue' ? '3. Queue & file' : '3. File'}</h2>
-        {target === 'queue' && (
-          <div className="max-w-md space-y-2">
-            <Label>Add to queue</Label>
-            <Select value={queueId} onValueChange={setQueueId}>
-              <SelectTrigger><SelectValue placeholder="Select a queue" /></SelectTrigger>
-              <SelectContent>{filteredQueues.map((queue) => <SelectItem key={queue.id} value={queue.id}>{queue.name}</SelectItem>)}</SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">Only queues for the selected profile are shown.</p>
+      <section className="space-y-4">
+        <div className="rounded-md border bg-card p-4 shadow-[var(--shadow-sm)]">
+          <div className="mb-3 flex items-start gap-3">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-accent)] text-[11px] font-semibold text-[var(--text-on-brand)]">1</span>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Where should imported posts go?</h2>
+              <p className="text-sm text-muted-foreground">Choose whether rows become scheduled posts or queue entries.</p>
+            </div>
           </div>
-        )}
+          <RadioGroup value={target} onValueChange={(value) => setTarget(value as 'scheduled' | 'queue')} className="grid gap-3 md:grid-cols-2">
+            <Label className={cn('flex cursor-pointer items-start gap-3 rounded-md border bg-[var(--bg-base)] p-4 font-normal transition-colors hover:bg-[var(--bg-hover)]', target === 'scheduled' && 'border-[var(--brand-accent)] bg-[var(--brand-accent-soft)]')}>
+              <RadioGroupItem value="scheduled" />
+              <span className="space-y-1">
+                <span className="block text-sm font-semibold">Scheduled posts</span>
+                <span className="block text-sm text-muted-foreground">Each CSV row becomes a scheduled post with its own publish time.</span>
+              </span>
+            </Label>
+            <Label className={cn('flex cursor-pointer items-start gap-3 rounded-md border bg-[var(--bg-base)] p-4 font-normal transition-colors hover:bg-[var(--bg-hover)]', target === 'queue' && 'border-[var(--brand-accent)] bg-[var(--brand-accent-soft)]')}>
+              <RadioGroupItem value="queue" />
+              <span className="space-y-1">
+                <span className="block text-sm font-semibold">Append to a queue</span>
+                <span className="block text-sm text-muted-foreground">Each row joins the end of an existing queue, in CSV order.</span>
+              </span>
+            </Label>
+          </RadioGroup>
+        </div>
+
+        <div className="rounded-md border bg-card p-4 shadow-[var(--shadow-sm)]">
+          <div className="mb-3 flex items-start gap-3">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-accent)] text-[11px] font-semibold text-[var(--text-on-brand)]">2</span>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Which profile publishes these posts?</h2>
+              <p className="text-sm text-muted-foreground">Queue options are filtered after a profile is selected.</p>
+            </div>
+          </div>
+          <Select value={profileId} onValueChange={setProfileId}>
+            <SelectTrigger><SelectValue placeholder="Select a profile..." /></SelectTrigger>
+            <SelectContent>{profiles?.map((profile) => <SelectItem key={profile.id} value={profile.id}>@{profile.handle}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+
+        <div className="rounded-md border bg-card p-4 shadow-[var(--shadow-sm)]">
+          <div className="mb-3 flex items-start gap-3">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-accent)] text-[11px] font-semibold text-[var(--text-on-brand)]">3</span>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Upload your CSV</h2>
+              <p className="text-sm text-muted-foreground">Use UTF-8 CSV files up to 10 MB.</p>
+            </div>
+          </div>
+          {target === 'queue' && (
+            <div className="mb-4 space-y-2">
+              <Label>Add to queue</Label>
+              <Select value={queueId} onValueChange={setQueueId}>
+                <SelectTrigger><SelectValue placeholder="Select a queue" /></SelectTrigger>
+                <SelectContent>{filteredQueues.map((queue) => <SelectItem key={queue.id} value={queue.id}>{queue.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Only queues for the selected profile are shown.</p>
+            </div>
+          )}
         <FileDropZone
           file={file}
-          onFileChange={(nextFile) => {
-            setFile(nextFile);
-            setBudgetError(null);
-            setImportError(null);
-          }}
+          onFileChange={handleFileChange}
         />
+          {file && (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-[var(--bg-elevated)] px-3 py-2">
+              <Pill tone="success">{validRowCount} rows valid</Pill>
+              <Button type="button" variant="ghost" size="sm" onClick={() => handleFileChange(null)}>
+                <X size={14} aria-hidden="true" />
+                Clear
+              </Button>
+            </div>
+          )}
         {importError && (
-          <Alert variant="destructive" role="alert">
+          <Alert variant="destructive" role="alert" className="mt-4">
             <AlertTitle>{importError.title}</AlertTitle>
             <AlertDescription>
               <p>{importError.description}</p>
@@ -179,7 +221,7 @@ export default function BulkImportPage() {
             </Button>
           </Alert>
         )}
-      </section>
+        </div>
 
       <Card>
         <CardHeader>
@@ -187,8 +229,18 @@ export default function BulkImportPage() {
           <CardDescription>Download the template that matches your target. Tags are semicolon-separated. Spinnable text uses {'{a|b|c}'} syntax verbatim.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3 text-sm">
-          <a className="text-primary underline-offset-4 hover:underline" href={getScheduledTemplateUrl()}>Download Scheduled Template</a>
-          <a className="text-primary underline-offset-4 hover:underline" href={getQueueTemplateUrl()}>Download Queue Template</a>
+          <Button asChild variant="outline" size="sm">
+            <a href={getScheduledTemplateUrl()}>
+              <Download size={14} aria-hidden="true" />
+              Scheduled template
+            </a>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a href={getQueueTemplateUrl()}>
+              <Download size={14} aria-hidden="true" />
+              Queue template
+            </a>
+          </Button>
         </CardContent>
       </Card>
 
@@ -204,13 +256,19 @@ export default function BulkImportPage() {
         </Alert>
       )}
 
-      <div className="flex items-center justify-end gap-2">
-        <Button asChild variant="outline"><Link to="/posts">Don't Import</Link></Button>
-        <Button onClick={handleSubmit} disabled={!isReady || importMutation.isPending}>
+      <div className="flex items-center justify-between gap-2">
+        <Button asChild variant="ghost">
+          <Link to="/posts">
+            <ArrowLeft size={16} aria-hidden="true" />
+            Back to posts
+          </Link>
+        </Button>
+        <Button aria-label="Import" onClick={handleSubmit} disabled={!isReady || importMutation.isPending} variant="primary">
           {importMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-          {importMutation.isPending ? 'Queuing import...' : 'Import'}
+          {importMutation.isPending ? 'Queuing import...' : `Import ${validRowCount || ''} posts`}
         </Button>
       </div>
+      </section>
     </main>
   );
 }

@@ -1,14 +1,15 @@
-import { Router } from 'express';
-import { createBullBoard } from '@bull-board/api';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
-import { ExpressAdapter } from '@bull-board/express';
-import type { Queue } from 'bullmq';
+import { Router } from "express";
+import { createBullBoard } from "@bull-board/api";
+import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
+import { ExpressAdapter } from "@bull-board/express";
+import type { Queue } from "bullmq";
 
-import { requireAuth } from '../middleware/auth-guard.js';
+import { requireAuth } from "../middleware/auth-guard.js";
 
 export interface AdminRouterDeps {
   publishQueue: Queue;
   notificationQueue: Queue;
+  // Optional in deployments/tests that have not enabled the bulk operations worker.
   bulkOpsQueue?: Queue;
 }
 
@@ -31,7 +32,7 @@ export function createAdminRouter({
   bulkOpsQueue,
 }: AdminRouterDeps): Router {
   const serverAdapter = new ExpressAdapter();
-  serverAdapter.setBasePath('/admin/queues');
+  serverAdapter.setBasePath("/admin/queues");
 
   createBullBoard({
     queues: [
@@ -43,6 +44,40 @@ export function createAdminRouter({
   });
 
   const router = Router();
-  router.use('/admin/queues', requireAuth, serverAdapter.getRouter());
+  router.get("/admin/queue-health", requireAuth, async (_req, res, next) => {
+    try {
+      const [publish, notification, bulkOps] = await Promise.all([
+        publishQueue.getJobCounts("active", "completed", "failed"),
+        notificationQueue.getJobCounts("active", "completed", "failed"),
+        bulkOpsQueue?.getJobCounts("active", "completed", "failed") ??
+          Promise.resolve({ active: 0, completed: 0, failed: 0 }),
+      ]);
+
+      res.json({
+        publish,
+        notification,
+        bulk_ops: bulkOps,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.use(
+    "/admin/queues",
+    requireAuth,
+    (_req, res, next) => {
+      // Direct API/dev/test fallback only. production nginx's /admin/ block
+      // hides these upstream headers before applying its canonical CSP/XFO
+      // policy; middleware.test asserts that proxy_hide_header contract.
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'",
+      );
+      next();
+    },
+    serverAdapter.getRouter(),
+  );
   return router;
 }

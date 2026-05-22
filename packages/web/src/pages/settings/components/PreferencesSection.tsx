@@ -1,12 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { preferencesUpdateSchema, DATE_FORMATS, ENTRIES_PER_PAGE_OPTIONS, type PreferencesUpdateInput } from '@sms/shared';
+import {
+  preferencesUpdateSchema,
+  DATE_FORMATS,
+  ENTRIES_PER_PAGE_OPTIONS,
+  type DefaultLandingPage,
+  type PreferencesUpdateInput,
+} from '@sms/shared';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { User } from '../../../hooks/use-auth';
 import { useUpdatePreferences } from '../../../hooks/use-settings';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Card } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '../../../components/ui/form';
@@ -35,6 +41,15 @@ interface PreferencesSectionProps {
   user: User;
 }
 
+const DEFAULT_LANDING_OPTIONS: Array<{ value: DefaultLandingPage; label: string }> = [
+  { value: '/dashboard', label: 'Dashboard' },
+  { value: '/posts', label: 'Posts' },
+  { value: '/queues', label: 'Queues' },
+  { value: '/calendar', label: 'Calendar' },
+  { value: '/profiles', label: 'Profiles' },
+  { value: '/notifications', label: 'Notifications' },
+];
+
 export function PreferencesSection({ user }: PreferencesSectionProps) {
   const [tzSearch, setTzSearch] = useState('');
   const updatePreferences = useUpdatePreferences();
@@ -52,15 +67,20 @@ export function PreferencesSection({ user }: PreferencesSectionProps) {
       timezone: user.timezone,
       dateFormat: user.dateFormat,
       entriesPerPage: user.entriesPerPage,
+      defaultLandingPage: (user.defaultLandingPage || '/dashboard') as DefaultLandingPage,
     },
   });
 
   const hasChanges = form.formState.isDirty;
 
   async function onSubmit(data: PreferencesUpdateInput) {
+    const payload = {
+      ...data,
+      defaultLandingPage: (data.defaultLandingPage ?? '/dashboard') as DefaultLandingPage,
+    };
     try {
-      await updatePreferences.mutateAsync(data);
-      form.reset(data);
+      await updatePreferences.mutateAsync(payload);
+      form.reset(payload);
       toast.success('Preferences saved.');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
@@ -69,13 +89,10 @@ export function PreferencesSection({ user }: PreferencesSectionProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Preferences</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+    <Card title="Preferences" padded>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
             <FormField
               control={form.control}
               name="timezone"
@@ -91,7 +108,7 @@ export function PreferencesSection({ user }: PreferencesSectionProps) {
                     <SelectContent>
                       <div className="p-2">
                         <Input
-                          placeholder="Search timezones..."
+                          placeholder="Search timezones"
                           value={tzSearch}
                           onChange={(e) => setTzSearch(e.target.value)}
                           className="h-8"
@@ -164,19 +181,42 @@ export function PreferencesSection({ user }: PreferencesSectionProps) {
               )}
             />
 
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                variant="secondary"
-                disabled={!hasChanges || updatePreferences.isPending}
-              >
-                {updatePreferences.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Save Preferences
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
+            <FormField
+              control={form.control}
+              name="defaultLandingPage"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Default landing page</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select landing page" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {DEFAULT_LANDING_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!hasChanges || updatePreferences.isPending}
+            >
+              {updatePreferences.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save preferences
+            </Button>
+          </div>
+        </form>
+      </Form>
     </Card>
   );
 }

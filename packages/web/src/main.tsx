@@ -4,8 +4,11 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from './components/ui/sonner';
 import { queryClient } from './lib/query-client';
 import { BULK_OPERATION_LIVE_REGION_ID } from './lib/bulk-operation-live-region';
+import { initializeTheme } from './lib/theme';
 import { App } from './App';
 import './index.css';
+
+initializeTheme();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

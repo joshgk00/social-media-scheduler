@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseQueueStartDate } from '../queue.service.js';
+import {
+  assertQueueScheduleConsistency,
+  parseQueueStartDate,
+  QueueServiceError,
+} from '../queue.service.js';
 
 describe('parseQueueStartDate', () => {
   it('interprets date-only values as midnight in the user timezone', () => {
@@ -15,5 +19,19 @@ describe('parseQueueStartDate', () => {
     );
 
     expect(startDate?.toISOString()).toBe('2026-05-21T12:30:00.000Z');
+  });
+});
+
+describe('assertQueueScheduleConsistency', () => {
+  it('accepts matching schedule mode and interval type pairs', () => {
+    expect(() => assertQueueScheduleConsistency('specific', 'fixed')).not.toThrow();
+    expect(() => assertQueueScheduleConsistency('fixed', 'fixed')).not.toThrow();
+    expect(() => assertQueueScheduleConsistency('variable', 'variable')).not.toThrow();
+  });
+
+  it('rejects inconsistent effective update pairs before the database write', () => {
+    expect(() => assertQueueScheduleConsistency('fixed', 'variable')).toThrow(QueueServiceError);
+    expect(() => assertQueueScheduleConsistency('specific', 'variable')).toThrow(QueueServiceError);
+    expect(() => assertQueueScheduleConsistency('variable', 'fixed')).toThrow(QueueServiceError);
   });
 });

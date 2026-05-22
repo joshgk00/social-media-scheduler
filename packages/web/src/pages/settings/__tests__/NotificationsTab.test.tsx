@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { NOTIFICATION_EVENTS } from '@sms/shared';
 
 import { NotificationsTab } from '../components/NotificationsTab';
 
@@ -10,21 +9,29 @@ beforeEach(() => {
 });
 
 describe('NotificationsTab', () => {
-  it('renders one row per event and disables always-on switches', () => {
+  it('renders the settings event rows and disables required switches', () => {
     render(<NotificationsTab smtpStatus={{ configured: true }} />);
 
-    for (const eventSpec of NOTIFICATION_EVENTS) {
-      expect(screen.getByText(eventSpec.label)).toBeInTheDocument();
+    for (const label of [
+      'Publish failed',
+      'Token expiring soon',
+      'Re-authentication required',
+      'Token revoked',
+      'Rate limit reached',
+      'Queue finished',
+      'Bulk import complete',
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(screen.getAllByRole('row')).toHaveLength(NOTIFICATION_EVENTS.length + 1);
-    expect(screen.getAllByText('Required notification — cannot be disabled').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('row')).toHaveLength(8);
+    expect(screen.getAllByText('Required event — cannot be disabled in-app').length).toBeGreaterThan(0);
   });
 
   it('renders deferred and in-app-only helper copy', () => {
     render(<NotificationsTab smtpStatus={{ configured: true }} />);
 
-    expect(screen.getByText('Available when bulk operations ship in Phase 10.')).toBeInTheDocument();
-    expect(screen.getAllByText('In-app only — no email for this event.').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Available when bulk import notifications are enabled.')).toBeInTheDocument();
+    expect(screen.getByText('In-app only — no email for this event.')).toBeInTheDocument();
   });
 
   it('renders save and discard actions disabled while the form is clean', () => {
@@ -39,25 +46,25 @@ describe('NotificationsTab', () => {
 
     render(<NotificationsTab smtpStatus={{ configured: true }} />);
 
-    const autoDestructSwitch = screen.getByRole('switch', {
-      name: 'Auto-destruct failed in-app notifications',
+    const publishFailedSwitch = screen.getByRole('switch', {
+      name: 'Publish failed in-app notifications',
     });
     const discardButton = screen.getByRole('button', { name: 'Discard changes' });
     const saveButton = screen.getByRole('button', { name: 'Save preferences' });
 
-    expect(autoDestructSwitch).toBeChecked();
+    expect(publishFailedSwitch).toBeChecked();
     expect(discardButton).toBeDisabled();
     expect(saveButton).toBeDisabled();
 
-    await user.click(autoDestructSwitch);
+    await user.click(publishFailedSwitch);
 
-    expect(autoDestructSwitch).not.toBeChecked();
+    expect(publishFailedSwitch).not.toBeChecked();
     expect(discardButton).toBeEnabled();
     expect(saveButton).toBeEnabled();
 
     await user.click(discardButton);
 
-    expect(autoDestructSwitch).toBeChecked();
+    expect(publishFailedSwitch).toBeChecked();
     expect(discardButton).toBeDisabled();
     expect(saveButton).toBeDisabled();
   });
@@ -67,26 +74,26 @@ describe('NotificationsTab', () => {
 
     render(<NotificationsTab smtpStatus={{ configured: true }} />);
 
-    const rateLimitWarningSwitch = screen.getByRole('switch', {
-      name: 'Rate limit warning in-app notifications',
+    const tokenExpiringSwitch = screen.getByRole('switch', {
+      name: 'Token expiring soon in-app notifications',
     });
-    const queueEmptySwitch = screen.getByRole('switch', {
-      name: 'Queue empty in-app notifications',
+    const queueFinishedSwitch = screen.getByRole('switch', {
+      name: 'Queue finished in-app notifications',
     });
     const saveButton = screen.getByRole('button', { name: 'Save preferences' });
 
-    await user.click(rateLimitWarningSwitch);
+    await user.click(tokenExpiringSwitch);
     expect(saveButton).toBeEnabled();
 
-    await user.click(rateLimitWarningSwitch);
+    await user.click(tokenExpiringSwitch);
     expect(saveButton).toBeDisabled();
 
-    await user.click(rateLimitWarningSwitch);
-    await user.click(queueEmptySwitch);
+    await user.click(tokenExpiringSwitch);
+    await user.click(queueFinishedSwitch);
     expect(saveButton).toBeEnabled();
 
-    await user.click(rateLimitWarningSwitch);
-    await user.click(queueEmptySwitch);
+    await user.click(tokenExpiringSwitch);
+    await user.click(queueFinishedSwitch);
     expect(saveButton).toBeDisabled();
   });
 

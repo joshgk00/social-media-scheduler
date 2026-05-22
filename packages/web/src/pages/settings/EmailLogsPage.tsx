@@ -1,345 +1,171 @@
-import { Fragment, useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
-import { NOTIFICATION_EVENTS, type NotificationEventType } from '@sms/shared';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { useEmailLogs, type EmailLogRow, type EmailLogsFilters } from '@/hooks/use-notifications';
+import { useMemo, useState } from "react";
+import { Link } from "react-router";
+import { formatDistanceToNow } from "date-fns";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { PageHeader } from "@/components/ui/page-header";
+import { Pill } from "@/components/ui/pill";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useEmailLogs } from "@/hooks/use-notifications";
 
-type TestEmailLogRow = Partial<EmailLogRow> & Pick<EmailLogRow, 'id' | 'eventType' | 'recipientEmail' | 'subject' | 'status' | 'sentAt'>;
+type StatusFilter = "all" | "sent" | "failed";
 
-export interface EmailLogsPageProps {
-  rows?: TestEmailLogRow[];
-  page?: number;
-  pageSize?: number;
-  total?: number;
-  onFilter?: (filters: EmailLogsFilters) => void;
-  onPageChange?: (page: number) => void;
+function formatSentAt(value: string) {
+  return formatDistanceToNow(new Date(value), { addSuffix: true });
 }
 
-function toEmailLogRow(emailLogRow: TestEmailLogRow): EmailLogRow {
-  return {
-    errorMessage: null,
-    smtpMessageId: null,
-    ...emailLogRow,
-  };
-}
-
-function getEventLabel(eventType: NotificationEventType): string {
-  return NOTIFICATION_EVENTS.find((eventSpec) => eventSpec.eventType === eventType)?.label ?? eventType;
-}
-
-function useIsNarrowViewport() {
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false,
+export default function EmailLogsPage() {
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [recipient, setRecipient] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+  const trimmedRecipient = recipient.trim();
+  const filters = useMemo(
+    () => ({
+      page,
+      pageSize,
+      status: status === "all" ? undefined : status,
+      recipient: trimmedRecipient || undefined,
+    }),
+    [page, pageSize, status, trimmedRecipient],
   );
-
-  useEffect(() => {
-    function syncViewport() {
-      setIsNarrowViewport(window.innerWidth < 768);
-    }
-
-    syncViewport();
-    window.addEventListener('resize', syncViewport);
-    return () => window.removeEventListener('resize', syncViewport);
-  }, []);
-
-  return isNarrowViewport;
-}
-
-function EmailLogsPageView({
-  rows,
-  page = 1,
-  pageSize = rows.length || 25,
-  total = rows.length,
-  onFilter,
-  onPageChange,
-}: {
-  rows: EmailLogRow[];
-  page?: number;
-  pageSize?: number;
-  total?: number;
-  onFilter?: (filters: EmailLogsFilters) => void;
-  onPageChange?: (page: number) => void;
-}) {
-  const [status, setStatus] = useState<'all' | 'sent' | 'failed'>('all');
-  const [eventType, setEventType] = useState<'all' | NotificationEventType>('all');
-  const [recipientInput, setRecipientInput] = useState('');
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const isNarrowViewport = useIsNarrowViewport();
-
-  useEffect(() => {
-    if (!onFilter) return undefined;
-
-    const timer = setTimeout(() => {
-      onFilter?.({
-        status: status === 'all' ? undefined : status,
-        eventType: eventType === 'all' ? undefined : [eventType],
-        recipient: recipientInput || undefined,
-      });
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [eventType, onFilter, recipientInput, status]);
-
-  function toggleExpanded(rowId: string) {
-    setExpandedRows((previousExpandedRows) => {
-      const nextExpandedRows = new Set(previousExpandedRows);
-      if (nextExpandedRows.has(rowId)) {
-        nextExpandedRows.delete(rowId);
-      } else {
-        nextExpandedRows.add(rowId);
-      }
-      return nextExpandedRows;
-    });
-  }
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-  return (
-    <main className="space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Email logs</h1>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={status} onValueChange={(value) => setStatus(value as 'all' | 'sent' | 'failed')}>
-          <TabsList aria-label="Email delivery status">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="sent">Sent</TabsTrigger>
-            <TabsTrigger value="failed">Failed</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <Select value={eventType} onValueChange={(value) => setEventType(value as 'all' | NotificationEventType)}>
-          <SelectTrigger className="w-[220px]" aria-label="Event type">
-            <SelectValue placeholder="Event type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All event types</SelectItem>
-            {NOTIFICATION_EVENTS.map((eventSpec) => (
-              <SelectItem key={eventSpec.eventType} value={eventSpec.eventType}>
-                {eventSpec.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Input
-          type="search"
-          aria-label="Recipient"
-          placeholder="Recipient"
-          value={recipientInput}
-          onChange={(event) => setRecipientInput(event.target.value)}
-          className="w-[240px]"
-        />
-      </div>
-
-      {isNarrowViewport ? (
-        <div className="space-y-3">
-          {rows.length === 0 ? (
-            <div className="rounded-md border border-border px-4 py-12 text-center text-sm text-muted-foreground">
-              No emails yet
-            </div>
-          ) : null}
-          {rows.map((emailLogRow) => {
-            const isExpanded = expandedRows.has(emailLogRow.id);
-            const canExpand = emailLogRow.status === 'failed' && Boolean(emailLogRow.errorMessage);
-
-            return (
-              <div key={emailLogRow.id} className="overflow-hidden rounded-md border border-border">
-                <div className="grid gap-3 p-4 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Event type</p>
-                      <p className="font-medium text-foreground">{getEventLabel(emailLogRow.eventType)}</p>
-                    </div>
-                    <Badge variant={emailLogRow.status === 'failed' ? 'destructive' : 'secondary'}>
-                      {emailLogRow.status}
-                    </Badge>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Sent at</p>
-                      <p className="text-foreground">{format(new Date(emailLogRow.sentAt), 'PPp')}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Recipient</p>
-                      <p className="break-words text-foreground">{emailLogRow.recipientEmail}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Subject</p>
-                    <p className="break-words text-foreground">{emailLogRow.subject}</p>
-                  </div>
-                  {canExpand ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-fit"
-                      onClick={() => toggleExpanded(emailLogRow.id)}
-                      aria-label={isExpanded ? 'Collapse failed email' : 'Expand failed email'}
-                    >
-                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      {isExpanded ? 'Hide failure' : 'Show failure'}
-                    </Button>
-                  ) : null}
-                </div>
-                {isExpanded ? (
-                  <div className="border-t border-border bg-muted/30 px-4 py-3 text-sm text-destructive">
-                    {emailLogRow.errorMessage}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10" />
-                <TableHead>Sent at</TableHead>
-                <TableHead>Event type</TableHead>
-                <TableHead>Recipient</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                    No emails yet
-                  </TableCell>
-                </TableRow>
-              ) : null}
-              {rows.map((emailLogRow) => {
-                const isExpanded = expandedRows.has(emailLogRow.id);
-                const canExpand = emailLogRow.status === 'failed' && Boolean(emailLogRow.errorMessage);
-
-                return (
-                  <Fragment key={emailLogRow.id}>
-                    <TableRow>
-                      <TableCell>
-                        {canExpand ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => toggleExpanded(emailLogRow.id)}
-                            aria-label={isExpanded ? 'Collapse failed email' : 'Expand failed email'}
-                          >
-                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                          </Button>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>{format(new Date(emailLogRow.sentAt), 'PPp')}</TableCell>
-                      <TableCell>{getEventLabel(emailLogRow.eventType)}</TableCell>
-                      <TableCell>{emailLogRow.recipientEmail}</TableCell>
-                      <TableCell>{emailLogRow.subject}</TableCell>
-                      <TableCell>
-                        <Badge variant={emailLogRow.status === 'failed' ? 'destructive' : 'secondary'}>
-                          {emailLogRow.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                    {isExpanded ? (
-                      <TableRow>
-                        <TableCell />
-                        <TableCell colSpan={5} className="bg-muted/30 text-sm text-destructive">
-                          {emailLogRow.errorMessage}
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {totalPages > 1 ? (
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => onPageChange?.(page - 1)}
-          >
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground" role="status" aria-live="polite">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange?.(page + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      ) : null}
-    </main>
-  );
-}
-
-function EmailLogsPageContainer() {
-  const [filters, setFilters] = useState<EmailLogsFilters>({ page: 1 });
   const emailLogsQuery = useEmailLogs(filters);
+  const rows = emailLogsQuery.data?.rows ?? [];
+  const responsePage = emailLogsQuery.data?.page ?? page;
+  const responsePageSize = emailLogsQuery.data?.pageSize ?? pageSize;
+  const total = emailLogsQuery.data?.total ?? rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / responsePageSize));
+  const hasPreviousPage = responsePage > 1;
+  const hasNextPage = responsePage * responsePageSize < total;
 
   return (
-    <EmailLogsPageView
-      rows={emailLogsQuery.data?.rows ?? []}
-      page={emailLogsQuery.data?.page ?? filters.page ?? 1}
-      pageSize={emailLogsQuery.data?.pageSize ?? filters.pageSize ?? 25}
-      total={emailLogsQuery.data?.total ?? 0}
-      onFilter={(nextFilters) => setFilters((previousFilters) => ({ ...previousFilters, ...nextFilters, page: 1 }))}
-      onPageChange={(page) => setFilters((previousFilters) => ({ ...previousFilters, page }))}
-    />
+    <div className="space-y-5">
+      <PageHeader
+        breadcrumb={
+          <span className="flex flex-wrap items-center gap-1">
+            <Link to="/settings/profile" className="hover:underline">
+              Settings
+            </Link>
+            <span>/</span>
+            <span className="text-foreground">Email logs</span>
+          </span>
+        }
+        title="Email logs"
+        subtitle="Inspect notification emails that were sent or failed."
+      />
+
+      <Card padded>
+        <div className="mb-4 grid gap-3 sm:grid-cols-[180px_minmax(0,320px)]">
+          <label className="space-y-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Status</span>
+            <NativeSelect
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value as StatusFilter);
+                setPage(1);
+              }}
+              aria-label="Email status"
+            >
+              <option value="all">All</option>
+              <option value="sent">Sent</option>
+              <option value="failed">Failed</option>
+            </NativeSelect>
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Recipient</span>
+            <Input
+              value={recipient}
+              onChange={(event) => {
+                setRecipient(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Filter by recipient"
+            />
+          </label>
+        </div>
+
+        {emailLogsQuery.isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Skeleton key={index} className="h-11 w-full rounded-md" />
+            ))}
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No email log entries match these filters.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="border-b text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-semibold">Status</th>
+                  <th className="px-3 py-2 font-semibold">Event</th>
+                  <th className="px-3 py-2 font-semibold">Recipient</th>
+                  <th className="px-3 py-2 font-semibold">Subject</th>
+                  <th className="py-2 pl-3 text-right font-semibold">Sent</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="py-3 pr-3">
+                      <Pill tone={row.status === "failed" ? "danger" : "success"} dot>
+                        {row.status}
+                      </Pill>
+                    </td>
+                    <td className="mono px-3 py-3 text-xs text-muted-foreground">
+                      {row.eventType}
+                    </td>
+                    <td className="px-3 py-3">{row.recipientEmail}</td>
+                    <td className="px-3 py-3">
+                      <div className="max-w-[280px] truncate">{row.subject}</div>
+                      {row.errorMessage ? (
+                        <div className="mt-1 max-w-[280px] truncate text-xs text-[var(--status-danger)]">
+                          {row.errorMessage}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="py-3 pl-3 text-right text-xs text-muted-foreground">
+                      {formatSentAt(row.sentAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {(total > responsePageSize || responsePage > 1) && (
+          <div className="mt-4 flex items-center justify-between gap-3 border-t pt-4">
+            <p className="text-sm text-muted-foreground">
+              Page {responsePage} of {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!hasPreviousPage}
+                onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!hasNextPage}
+                onClick={() => setPage((currentPage) => currentPage + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
-
-export function EmailLogsPage(props: EmailLogsPageProps) {
-  if (props.rows !== undefined || props.onFilter !== undefined || props.onPageChange !== undefined) {
-    return (
-      <EmailLogsPageView
-        rows={(props.rows ?? []).map(toEmailLogRow)}
-        page={props.page}
-        pageSize={props.pageSize}
-        total={props.total}
-        onFilter={props.onFilter}
-        onPageChange={props.onPageChange}
-      />
-    );
-  }
-
-  return <EmailLogsPageContainer />;
-}
-
-export default EmailLogsPage;

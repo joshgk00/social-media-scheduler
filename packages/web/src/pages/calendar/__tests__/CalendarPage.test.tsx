@@ -1,137 +1,83 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import type { CalendarResponse, CalendarQuery } from '@sms/shared';
-import CalendarPage, { normalizeRange } from '../CalendarPage';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { CalendarQuery, CalendarResponse } from "@sms/shared";
+import CalendarPage, { normalizeRange } from "../CalendarPage";
 
 const navigate = vi.fn();
-const setSearchParams = vi.fn();
 const useCalendarPostsMock = vi.fn();
 
-vi.mock('react-router', async () => {
-  const actual = await vi.importActual<typeof import('react-router')>('react-router');
+vi.mock("react-router", async () => {
+  const actual = await vi.importActual<typeof import("react-router")>("react-router");
   return {
     ...actual,
     useNavigate: () => navigate,
-    useSearchParams: () => [new URLSearchParams(), setSearchParams],
   };
 });
 
-vi.mock('../../../hooks/use-profiles', () => ({
-  useProfiles: () => ({ data: [] }),
+vi.mock("@/hooks/use-profiles", () => ({
+  useProfiles: () => ({
+    data: [
+      {
+        id: "profile-1",
+        displayName: "Downtown Store",
+        handle: "@downtown",
+        platform: "twitter",
+      },
+    ],
+  }),
 }));
 
-vi.mock('../../../hooks/use-tags', () => ({
-  useTags: () => ({ data: [] }),
+vi.mock("@/hooks/use-tags", () => ({
+  useTags: () => ({
+    data: [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440777",
+        name: "Launch",
+        color: "#9b1c1c",
+      },
+    ],
+  }),
 }));
 
-vi.mock('../../../hooks/use-calendar-posts', () => ({
+vi.mock("@/hooks/use-calendar-posts", () => ({
   useCalendarPosts: (query: CalendarQuery | undefined) => useCalendarPostsMock(query),
 }));
 
-vi.mock('react-big-calendar', async () => {
-  const React = await vi.importActual<typeof import('react')>('react');
-
-  return {
-    luxonLocalizer: vi.fn(() => ({ kind: 'localizer' })),
-    Calendar: (props: {
-      events: Array<Record<string, unknown>>;
-      components?: { toolbar?: (props: Record<string, unknown>) => ReactNode; event?: (props: Record<string, unknown>) => ReactNode };
-      eventPropGetter?: (event: Record<string, unknown>) => { className?: string };
-      onSelectEvent?: (event: Record<string, unknown>) => void;
-      onSelectSlot?: (slotInfo: { start: Date }) => void;
-      onRangeChange?: (input: Date[] | { start: Date; end: Date }) => void;
-      onView?: (view: string) => void;
-      view: string;
-    }) => {
-      const Toolbar = props.components?.toolbar;
-      const EventComponent = props.components?.event;
-
-      return (
-        <div>
-          {Toolbar ? (
-            <Toolbar
-              label="June 2026"
-              view={props.view}
-              views={['month', 'week', 'day']}
-              onNavigate={vi.fn()}
-              onView={(nextView: string) => {
-                props.onView?.(nextView);
-                if (nextView === 'week') {
-                  props.onRangeChange?.([
-                    new Date('2026-06-01T00:00:00.000Z'),
-                    new Date('2026-06-07T00:00:00.000Z'),
-                  ]);
-                  return;
-                }
-                if (nextView === 'day') {
-                  props.onRangeChange?.([new Date('2026-06-01T14:30:00.000Z')]);
-                  return;
-                }
-                props.onRangeChange?.({
-                  start: new Date('2026-06-01T00:00:00.000Z'),
-                  end: new Date('2026-06-30T00:00:00.000Z'),
-                });
-              }}
-            />
-          ) : null}
-
-          <button type="button" onClick={() => props.onSelectSlot?.({ start: new Date('2026-06-01T14:30:00.000Z') })}>
-            Select slot
-          </button>
-
-          {props.events.map((event) => {
-            const className = props.eventPropGetter?.(event).className ?? '';
-            const title = String(event.title);
-            return (
-              <button
-                key={String(event.id)}
-                type="button"
-                className={className}
-                onClick={() => props.onSelectEvent?.(event)}
-              >
-                {EventComponent ? <EventComponent event={event} title={title} /> : title}
-              </button>
-            );
-          })}
-        </div>
-      );
-    },
-  };
-});
-
-beforeAll(() => {
-  class ResizeObserverMock {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-
-  vi.stubGlobal('ResizeObserver', ResizeObserverMock);
-  window.HTMLElement.prototype.scrollIntoView = vi.fn();
-});
-
-function buildResponse(events: CalendarResponse['events']): CalendarResponse {
+function buildResponse(events: CalendarResponse["events"]): CalendarResponse {
   return { events };
 }
 
-function buildEvent(overrides: Partial<CalendarResponse['events'][number]> = {}): CalendarResponse['events'][number] {
+function buildEvent(overrides: Partial<CalendarResponse["events"][number]> = {}): CalendarResponse["events"][number] {
   return {
-    id: 'default-event',
-    platform: 'twitter',
-    profileId: 'profile-1',
-    profileDisplayName: 'Twitter',
-    status: 'scheduled',
-    scheduledAt: '2026-06-01T12:00:00.000Z',
-    textPreview: 'Default event',
+    id: "default-event",
+    platform: "twitter",
+    profileId: "profile-1",
+    profileDisplayName: "Downtown Store",
+    status: "scheduled",
+    scheduledAt: "2026-05-21T12:00:00.000Z",
+    textPreview: "Default event",
     hasConflict: false,
     ...overrides,
   };
 }
 
-describe('CalendarPage', () => {
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <CalendarPage />
+    </MemoryRouter>,
+  );
+}
+
+function latestCalendarQuery(): CalendarQuery {
+  return useCalendarPostsMock.mock.calls.at(-1)?.[0];
+}
+
+describe("CalendarPage", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-21T16:00:00.000Z"));
     vi.clearAllMocks();
     useCalendarPostsMock.mockReturnValue({
       data: buildResponse([buildEvent()]),
@@ -140,156 +86,168 @@ describe('CalendarPage', () => {
     });
   });
 
-  it('renders the M/W/D switcher and re-queries when the view changes', async () => {
-    render(<CalendarPage />);
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('tab', { name: 'W' }));
-
-    expect(useCalendarPostsMock.mock.calls.length).toBeGreaterThan(1);
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it('applies platform classes to each calendar event', () => {
-    useCalendarPostsMock.mockReturnValue({
-      data: buildResponse([
-        {
-          id: 'twitter-event',
-          platform: 'twitter',
-          profileId: 'profile-1',
-          profileDisplayName: 'Twitter',
-          status: 'scheduled',
-          scheduledAt: '2026-06-01T12:00:00.000Z',
-          textPreview: 'Tweet',
-          hasConflict: false,
-        },
-        {
-          id: 'linkedin-event',
-          platform: 'linkedin',
-          profileId: 'profile-2',
-          profileDisplayName: 'LinkedIn',
-          status: 'queued',
-          scheduledAt: '2026-06-01T13:00:00.000Z',
-          textPreview: 'LinkedIn',
-          hasConflict: false,
-        },
-        {
-          id: 'facebook-event',
-          platform: 'facebook',
-          profileId: 'profile-3',
-          profileDisplayName: 'Facebook',
-          status: 'publishing',
-          scheduledAt: '2026-06-01T14:00:00.000Z',
-          textPreview: 'Facebook',
-          hasConflict: false,
-        },
-      ]),
-      isLoading: false,
-      isError: false,
-    });
-
-    render(<CalendarPage />);
-
-    expect(screen.getByRole('button', { name: /TW · Tweet/i })).toHaveClass('border-platform-twitter');
-    expect(screen.getByRole('button', { name: /LI · LinkedIn/i })).toHaveClass('border-platform-linkedin');
-    expect(screen.getByRole('button', { name: /FB · Facebook/i })).toHaveClass('border-platform-facebook');
-  });
-
-  it('applies the destructive border class to conflict events', () => {
-    useCalendarPostsMock.mockReturnValue({
-      data: buildResponse([
-        {
-          id: 'conflict-event',
-          platform: 'twitter',
-          profileId: 'profile-1',
-          profileDisplayName: 'Twitter',
-          status: 'scheduled',
-          scheduledAt: '2026-06-01T12:00:00.000Z',
-          textPreview: 'Conflicting post',
-          hasConflict: true,
-        },
-      ]),
-      isLoading: false,
-      isError: false,
-    });
-
-    render(<CalendarPage />);
-
-    expect(screen.getByRole('button', { name: /TW · Conflicting post/i })).toHaveClass('!border-l-destructive');
-  });
-
-  it('navigates to the edit page when an event is selected', async () => {
-    useCalendarPostsMock.mockReturnValue({
-      data: buildResponse([
-        {
-          id: 'abc',
-          platform: 'twitter',
-          profileId: 'profile-1',
-          profileDisplayName: 'Twitter',
-          status: 'scheduled',
-          scheduledAt: '2026-06-01T12:00:00.000Z',
-          textPreview: 'Edit me',
-          hasConflict: false,
-        },
-      ]),
-      isLoading: false,
-      isError: false,
-    });
-
-    render(<CalendarPage />);
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: /TW · Edit me/i }));
-
-    expect(navigate).toHaveBeenCalledWith('/posts/abc/edit');
-  });
-
-  it('navigates to the new post route when an empty slot is selected', async () => {
-    render(<CalendarPage />);
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: 'Select slot' }));
-
-    expect(navigate).toHaveBeenCalledWith('/posts/new?scheduledAt=2026-06-01T14%3A30%3A00.000Z');
-  });
-
-  it('keeps calendar controls active when the visible range has no events', async () => {
+  it("always renders the full 6-week month grid with no events", () => {
     useCalendarPostsMock.mockReturnValue({
       data: buildResponse([]),
       isLoading: false,
       isError: false,
     });
-    render(<CalendarPage />);
-    const user = userEvent.setup();
 
-    expect(screen.getByText('No posts in this month.')).toBeInTheDocument();
+    renderPage();
 
-    await user.click(screen.getByRole('button', { name: 'Select slot' }));
-
-    expect(navigate).toHaveBeenCalledWith('/posts/new?scheduledAt=2026-06-01T14%3A30%3A00.000Z');
+    expect(screen.getByRole("heading", { name: "May 2026" })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Show calendar items" })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Calendar view" })).toBeInTheDocument();
+    expect(screen.getByText("Show:")).toBeInTheDocument();
+    expect(screen.getByText("View:")).toBeInTheDocument();
+    expect(within(screen.getByRole("grid", { name: "Month days" })).getAllByRole("gridcell")).toHaveLength(42);
+    expect(screen.queryByText(/No posts in this/i)).not.toBeInTheDocument();
   });
 
-  it('normalizes month, week, and day range shapes', () => {
+  it("renders scheduled, queued, and conflict event chips with truncating text", () => {
+    useCalendarPostsMock.mockReturnValue({
+      data: buildResponse([
+        buildEvent({
+          id: "scheduled-event",
+          platform: "twitter",
+          status: "scheduled",
+          scheduledAt: "2026-05-21T12:00:00.000Z",
+          textPreview: "Scheduled launch with a very long message that should truncate in the chip",
+        }),
+        buildEvent({
+          id: "queued-event",
+          platform: "linkedin",
+          status: "queued",
+          scheduledAt: "2026-05-21T13:00:00.000Z",
+          textPreview: "Queued update",
+        }),
+        buildEvent({
+          id: "conflict-event",
+          platform: "facebook",
+          status: "scheduled",
+          scheduledAt: "2026-05-21T14:00:00.000Z",
+          textPreview: "Conflict update",
+          hasConflict: true,
+        }),
+      ]),
+      isLoading: false,
+      isError: false,
+    });
+
+    renderPage();
+
+    const scheduledText = screen.getByText(/Scheduled launch/i);
+    const queuedChip = screen.getByText("Queued update").closest("button");
+    const conflictChip = screen.getByText("Conflict update").closest("button");
+
+    expect(scheduledText).toHaveClass("truncate");
+    expect(queuedChip).toHaveClass("bg-[var(--bg-elevated)]");
+    expect(conflictChip).toHaveClass("border-destructive");
+  });
+
+  it("navigates to the edit page when an event is selected", () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: /Default event/i }));
+
+    expect(navigate).toHaveBeenCalledWith("/posts/default-event/edit");
+  });
+
+  it("switches between month, week, and day views", () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Week" }));
+    expect(screen.getByLabelText("Week calendar")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Day" }));
+    expect(screen.getByLabelText("Day calendar")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Month" }));
+    expect(screen.getByLabelText("Month calendar")).toBeInTheDocument();
+  });
+
+  it("updates the calendar query when show and profile filters change", () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Queued" }));
+    fireEvent.change(screen.getByLabelText("Profile filter"), { target: { value: "profile-1" } });
+
+    expect(latestCalendarQuery()).toMatchObject({
+      scope: "queued",
+      profileIds: ["profile-1"],
+    });
+  });
+
+  it("includes search, platform, and tag filters in the calendar query", () => {
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText("Search calendar posts"), {
+      target: { value: "launch preview" },
+    });
+    fireEvent.change(screen.getByLabelText("Platform filter"), { target: { value: "twitter" } });
+    fireEvent.change(screen.getByLabelText("Tag filter"), {
+      target: { value: "550e8400-e29b-41d4-a716-446655440777" },
+    });
+
+    expect(latestCalendarQuery()).toMatchObject({
+      search: "launch preview",
+      platforms: ["twitter"],
+      tagIds: ["550e8400-e29b-41d4-a716-446655440777"],
+    });
+  });
+
+  it("returns to the real current month when Today is clicked", () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next month" }));
+    expect(screen.getByRole("heading", { name: "June 2026" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    expect(screen.getByRole("heading", { name: "May 2026" })).toBeInTheDocument();
+  });
+
+  it("navigates to the new post route from an active empty day slot", () => {
+    useCalendarPostsMock.mockReturnValue({
+      data: buildResponse([]),
+      isLoading: false,
+      isError: false,
+    });
+    renderPage();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Day" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create post at 8am" }));
+
+    const expectedDate = new Date("2026-05-21T16:00:00.000Z");
+    expectedDate.setHours(8, 0, 0, 0);
+    expect(navigate).toHaveBeenCalledWith(`/posts/new?scheduledAt=${encodeURIComponent(expectedDate.toISOString())}`);
+  });
+
+  it("normalizes month, week, and day range shapes", () => {
     expect(normalizeRange({
-      start: new Date('2026-06-01T00:00:00.000Z'),
-      end: new Date('2026-06-30T00:00:00.000Z'),
+      start: new Date("2026-06-01T00:00:00.000Z"),
+      end: new Date("2026-06-30T00:00:00.000Z"),
     })).toEqual({
-      from: '2026-06-01T00:00:00.000Z',
-      to: '2026-06-30T00:00:00.000Z',
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-06-30T00:00:00.000Z",
     });
 
     expect(normalizeRange([
-      new Date('2026-06-01T00:00:00.000Z'),
-      new Date('2026-06-07T00:00:00.000Z'),
+      new Date("2026-06-01T00:00:00.000Z"),
+      new Date("2026-06-07T00:00:00.000Z"),
     ])).toEqual({
-      from: '2026-06-01T00:00:00.000Z',
-      to: '2026-06-07T00:00:00.000Z',
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-06-07T00:00:00.000Z",
     });
 
     expect(normalizeRange([
-      new Date('2026-06-01T14:30:00.000Z'),
+      new Date("2026-06-01T14:30:00.000Z"),
     ])).toEqual({
-      from: '2026-06-01T14:30:00.000Z',
-      to: '2026-06-01T14:30:00.000Z',
+      from: "2026-06-01T14:30:00.000Z",
+      to: "2026-06-01T14:30:00.000Z",
     });
   });
 });

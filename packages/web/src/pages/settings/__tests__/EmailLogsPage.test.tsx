@@ -1,84 +1,98 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import EmailLogsPage from "../EmailLogsPage";
 
-import { EmailLogsPage } from '../EmailLogsPage';
+const mocks = vi.hoisted(() => ({
+  useEmailLogs: vi.fn(),
+}));
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  vi.clearAllMocks();
-});
+vi.mock("@/hooks/use-notifications", () => ({
+  useEmailLogs: mocks.useEmailLogs,
+}));
 
-describe('EmailLogsPage', () => {
-  it('renders title, table columns, status filters, and empty state', () => {
-    render(<EmailLogsPage rows={[]} />);
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <EmailLogsPage />
+    </MemoryRouter>,
+  );
+}
 
-    expect(screen.getByRole('heading', { name: 'Email logs' })).toBeInTheDocument();
-    expect(screen.getByText('Sent')).toBeInTheDocument();
-    expect(screen.getByText('Event type')).toBeInTheDocument();
-    expect(screen.getByText('Recipient')).toBeInTheDocument();
-    expect(screen.getByText('Subject')).toBeInTheDocument();
-    expect(screen.getByText('Status')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'All' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Sent' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Failed' })).toBeInTheDocument();
-    expect(screen.getByText('No emails yet')).toBeInTheDocument();
-  });
-
-  it('expands failed rows to show the error message and keeps sent rows quiet', () => {
-    render(<EmailLogsPage rows={[{
-      id: 'email-1',
-      eventType: 'publish_failed',
-      recipientEmail: 'recipient@example.com',
-      subject: '[SMS] Publish failed',
-      status: 'failed',
-      errorMessage: 'SMTP rejected the message',
-      sentAt: '2026-04-28T12:00:00.000Z',
-    }]} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /expand/i }));
-
-    expect(screen.getByText('SMTP rejected the message')).toBeInTheDocument();
-  });
-
-  it('debounces recipient search input', () => {
-    const onFilter = vi.fn();
-
-    render(<EmailLogsPage rows={[]} onFilter={onFilter} />);
-    fireEvent.change(screen.getByRole('searchbox', { name: /recipient/i }), {
-      target: { value: 'example.com' },
+describe("EmailLogsPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.useEmailLogs.mockReturnValue({
+      isLoading: false,
+      data: {
+        page: 1,
+        pageSize: 50,
+        total: 1,
+        rows: [
+          {
+            id: "email-log-1",
+            eventType: "publish_failed",
+            recipientEmail: "user@example.com",
+            subject: "Publish failed",
+            status: "failed",
+            errorMessage: "SMTP rejected",
+            sentAt: new Date().toISOString(),
+          },
+        ],
+      },
     });
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
-
-    expect(onFilter).toHaveBeenCalledWith(expect.objectContaining({ recipient: 'example.com' }));
   });
 
-  it('renders pagination controls and requests the next page', () => {
-    const onPageChange = vi.fn();
+  it("renders sent and failed notification email logs", () => {
+    renderPage();
 
-    render(
-      <EmailLogsPage
-        rows={[{
-          id: 'email-1',
-          eventType: 'publish_failed',
-          recipientEmail: 'recipient@example.com',
-          subject: '[SMS] Publish failed',
-          status: 'sent',
-          sentAt: '2026-04-28T12:00:00.000Z',
-        }]}
-        page={1}
-        pageSize={1}
-        total={2}
-        onPageChange={onPageChange}
-      />,
-    );
+    expect(screen.getByRole("heading", { name: "Email logs" })).toBeInTheDocument();
+    expect(screen.getByText("publish_failed")).toBeInTheDocument();
+    expect(screen.getByText("user@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Publish failed")).toBeInTheDocument();
+    expect(screen.getByText("SMTP rejected")).toBeInTheDocument();
+  });
 
-    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+  it("requests older email logs with pagination controls", async () => {
+    const user = userEvent.setup();
+    mocks.useEmailLogs.mockReturnValue({
+      isLoading: false,
+      data: {
+        page: 1,
+        pageSize: 50,
+        total: 75,
+        rows: [
+          {
+            id: "email-log-1",
+            eventType: "publish_failed",
+            recipientEmail: "user@example.com",
+            subject: "Publish failed",
+            status: "failed",
+            errorMessage: null,
+            sentAt: new Date().toISOString(),
+          },
+        ],
+      },
+    });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    renderPage();
 
-    expect(onPageChange).toHaveBeenCalledWith(2);
+    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    expect(mocks.useEmailLogs).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 50,
+      status: undefined,
+      recipient: undefined,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(mocks.useEmailLogs).toHaveBeenLastCalledWith({
+      page: 2,
+      pageSize: 50,
+      status: undefined,
+      recipient: undefined,
+    });
   });
 });

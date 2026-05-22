@@ -85,6 +85,20 @@
       "when": 1779364448000,
       "tag": "0011_bulk-operation-idempotency-unique",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779364449000,
+      "tag": "0012_user-default-landing-page",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779413278961,
+      "tag": "0013_queue-schedule-mode",
+      "breakpoints": true
     }
   ]
 }

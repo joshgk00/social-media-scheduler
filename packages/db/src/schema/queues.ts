@@ -7,6 +7,7 @@ export const queues = pgTable('queues', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   profileId: uuid('profile_id').notNull().references(() => socialProfiles.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
+  scheduleMode: varchar('schedule_mode', { length: 16 }).notNull().default('fixed'),
   intervalType: varchar('interval_type', { length: 10 }).notNull().default('fixed'),
   intervalValue: integer('interval_value').notNull().default(4),
   intervalUnit: varchar('interval_unit', { length: 10 }).notNull().default('hours'),

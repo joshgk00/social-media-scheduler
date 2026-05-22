@@ -15,22 +15,9 @@ import {
   useUnreadCount,
   type NotificationRow,
 } from '@/hooks/use-notifications';
+import { toNotificationRow, type PartialNotificationRow } from '@/lib/notification-display';
 
-export type NotificationBellRow = Partial<NotificationRow> & Pick<NotificationRow, 'id' | 'title'>;
-
-const bulkOperationLabels: Record<string, string> = {
-  'bulk.csv-import-scheduled': 'Import',
-  'bulk.csv-import-queue': 'Import',
-  'bulk.queue-randomize': 'Randomize',
-  'bulk.queue-purge': 'Purge queue',
-  'bulk.queue-copy': 'Copy queue',
-  'bulk.queue-text-modify': 'Modify text',
-  'bulk.queue-dedupe': 'Remove duplicates',
-  'bulk.profile-pause': 'Pause publishing',
-  'bulk.profile-resume': 'Resume publishing',
-  'bulk.profile-bulk-delete': 'Bulk delete',
-  'bulk.profile-modify-tags': 'Modify tags',
-};
+export type NotificationBellRow = PartialNotificationRow;
 
 export interface NotificationBellProps {
   unreadCount?: number;
@@ -39,57 +26,6 @@ export interface NotificationBellProps {
   onMarkRead?: (notificationId: string) => Promise<unknown> | unknown;
   onMarkAllRead?: () => Promise<unknown> | unknown;
   onOpenChange?: (isOpen: boolean) => void;
-}
-
-function getStringPayloadValue(payload: Record<string, unknown>, key: string): string | null {
-  const value = payload[key];
-  return typeof value === 'string' ? value : null;
-}
-
-function getNumberPayloadValue(payload: Record<string, unknown>, key: string): number {
-  const value = payload[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function formatBulkNotification(notification: NotificationBellRow): NotificationBellRow {
-  if (notification.eventType !== 'bulk_completed') return notification;
-
-  const payload = notification.payload ?? {};
-  const operation = getStringPayloadValue(payload, 'operation') ?? '';
-  const operationLabel = bulkOperationLabels[operation] ?? 'Bulk operation';
-  const successCount = getNumberPayloadValue(payload, 'successCount');
-  const failureCount = getNumberPayloadValue(payload, 'failureCount');
-  const errorReportUrl = getStringPayloadValue(payload, 'errorReportUrl') ?? getStringPayloadValue(payload, 'errorReportPath');
-  const displayKind = failureCount > 0 ? 'bulk-op-failed' : 'bulk-op-finished';
-
-  return {
-    ...notification,
-    severity: failureCount > 0 ? 'warning' : 'info',
-    title:
-      failureCount > 0
-        ? `${operationLabel} complete with ${failureCount} errors.`
-        : `${operationLabel} complete: ${successCount} posts.`,
-    body: failureCount > 0 ? 'Open the error report to review rows that need attention.' : notification.body,
-    payload: {
-      ...payload,
-      displayKind,
-      errorReportUrl,
-    },
-  };
-}
-
-function toNotificationRow(notification: NotificationBellRow): NotificationRow {
-  const formattedNotification = formatBulkNotification(notification);
-  return {
-    eventType: 'publish_failed',
-    severity: 'info',
-    body: '',
-    linkPath: null,
-    payload: {},
-    readAt: null,
-    createdAt: new Date().toISOString(),
-    ...formattedNotification,
-  };
 }
 
 function NotificationBellView({
@@ -126,7 +62,7 @@ function NotificationBellView({
       <span className="sr-only" aria-live="polite">
         {ariaLabel}
       </span>
-      <DropdownMenuContent align="end" sideOffset={8} className="w-96 p-0">
+      <DropdownMenuContent align="end" sideOffset={8} className="w-[380px] p-0">
         <NotificationDropdownContent
           notifications={recentNotifications.map(toNotificationRow)}
           unreadCount={unreadCount}
@@ -141,7 +77,7 @@ function NotificationBellView({
 
 function NotificationBellContainer() {
   const unreadCountQuery = useUnreadCount();
-  const notificationsQuery = useNotifications({ page: 1, pageSize: 10 });
+  const notificationsQuery = useNotifications({ page: 1, pageSize: 4 });
   const markReadMutation = useMarkRead();
   const markAllReadMutation = useMarkAllRead();
   const [lastObservedUnreadCount, setLastObservedUnreadCount] = useState<number | null>(null);

@@ -1,62 +1,211 @@
-import { useState } from 'react';
-import { Outlet } from 'react-router';
-import { Menu } from 'lucide-react';
-import { Sidebar } from './Sidebar';
-import { NotificationBell } from './NotificationBell';
-import { Button } from '@/components/ui/button';
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { Link, Outlet, useNavigate } from "react-router";
+import { LogOut, Menu, PenSquare, Search, UserRound } from "lucide-react";
+import { toast } from "sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-} from '@/components/ui/sheet';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useAuth, useLogout } from "@/hooks/use-auth";
+import { getUserInitials } from "@/lib/user-display";
+import { cn } from "@/lib/utils";
+import { NotificationBell } from "./NotificationBell";
+import { Sidebar } from "./Sidebar";
+
+const searchTargets = [
+  { label: "dashboard", path: "/dashboard", aliases: ["home", "overview"] },
+  { label: "posts", path: "/posts", aliases: ["post", "drafts", "scheduled"] },
+  { label: "queues", path: "/queues", aliases: ["queue", "schedule", "scheduler"] },
+  { label: "calendar", path: "/calendar", aliases: ["dates"] },
+  { label: "new post", path: "/posts/new", aliases: ["compose", "create post"] },
+  { label: "import csv", path: "/posts/import", aliases: ["csv", "bulk import"] },
+  { label: "profiles", path: "/profiles", aliases: ["profile", "accounts"] },
+  { label: "notifications", path: "/notifications", aliases: ["alerts", "inbox"] },
+  { label: "settings", path: "/settings", aliases: ["preferences", "account"] },
+] as const;
 
 export function SidebarLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const { data: user } = useAuth();
+  const logout = useLogout();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    function handleGlobalShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalShortcut);
+    return () => window.removeEventListener("keydown", handleGlobalShortcut);
+  }, []);
+
+  async function handleSignOut() {
+    try {
+      await logout.mutateAsync();
+    } catch {
+      toast.error("Could not sign out cleanly. Returning to sign in.");
+    } finally {
+      navigate("/login", { replace: true });
+    }
+  }
+
+  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchValue.trim().toLowerCase();
+    if (!query) return;
+
+    const target = searchTargets.find((item) => {
+      if (item.label.includes(query) || query.includes(item.label)) return true;
+      return item.aliases.some((alias) => alias.includes(query) || query.includes(alias));
+    });
+
+    if (!target) return;
+    navigate(target.path);
+    setSearchValue("");
+    searchInputRef.current?.blur();
+  }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-3 focus:bg-background focus:text-foreground focus:border focus:border-ring focus:rounded-md"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded-md focus:border focus:border-ring focus:bg-background focus:p-3 focus:text-foreground"
       >
         Skip to main content
       </a>
 
-      {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <Sidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed((prev) => !prev)} />
+        <Sidebar
+          isCollapsed={isCollapsed}
+          onToggle={() => setIsCollapsed((prev) => !prev)}
+          user={user}
+        />
       </div>
 
-      {/* Mobile sheet sidebar */}
       <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-        <SheetContent side="left" className="w-60 p-0">
+        <SheetContent
+          side="left"
+          className="w-[var(--sidebar-w)] border-border bg-[var(--bg-base)] p-0"
+        >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <Sidebar isCollapsed={false} onToggle={() => setIsMobileOpen(false)} />
+          <Sidebar
+            isCollapsed={false}
+            onToggle={() => setIsMobileOpen(false)}
+            user={user}
+          />
         </SheetContent>
       </Sheet>
 
-      {/* Main content area */}
-      <div className="flex flex-1 flex-col">
-        {/* Mobile header with hamburger */}
-        <header className="flex items-center justify-between border-b border-border p-2 md:hidden">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-[var(--topbar-h)] shrink-0 items-center gap-3 border-b border-border bg-[var(--bg-base)] px-4 md:px-6">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setIsMobileOpen(true)}
             aria-label="Open navigation menu"
-            className="h-8 w-8"
+            className="h-8 w-8 md:hidden"
           >
             <Menu className="h-4 w-4" />
           </Button>
+
+          <form
+            role="search"
+            className="relative hidden w-full max-w-[480px] sm:block"
+            onSubmit={handleSearchSubmit}
+          >
+            <label htmlFor="global-nav-search" className="sr-only">
+              Jump to a page
+            </label>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              id="global-nav-search"
+              ref={searchInputRef}
+              type="search"
+              aria-keyshortcuts="Meta+K Control+K"
+              placeholder="Jump to… ⌘ K"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              className="h-8 w-full rounded-md border border-input bg-[var(--bg-canvas)] pl-9 pr-3 text-[13px] text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:shadow-[var(--shadow-focus)]"
+            />
+          </form>
+
+          <div className="flex-1" />
+
+          <Button
+            asChild
+            variant="ghost"
+            className="hidden h-8 gap-2 px-3 text-[13px] font-medium text-foreground hover:bg-accent sm:inline-flex"
+          >
+            <Link to="/posts/new">
+              <PenSquare className="h-4 w-4" />
+              New post
+            </Link>
+          </Button>
+
           <NotificationBell />
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                aria-label="Open user menu"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage
+                    src={user?.profileImagePath ?? undefined}
+                    alt=""
+                  />
+                  <AvatarFallback className="bg-[var(--bg-elevated)] text-[11px] font-semibold text-foreground">
+                    {getUserInitials(user)}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={8} className="w-56">
+              <DropdownMenuItem asChild>
+                <Link to="/settings/profile" className="cursor-default">
+                  <UserRound className="h-4 w-4" />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  void handleSignOut();
+                }}
+                className={cn(
+                  "text-destructive focus:text-destructive",
+                  logout.isPending && "opacity-60",
+                )}
+                disabled={logout.isPending}
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </header>
 
-        <header className="hidden md:flex items-center justify-end border-b border-border px-6 py-2">
-          <NotificationBell />
-        </header>
-
-        <div id="main-content" className="flex-1 overflow-auto p-6 lg:p-8">
+        <div
+          id="main-content"
+          className="min-h-0 flex-1 overflow-y-auto px-5 py-6 md:px-7"
+        >
           <Outlet />
         </div>
       </div>
