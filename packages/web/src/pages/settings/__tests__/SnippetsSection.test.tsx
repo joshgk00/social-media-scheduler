@@ -34,6 +34,16 @@ vi.mock('../../../hooks/use-snippets', () => ({
 }));
 
 describe('SnippetsSection', () => {
+  it('opens the create modal when New snippet is clicked', async () => {
+    const user = userEvent.setup();
+    render(<SnippetsSection />);
+
+    await user.click(screen.getByRole('button', { name: 'New snippet' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Create snippet' })).toBeInTheDocument();
+  });
+
   it('opens the edit modal when a row is clicked', async () => {
     const user = userEvent.setup();
     render(<SnippetsSection />);

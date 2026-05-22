@@ -39,7 +39,9 @@ export function SnippetFormDialog({ open, onOpenChange, snippet }: SnippetFormDi
   const createSnippetMutation = useCreateSnippet();
   const updateSnippetMutation = useUpdateSnippet();
   const isEditMode = !!snippet;
-  const activeMutation = isEditMode ? updateSnippetMutation : createSnippetMutation;
+  const isMutationPending = isEditMode
+    ? updateSnippetMutation.isPending
+    : createSnippetMutation.isPending;
 
   const {
     control,
@@ -56,7 +58,8 @@ export function SnippetFormDialog({ open, onOpenChange, snippet }: SnippetFormDi
   useEffect(() => {
     if (!open) {
       reset(INITIAL_VALUES);
-      activeMutation.reset();
+      createSnippetMutation.reset();
+      updateSnippetMutation.reset();
       return;
     }
 
@@ -70,7 +73,7 @@ export function SnippetFormDialog({ open, onOpenChange, snippet }: SnippetFormDi
     }
 
     reset(INITIAL_VALUES);
-  }, [activeMutation, open, reset, snippet]);
+  }, [open, reset, snippet]);
 
   async function onSubmit(values: CreateSnippetInput) {
     try {
@@ -183,12 +186,12 @@ export function SnippetFormDialog({ open, onOpenChange, snippet }: SnippetFormDi
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting || activeMutation.isPending}
+              disabled={isSubmitting || isMutationPending}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || activeMutation.isPending}>
-              {isSubmitting || activeMutation.isPending ? (
+            <Button type="submit" disabled={isSubmitting || isMutationPending}>
+              {isSubmitting || isMutationPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
               ) : null}
               {snippet ? 'Update snippet' : 'Create snippet'}
