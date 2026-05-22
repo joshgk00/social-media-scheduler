@@ -241,9 +241,7 @@ export default function ProfilesPage() {
               key={profile.id}
               profile={profile}
               rateLimitIndicator={
-                profile.platform === 'twitter' ? (
-                  <ProfileRateLimitIndicator profileId={profile.id} />
-                ) : undefined
+                <ProfileRateLimitIndicator profileId={profile.id} />
               }
               onEditRateLimit={
                 profile.platform === 'twitter'

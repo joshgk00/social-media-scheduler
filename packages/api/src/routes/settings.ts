@@ -11,6 +11,7 @@ import {
   totpVerifySchema,
   totpDisableSchema,
   securityQuestionsSchema,
+  defaultLandingPageSchema,
 } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { Redis } from 'ioredis';
@@ -104,15 +105,30 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
     }
 
     const { timezone, dateFormat, entriesPerPage, defaultLandingPage } = parsed.data;
-    await db.update(users).set({
+
+    const preferencesPatch = {
       timezone,
       dateFormat,
       entriesPerPage,
-      defaultLandingPage,
       updatedAt: new Date(),
-    }).where(eq(users.id, req.session.userId!));
+      ...(defaultLandingPage !== undefined ? { defaultLandingPage } : {}),
+    };
 
-    res.json({ timezone, dateFormat, entriesPerPage, defaultLandingPage });
+    const [updatedPreferences] = await db
+      .update(users)
+      .set(preferencesPatch)
+      .where(eq(users.id, req.session.userId!))
+      .returning({ defaultLandingPage: users.defaultLandingPage });
+    const responseDefaultLandingPage = defaultLandingPageSchema.parse(
+      updatedPreferences?.defaultLandingPage ?? defaultLandingPage ?? '/dashboard',
+    );
+
+    res.json({
+      timezone,
+      dateFormat,
+      entriesPerPage,
+      defaultLandingPage: responseDefaultLandingPage,
+    });
   });
 
   router.put('/api/settings/password', requireAuth, async (req, res) => {

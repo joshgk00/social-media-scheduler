@@ -26,7 +26,7 @@ const Card = React.forwardRef<
         {action}
       </div>
     )}
-    <div className={cn(padded && "p-4", !padded && (title || action) && "p-4")}>
+    <div className={cn(padded && "p-4")}>
       {children}
     </div>
   </div>

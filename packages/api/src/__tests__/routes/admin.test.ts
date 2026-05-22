@@ -202,6 +202,14 @@ describe("GET /admin/queues", () => {
     expect(res.status).toBe(401);
   });
 
+  it("returns 401 for queue health when no session is present", async () => {
+    const app = createTestApp();
+
+    const res = await request(app).get("/admin/queue-health");
+
+    expect(res.status).toBe(401);
+  });
+
   it("returns queue health counts for the settings wrapper", async () => {
     const agent = await authenticatedAgent();
 

@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { NotificationRow } from '@/components/notifications/NotificationRow';
+import { formatBulkNotification, toNotificationRow, type PartialNotificationRow } from '@/lib/notification-display';
 import {
   useClearRead,
   useMarkAllRead,
@@ -21,7 +22,7 @@ import { NotificationFilterBar } from './components/NotificationFilterBar';
 
 type ReadStatus = 'all' | 'read' | 'unread';
 type TypeFilter = 'all' | 'error' | 'warning' | 'info';
-type TestNotificationRow = Partial<NotificationRowData> & Pick<NotificationRowData, 'id' | 'title'>;
+type TestNotificationRow = PartialNotificationRow;
 
 export interface NotificationsPageProps {
   rows?: TestNotificationRow[];
@@ -29,19 +30,6 @@ export interface NotificationsPageProps {
   onMarkRead?: (notificationId: string) => Promise<unknown> | unknown;
   onMarkAllRead?: () => Promise<unknown> | unknown;
   onClearRead?: () => Promise<unknown> | unknown;
-}
-
-function toNotificationRow(notification: TestNotificationRow): NotificationRowData {
-  return {
-    eventType: 'publish_failed',
-    severity: 'info',
-    body: '',
-    linkPath: null,
-    payload: {},
-    readAt: null,
-    createdAt: new Date().toISOString(),
-    ...notification,
-  };
 }
 
 function NotificationSkeletonRows() {
@@ -217,7 +205,7 @@ function NotificationsPageContainer() {
   const markReadMutation = useMarkRead();
   const markAllReadMutation = useMarkAllRead();
   const clearReadMutation = useClearRead();
-  const rows = notificationsQuery.data?.rows ?? [];
+  const rows = (notificationsQuery.data?.rows ?? []).map(formatBulkNotification);
   const totalPages = notificationsQuery.data
     ? Math.max(1, Math.ceil(notificationsQuery.data.total / notificationsQuery.data.pageSize))
     : 1;

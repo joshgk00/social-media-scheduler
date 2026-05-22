@@ -4,7 +4,9 @@ import {
   Clock,
   Edit3,
   ListOrdered,
+  Loader2,
   Pause,
+  Trash2,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -70,8 +72,13 @@ const statusConfig: Record<string, StatusConfig> = {
   draft: { tone: "neutral", icon: Edit3, label: "Draft" },
   published: { tone: "success", icon: Check, label: "Published" },
   failed: { tone: "danger", icon: TriangleAlert, label: "Failed" },
+  publishing: { tone: "info", icon: Loader2, label: "Publishing" },
+  auto_destructing: { tone: "warning", icon: Trash2, label: "Auto-destructing" },
+  destroyed: { tone: "neutral", icon: Trash2, label: "Destroyed" },
   active: { tone: "success", label: "Active", dot: true },
   inactive: { tone: "neutral", label: "Inactive", dot: true },
+  expiring: { tone: "warning", icon: TriangleAlert, label: "Token expiring" },
+  needs_reauth: { tone: "warning", icon: TriangleAlert, label: "Needs reauth" },
   paused: { tone: "warning", icon: Pause, label: "Paused" },
   deprecated: { tone: "neutral", label: "Deprecated", dot: true },
 };

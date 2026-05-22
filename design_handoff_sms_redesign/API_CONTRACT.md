@@ -124,7 +124,7 @@ type Queue = {
 
 type Cadence =
   | {
-      mode: "specific-times";       // New mode — issue 8
+      mode: "specific";             // New mode — issue 8
       times: string[];              // ["08:00", "12:00", "15:00"]
       days: WeekDay[];              // ["Mon", "Tue", "Wed", "Thu", "Fri"]
     }
@@ -221,7 +221,10 @@ Returns: `{ count: number }`
 
 ### `POST /notifications/:id/read`
 ### `POST /notifications/mark-all-read`
+### `POST /notifications/read-all` — Deprecated legacy alias
+Deprecated: true. Sunset: `2026-08-01`. Prefer `POST /notifications/mark-all-read`.
 ### `POST /notifications/clear-read`
+Returns: `{ ok: true, deleted: number }`
 
 ---
 

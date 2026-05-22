@@ -201,6 +201,7 @@ const PROFILE_ID = '550e8400-e29b-41d4-a716-446655440012';
 const VALID_QUEUE_INPUT = {
   name: 'Morning Twitter Queue',
   profileId: PROFILE_ID,
+  scheduleMode: 'fixed',
   intervalType: 'fixed',
   intervalValue: 4,
   intervalUnit: 'hours',
@@ -213,6 +214,7 @@ const SAMPLE_QUEUE = {
   userId: 'user-1',
   profileId: PROFILE_ID,
   name: 'Morning Twitter Queue',
+  scheduleMode: 'fixed',
   intervalType: 'fixed',
   intervalValue: 4,
   intervalUnit: 'hours',
@@ -238,6 +240,7 @@ const SAMPLE_QUEUE_LIST_ITEM = {
   profileId: PROFILE_ID,
   profileName: 'Test User',
   network: 'twitter',
+  scheduleMode: 'fixed',
   isPaused: false,
   isRecycling: false,
   lastPublishedAt: null,
@@ -281,6 +284,11 @@ describe('queues routes', () => {
       expect(res.body).toHaveProperty('id', QUEUE_ID);
       expect(res.body).toHaveProperty('name', 'Morning Twitter Queue');
       expect(res.body).toHaveProperty('profileId', PROFILE_ID);
+      expect(mockCreateQueue).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        expect.objectContaining({ scheduleMode: 'fixed' }),
+      );
     });
 
     it('returns 400 when name is missing', async () => {
@@ -384,16 +392,22 @@ describe('queues routes', () => {
 
   describe('PUT /api/queues/:id', () => {
     it('updates schedule configuration', async () => {
-      const updatedQueue = { ...SAMPLE_QUEUE, intervalValue: 6 };
+      const updatedQueue = { ...SAMPLE_QUEUE, intervalValue: 6, scheduleMode: 'fixed' };
       mockUpdateQueue.mockResolvedValueOnce(updatedQueue);
       const agent = await authenticatedAgent();
 
       const res = await agent
         .put(`/api/queues/${QUEUE_ID}`)
-        .send({ intervalValue: 6 });
+        .send({ scheduleMode: 'fixed', intervalValue: 6 });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('intervalValue', 6);
+      expect(mockUpdateQueue).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        QUEUE_ID,
+        expect.objectContaining({ scheduleMode: 'fixed', intervalValue: 6 }),
+      );
     });
 
     it('returns 404 for non-owned queue', async () => {
@@ -528,6 +542,21 @@ describe('queues routes', () => {
         'user-1',
         QUEUE_ID,
         { search: 'announcement' },
+      );
+    });
+
+    it('passes optional queue preview limits through to the service', async () => {
+      mockGetQueuePosts.mockResolvedValueOnce([]);
+      const agent = await authenticatedAgent();
+
+      const res = await agent.get(`/api/queues/${QUEUE_ID}/posts?limit=4`);
+
+      expect(res.status).toBe(200);
+      expect(mockGetQueuePosts).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        QUEUE_ID,
+        { limit: 4 },
       );
     });
   });

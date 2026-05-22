@@ -9,6 +9,7 @@ import { requireAuth } from "../middleware/auth-guard.js";
 export interface AdminRouterDeps {
   publishQueue: Queue;
   notificationQueue: Queue;
+  // Optional in deployments/tests that have not enabled the bulk operations worker.
   bulkOpsQueue?: Queue;
 }
 
@@ -64,15 +65,18 @@ export function createAdminRouter({
 
   router.use(
     "/admin/queues",
+    requireAuth,
     (_req, res, next) => {
+      // Direct API/dev/test fallback only. production nginx's /admin/ block
+      // hides these upstream headers before applying its canonical CSP/XFO
+      // policy; middleware.test asserts that proxy_hide_header contract.
       res.setHeader("X-Frame-Options", "SAMEORIGIN");
       res.setHeader(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'self'",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'",
       );
       next();
     },
-    requireAuth,
     serverAdapter.getRouter(),
   );
   return router;

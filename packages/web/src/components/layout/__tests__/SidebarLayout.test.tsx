@@ -30,7 +30,7 @@ describe('SidebarLayout', () => {
       </MemoryRouter>,
     );
 
-    const search = screen.getByRole('searchbox', { name: /search posts, queues, profiles/i });
+    const search = screen.getByRole('searchbox', { name: /jump to a page/i });
 
     await userEvent.keyboard('{Meta>}k{/Meta}');
 

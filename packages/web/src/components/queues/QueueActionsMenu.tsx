@@ -51,14 +51,16 @@ export function QueueActionsMenu({ queue, onDelete, onCopyConfig, onTogglePause 
             <Copy className="mr-2 h-4 w-4" />
             Copy configuration
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onTogglePause}>
-            {queue.isPaused ? (
-              <Play className="mr-2 h-4 w-4" />
-            ) : (
-              <Pause className="mr-2 h-4 w-4" />
-            )}
-            {queue.isPaused ? 'Resume queue' : 'Pause queue'}
-          </DropdownMenuItem>
+          {onTogglePause && (
+            <DropdownMenuItem onClick={onTogglePause}>
+              {queue.isPaused ? (
+                <Play className="mr-2 h-4 w-4" />
+              ) : (
+                <Pause className="mr-2 h-4 w-4" />
+              )}
+              {queue.isPaused ? 'Resume queue' : 'Pause queue'}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"

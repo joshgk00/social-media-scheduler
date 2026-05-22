@@ -5,6 +5,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SidebarLayout } from "./components/layout/SidebarLayout";
 import { PageSkeleton } from "./components/PageSkeleton";
 import { lazy, Suspense } from "react";
+import { useAuth } from "./hooks/use-auth";
 
 const LoginPage = lazy(() => import("./pages/login/LoginPage"));
 const SetupPage = lazy(() => import("./pages/setup/SetupPage"));
@@ -15,7 +16,7 @@ const NewPostPage = lazy(() => import("./pages/posts/NewPostPage"));
 const EditPostPage = lazy(() => import("./pages/posts/EditPostPage"));
 const BulkImportPage = lazy(() => import("./pages/posts/BulkImportPage"));
 const QueuesPage = lazy(() => import("./pages/queues/QueuesPage"));
-const QueueFormPage = lazy(() => import("./pages/queues/QueueDetailPage"));
+const QueueFormPage = lazy(() => import("./pages/queues/QueueFormPage"));
 const QueueOverviewPage = lazy(() => import("./pages/queues/QueueOverviewPage"));
 const QueuePostsPage = lazy(() => import("./pages/queues/QueuePostsPage"));
 const CalendarPage = lazy(() => import("./pages/calendar/CalendarPage"));
@@ -23,6 +24,14 @@ const ProfilesPage = lazy(() => import("./pages/profiles/ProfilesPage"));
 const NotificationsPage = lazy(() => import("./pages/notifications/NotificationsPage"));
 const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
 const BullBoardPage = lazy(() => import("./pages/settings/BullBoardPage"));
+const EmailLogsPage = lazy(() => import("./pages/settings/EmailLogsPage"));
+
+function DefaultLandingRedirect() {
+  const { data: user, isLoading } = useAuth();
+
+  if (isLoading) return <PageSkeleton />;
+  return <Navigate to={user?.defaultLandingPage || "/dashboard"} replace />;
+}
 
 export function App() {
   return (
@@ -45,7 +54,7 @@ export function App() {
                 </ProtectedRoute>
               }
             >
-              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route index element={<DefaultLandingRedirect />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/posts" element={<PostsPage />} />
               <Route path="/posts/new" element={<NewPostPage />} />
@@ -86,6 +95,10 @@ export function App() {
               <Route
                 path="/settings/advanced/bull-board"
                 element={<BullBoardPage />}
+              />
+              <Route
+                path="/settings/email-logs"
+                element={<EmailLogsPage />}
               />
               <Route
                 path="/settings"

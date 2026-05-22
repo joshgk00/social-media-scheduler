@@ -9,7 +9,7 @@ import {
 import { Avatar } from '../ui/avatar';
 import { Card } from '../ui/card';
 import { IconButton } from '../ui/icon';
-import { Pill, StatusPill } from '../ui/pill';
+import { Pill, StatusPill, type StatusPillStatus } from '../ui/pill';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,20 +44,20 @@ function formatRelative(iso: string | null, emptyLabel: string): string {
   return formatDistanceToNow(new Date(iso), { addSuffix: true });
 }
 
-function profileStatus(profile: SocialProfile): 'active' | 'inactive' | 'deprecated' {
-  if (profile.tokenStatus === 'expired' || profile.tokenStatus === 'needs_reauth') {
+function profileStatus(profile: SocialProfile): StatusPillStatus {
+  if (profile.tokenStatus === 'expired') {
     return 'deprecated';
   }
 
+  if (profile.tokenStatus === 'needs_reauth') {
+    return 'needs_reauth';
+  }
+
   if (profile.tokenStatus === 'expiring') {
-    return 'inactive';
+    return 'expiring';
   }
 
   return 'active';
-}
-
-function nonTwitterRateCopy(platform: Platform): string {
-  return `No rate cap on ${PLATFORM_LABEL[platform]} (org-level limits only)`;
 }
 
 export function ProfileCard({
@@ -129,14 +129,8 @@ export function ProfileCard({
       </div>
 
       <div className="px-3 pb-3">
-        {profile.platform === 'twitter' ? (
-          rateLimitIndicator ?? (
-            <p className="text-[11px] text-muted-foreground">Rate limit unavailable</p>
-          )
-        ) : (
-          <p className="text-[11px] text-muted-foreground">
-            {nonTwitterRateCopy(profile.platform)}
-          </p>
+        {rateLimitIndicator ?? (
+          <p className="text-[11px] text-muted-foreground">Rate limit unavailable</p>
         )}
       </div>
 

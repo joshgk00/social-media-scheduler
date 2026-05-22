@@ -112,10 +112,16 @@ export function AdvancedSection() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" leadingIcon={<Server className="h-4 w-4" aria-hidden="true" />}>
+            <Button
+              variant="outline"
+              size="sm"
+              leadingIcon={<Server className="h-4 w-4" aria-hidden="true" />}
+              disabled
+              title="Coming soon"
+            >
               Export all data
             </Button>
-            <Button variant="danger" size="sm">
+            <Button variant="danger" size="sm" disabled title="Coming soon">
               Reset application
             </Button>
           </div>

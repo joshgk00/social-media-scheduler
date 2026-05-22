@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { notificationEventTypeSchema } from '@sms/shared';
@@ -57,68 +57,93 @@ async function loadEntriesPerPage(db: Db, userId: string): Promise<number> {
 export function createNotificationsRouter({ db }: NotificationsRouterDeps): Router {
   const router = Router();
 
-  router.get('/api/notifications/unread-count', requireAuth, async (req, res) => {
-    const userId = req.session.userId!;
-    const unreadCount = await countUnread(db, userId);
-    res.json({ count: unreadCount });
+  router.get('/api/notifications/unread-count', requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.session.userId!;
+      const unreadCount = await countUnread(db, userId);
+      res.json({ count: unreadCount });
+    } catch (error) {
+      next(error);
+    }
   });
 
-  router.get('/api/notifications', requireAuth, async (req, res) => {
-    const parsed = listQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
-      return;
+  router.get('/api/notifications', requireAuth, async (req, res, next) => {
+    try {
+      const parsed = listQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+        return;
+      }
+
+      const userId = req.session.userId!;
+      const pageSize = parsed.data.pageSize ?? await loadEntriesPerPage(db, userId);
+      const notificationPage = await listNotifications(db, {
+        userId,
+        page: parsed.data.page,
+        pageSize,
+        eventTypes: parsed.data.eventTypes,
+        severity: parsed.data.type,
+        readStatus: parsed.data.readStatus,
+      });
+
+      res.json({
+        rows: notificationPage.rows,
+        page: parsed.data.page,
+        pageSize,
+        total: notificationPage.total,
+      });
+    } catch (error) {
+      next(error);
     }
-
-    const userId = req.session.userId!;
-    const pageSize = parsed.data.pageSize ?? await loadEntriesPerPage(db, userId);
-    const notificationPage = await listNotifications(db, {
-      userId,
-      page: parsed.data.page,
-      pageSize,
-      eventTypes: parsed.data.eventTypes,
-      severity: parsed.data.type,
-      readStatus: parsed.data.readStatus,
-    });
-
-    res.json({
-      rows: notificationPage.rows,
-      page: parsed.data.page,
-      pageSize,
-      total: notificationPage.total,
-    });
   });
 
-  router.post('/api/notifications/:id/read', requireAuth, async (req, res) => {
-    const parsed = idParamSchema.safeParse(req.params);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid id' });
-      return;
-    }
+  router.post('/api/notifications/:id/read', requireAuth, async (req, res, next) => {
+    try {
+      const parsed = idParamSchema.safeParse(req.params);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid id' });
+        return;
+      }
 
-    const userId = req.session.userId!;
-    const wasUpdated = await markRead(db, { userId, notificationId: parsed.data.id });
-    if (!wasUpdated) {
-      res.status(404).json({ error: 'Notification not found' });
-      return;
-    }
+      const userId = req.session.userId!;
+      const wasUpdated = await markRead(db, { userId, notificationId: parsed.data.id });
+      if (!wasUpdated) {
+        res.status(404).json({ error: 'Notification not found' });
+        return;
+      }
 
-    res.json({ ok: true });
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
   });
 
-  async function handleMarkAllRead(req: Request, res: Response) {
-    const userId = req.session.userId!;
-    const updatedCount = await markAllRead(db, userId);
-    res.json({ ok: true, updated: updatedCount });
+  async function handleMarkAllRead(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.session.userId!;
+      const updatedCount = await markAllRead(db, userId);
+      res.json({ ok: true, updated: updatedCount });
+    } catch (error) {
+      next(error);
+    }
   }
 
-  router.post('/api/notifications/read-all', requireAuth, handleMarkAllRead);
+  router.post('/api/notifications/read-all', requireAuth, (req, res, next) => {
+    res.setHeader('Deprecation', 'true');
+    res.setHeader('Sunset', '2026-08-01');
+    res.setHeader('Link', '</api/notifications/mark-all-read>; rel="successor-version"');
+    void handleMarkAllRead(req, res, next);
+  });
   router.post('/api/notifications/mark-all-read', requireAuth, handleMarkAllRead);
 
-  router.post('/api/notifications/clear-read', requireAuth, async (req, res) => {
-    const userId = req.session.userId!;
-    const deletedCount = await clearRead(db, userId);
-    res.json({ ok: true, deleted: deletedCount });
+  router.post('/api/notifications/clear-read', requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.session.userId!;
+      const deletedCount = await clearRead(db, userId);
+      res.json({ ok: true, deleted: deletedCount });
+    } catch (error) {
+      next(error);
+    }
   });
 
   return router;

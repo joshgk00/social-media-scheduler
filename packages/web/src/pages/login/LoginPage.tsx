@@ -61,8 +61,8 @@ export default function LoginPage() {
     }
   }, [searchParams, setRedirectAfterLogin]);
 
-  const redirectToTarget = useCallback(() => {
-    const target = redirectAfterLogin || "/dashboard";
+  const redirectToTarget = useCallback((defaultLandingPage?: string) => {
+    const target = redirectAfterLogin || defaultLandingPage || "/dashboard";
     setRedirectAfterLogin(null);
     navigate(target);
   }, [redirectAfterLogin, setRedirectAfterLogin, navigate]);
@@ -107,7 +107,7 @@ export default function LoginPage() {
         setCountdown(TOTP_TIMEOUT_SECONDS);
         setStep("totp");
       } else {
-        redirectToTarget();
+        redirectToTarget(result.defaultLandingPage);
       }
     } catch (error: unknown) {
       const typedError = error as { status?: number };
@@ -124,8 +124,8 @@ export default function LoginPage() {
   async function onTotpSubmit(data: TotpVerifyInput) {
     setTotpError(null);
     try {
-      await verify2FAMutation.mutateAsync(data);
-      redirectToTarget();
+      const result = await verify2FAMutation.mutateAsync(data);
+      redirectToTarget(result.defaultLandingPage);
     } catch (error: unknown) {
       const typedError = error as {
         status?: number;

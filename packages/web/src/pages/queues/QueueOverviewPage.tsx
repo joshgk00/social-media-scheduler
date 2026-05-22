@@ -29,12 +29,16 @@ function postStatus(status: string): StatusPillStatus {
 export default function QueueOverviewPage() {
   const { id } = useParams<{ id: string }>();
   const { data: queue, isLoading } = useQueue(id ?? "");
-  const { data: posts, isLoading: postsLoading } = useQueuePosts(id ?? "");
+  const { data: posts, isLoading: postsLoading } = useQueuePosts(
+    id ?? "",
+    { limit: 4 },
+    { refetchInterval: false },
+  );
   const { data: profiles } = useProfiles();
   const profile = profiles?.find((item) => item.id === queue?.profileId);
-  const queueForSummary = queue ? { ...queue, postCount: posts?.length ?? 0 } : null;
+  const queueForSummary = queue ? { ...queue, postCount: queue.postCount ?? 0 } : null;
   const cadence = queueForSummary ? cadenceSummary(queueForSummary) : null;
-  const previewPosts = (posts ?? []).slice(0, 4);
+  const previewPosts = posts ?? [];
 
   if (isLoading) {
     return (
@@ -82,7 +86,7 @@ export default function QueueOverviewPage() {
 
       <div className="mb-5 grid gap-3 md:grid-cols-4">
         <StatCard label="Cadence" value={cadence?.primary ?? "-"} meta={cadence?.secondary ?? ""} />
-        <StatCard label="Posts in queue" value={String(posts?.length ?? 0)} meta="ready to publish" />
+        <StatCard label="Posts in queue" value={String(queue.postCount ?? 0)} meta="ready to publish" />
         <StatCard label="Next run" value={formatNextRun(queue.nextRunAt)} meta={queue.nextRunAt ? format(new Date(queue.nextRunAt), "PPp") : "-"} />
         <Card padded>
           <p className="text-xs font-medium uppercase text-muted-foreground">Profile</p>
@@ -106,7 +110,7 @@ export default function QueueOverviewPage() {
       <div className="mb-2 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-foreground">Posts in queue</h2>
         <Button variant="outline" size="sm" asChild>
-          <Link to={`/queues/${queue.id}/posts`}>View all {posts?.length ?? 0}</Link>
+          <Link to={`/queues/${queue.id}/posts`}>View all {queue.postCount ?? 0}</Link>
         </Button>
       </div>
       <Card>

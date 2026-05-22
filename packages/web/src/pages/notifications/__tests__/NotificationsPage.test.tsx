@@ -42,4 +42,43 @@ describe('NotificationsPage', () => {
 
     expect(onMarkRead).toHaveBeenCalledWith('n1');
   });
+
+  it('formats bulk failures with an error report action', async () => {
+    const onMarkRead = vi.fn();
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const user = userEvent.setup();
+    const bulkOperationId = '55555555-5555-4555-8555-555555555555';
+
+    render(
+      <NotificationsPage
+        rows={[
+          {
+            id: 'bulk-notification',
+            eventType: 'bulk_completed',
+            title: 'Bulk complete',
+            payload: {
+              operation: 'bulk.profile-modify-tags',
+              successCount: 10,
+              failureCount: 1,
+              errorReportPath: `/var/app/data/media/bulk-errors/${bulkOperationId}/errors.csv`,
+            },
+          },
+        ]}
+        onMarkRead={onMarkRead}
+      />,
+    );
+
+    expect(screen.getByText('Modify tags complete with 1 errors.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Open report' }));
+
+    expect(onMarkRead).toHaveBeenCalledWith('bulk-notification');
+    expect(openSpy).toHaveBeenCalledWith(
+      `/media/bulk-errors/${bulkOperationId}/errors.csv`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+
+    openSpy.mockRestore();
+  });
 });

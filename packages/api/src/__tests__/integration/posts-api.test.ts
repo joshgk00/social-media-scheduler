@@ -10,6 +10,8 @@ const mockUpdatePost = vi.fn();
 const mockDeletePost = vi.fn();
 const mockGetPostById = vi.fn();
 const mockGetPosts = vi.fn();
+const mockGetPostStatusCounts = vi.fn();
+const mockGetDashboardPostStats = vi.fn();
 const mockCheckConflicts = vi.fn();
 
 vi.mock('../../services/post.service.js', async () => {
@@ -20,6 +22,8 @@ vi.mock('../../services/post.service.js', async () => {
     deletePost: (...args: unknown[]) => mockDeletePost(...args),
     getPostById: (...args: unknown[]) => mockGetPostById(...args),
     getPosts: (...args: unknown[]) => mockGetPosts(...args),
+    getPostStatusCounts: (...args: unknown[]) => mockGetPostStatusCounts(...args),
+    getDashboardPostStats: (...args: unknown[]) => mockGetDashboardPostStats(...args),
     checkConflicts: (...args: unknown[]) => mockCheckConflicts(...args),
     PostServiceError,
   };
@@ -353,6 +357,56 @@ describe('posts API integration', () => {
       expect(queryArg).toHaveProperty('profileId', PROFILE_ID);
       expect(queryArg).toHaveProperty('tagId', TAG_ID);
       expect(queryArg).toHaveProperty('search', 'test');
+    });
+
+    it('returns uncapped status counts from the server', async () => {
+      mockGetPostStatusCounts.mockResolvedValueOnce({
+        total: 125,
+        byStatus: {
+          draft: 20,
+          scheduled: 100,
+          queued: 3,
+          failed: 2,
+        },
+      });
+      const agent = await authenticatedAgent();
+
+      const res = await agent.get(`/api/posts/status-counts?profileId=${PROFILE_ID}&search=launch`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBe(125);
+      expect(res.body.byStatus.scheduled).toBe(100);
+      expect(mockGetPostStatusCounts).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        expect.objectContaining({
+          profileId: PROFILE_ID,
+          search: 'launch',
+        }),
+      );
+    });
+
+    it('returns dashboard post stats for the selected window', async () => {
+      mockGetDashboardPostStats.mockResolvedValueOnce({
+        scheduled24Count: 1,
+        scheduled24: [SAMPLE_POST],
+        scheduledInRange: [SAMPLE_POST],
+        failed24: [],
+        failed7dCount: 7,
+        scheduledProfileCount: 2,
+      });
+      const agent = await authenticatedAgent();
+
+      const res = await agent.get('/api/posts/dashboard-stats?range=7d');
+
+      expect(res.status).toBe(200);
+      expect(res.body.failed7dCount).toBe(7);
+      expect(res.body.scheduledProfileCount).toBe(2);
+      expect(mockGetDashboardPostStats).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        '7d',
+      );
     });
   });
 

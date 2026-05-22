@@ -52,7 +52,7 @@ describe('ProfileCard', () => {
     expect(screen.getByText(/Next:/)).toBeInTheDocument();
   });
 
-  it('uses platform-specific non-rate-copy for LinkedIn and Facebook', () => {
+  it('renders provided rate-limit state for LinkedIn and Facebook', () => {
     render(
       <ProfileCard
         profile={buildProfile({
@@ -61,6 +61,7 @@ describe('ProfileCard', () => {
           displayName: 'CMW LinkedIn',
           handle: 'clicks-mortar',
         })}
+        rateLimitIndicator={<div>Rate limit 12 / 100</div>}
         {...handlers}
       />,
     );
@@ -68,15 +69,29 @@ describe('ProfileCard', () => {
     expect(screen.getByText('CMW LinkedIn')).toBeInTheDocument();
     expect(screen.getByText('@clicks-mortar')).toBeInTheDocument();
     expect(screen.getByLabelText('LinkedIn')).toBeInTheDocument();
-    expect(screen.getByText('No rate cap on LinkedIn (org-level limits only)')).toBeInTheDocument();
+    expect(screen.getByText('Rate limit 12 / 100')).toBeInTheDocument();
   });
 
-  it('shows the deprecated pill for profiles that need re-authentication', () => {
+  it('shows a recoverable warning pill for profiles that need re-authentication', () => {
     render(
       <ProfileCard
         profile={buildProfile({
           tokenStatus: 'needs_reauth',
           displayName: 'Old Test Account',
+        })}
+        {...handlers}
+      />,
+    );
+
+    expect(screen.getByText('Needs reauth')).toBeInTheDocument();
+  });
+
+  it('reserves the deprecated pill for expired profiles', () => {
+    render(
+      <ProfileCard
+        profile={buildProfile({
+          tokenStatus: 'expired',
+          displayName: 'Expired Test Account',
         })}
         {...handlers}
       />,

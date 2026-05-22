@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pill } from "@/components/ui/pill";
+import { apiClient } from "@/lib/api-client";
 import { getAdminQueuesUrl } from "@/lib/admin-queues-url";
 
 interface QueueCounts {
@@ -66,9 +67,9 @@ function summarizeQueue(
   }
   if (counts.active > 0) {
     return {
-      status: "Watch",
-      tone: "warning" as const,
-      detail: `${counts.active} active jobs are running now.`,
+      status: "Healthy",
+      tone: "success" as const,
+      detail: `${counts.active} active jobs running; ${counts.completed} completed.`,
     };
   }
   return {
@@ -82,13 +83,7 @@ export default function BullBoardPage() {
   const adminQueuesUrl = getAdminQueuesUrl();
   const queueHealthQuery = useQuery({
     queryKey: ["admin-queue-health"],
-    queryFn: async () => {
-      const response = await fetch("/admin/queue-health", {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Could not load queue health");
-      return response.json() as Promise<QueueHealthResponse>;
-    },
+    queryFn: () => apiClient.get<QueueHealthResponse>("/admin/queue-health"),
     refetchInterval: 30_000,
   });
 
@@ -97,7 +92,7 @@ export default function BullBoardPage() {
       <PageHeader
         breadcrumb={
           <span className="flex flex-wrap items-center gap-1">
-            <Link to="/settings/advanced" className="hover:underline">
+            <Link to="/settings/profile" className="hover:underline">
               Settings
             </Link>
             <span>/</span>
@@ -180,6 +175,7 @@ export default function BullBoardPage() {
           </Button>
         </div>
         <div className="bg-background">
+          {/* Bull Board is same-origin admin UI; do not present iframe sandboxing as an isolation boundary. */}
           <iframe
             title="Embedded Bull Board"
             src={adminQueuesUrl}

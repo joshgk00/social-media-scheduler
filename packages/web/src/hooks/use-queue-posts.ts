@@ -18,12 +18,22 @@ export interface QueuePost {
 export interface QueuePostFilters {
   search?: string;
   searchScope?: 'queue';
+  limit?: number;
 }
 
-export function useQueuePosts(queueId: string, filters: QueuePostFilters = {}) {
+interface QueuePostOptions {
+  refetchInterval?: number | false;
+}
+
+export function useQueuePosts(
+  queueId: string,
+  filters: QueuePostFilters = {},
+  options: QueuePostOptions = {},
+) {
   const params = new URLSearchParams();
   if (filters.search) params.set('search', filters.search);
   if (filters.searchScope) params.set('searchScope', filters.searchScope);
+  if (filters.limit !== undefined) params.set('limit', String(filters.limit));
   const queryString = params.toString();
 
   return useQuery({
@@ -32,7 +42,7 @@ export function useQueuePosts(queueId: string, filters: QueuePostFilters = {}) {
       apiClient.get<QueuePost[]>(`/api/queues/${queueId}/posts${queryString ? `?${queryString}` : ''}`),
     enabled: !!queueId,
     staleTime: 5_000,
-    refetchInterval: 10_000,
+    refetchInterval: options.refetchInterval ?? 10_000,
     refetchIntervalInBackground: false,
   });
 }

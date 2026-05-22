@@ -74,9 +74,13 @@ export function PreferencesSection({ user }: PreferencesSectionProps) {
   const hasChanges = form.formState.isDirty;
 
   async function onSubmit(data: PreferencesUpdateInput) {
+    const payload = {
+      ...data,
+      defaultLandingPage: (data.defaultLandingPage ?? '/dashboard') as DefaultLandingPage,
+    };
     try {
-      await updatePreferences.mutateAsync(data);
-      form.reset(data);
+      await updatePreferences.mutateAsync(payload);
+      form.reset(payload);
       toast.success('Preferences saved.');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';

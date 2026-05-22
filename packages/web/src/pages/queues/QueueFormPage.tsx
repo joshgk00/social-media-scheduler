@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useQueue, useCreateQueue, useUpdateQueue, type QueueConfig } from '../../hooks/use-queues';
 import { useProfiles } from '../../hooks/use-profiles';
 import { ScheduleBuilder, type QueueFormValues } from '../../components/queues/ScheduleBuilder';
+import { hourToTime, inferScheduleMode, timeToHour } from '../../lib/queue-schedule';
 
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
@@ -27,16 +28,26 @@ import {
   FormMessage,
 } from '../../components/ui/form';
 
+const WHOLE_HOUR_TIME_PATTERN = /^\d{2}:00$/;
+const WHOLE_HOUR_TIME_MESSAGE = 'Use whole-hour publish times.';
+
+const wholeHourTimesSchema = z
+  .array(z.string())
+  .refine(
+    (times) => times.every((time) => WHOLE_HOUR_TIME_PATTERN.test(time)),
+    WHOLE_HOUR_TIME_MESSAGE,
+  );
+
 const queueFormSchema = z.object({
   name: z.string().min(1, 'Queue name is required.').max(255),
   profileId: z.string().min(1, 'Select a social profile.'),
   scheduleMode: z.enum(['specific', 'fixed', 'variable']),
-  specificTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/)),
+  specificTimes: wholeHourTimesSchema,
   intervalType: z.enum(['fixed', 'variable']),
   intervalValue: z.coerce.number().int().min(1, 'Interval must be at least 1.').max(999),
   intervalUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months', 'years']),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'Select at least one day of the week.'),
-  hourSlots: z.array(z.number().int().min(0).max(23)).min(1, 'Select at least one hour window.'),
+  hourSlots: z.array(z.number().int().min(0).max(23)),
   startDate: z.string().optional(),
   seasonalStart: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional().or(z.literal('')),
   seasonalEnd: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional().or(z.literal('')),
@@ -49,6 +60,14 @@ const queueFormSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ['specificTimes'],
       message: 'Add at least one publish time.',
+    });
+  }
+
+  if (value.scheduleMode !== 'specific' && value.hourSlots.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['hourSlots'],
+      message: 'Select at least one hour window.',
     });
   }
 });
@@ -101,24 +120,8 @@ const FIELD_LABELS: Record<string, string> = {
   notes: 'Internal notes',
 };
 
-function hourToTime(hour: number): string {
-  return `${String(hour).padStart(2, '0')}:00`;
-}
-
-function timeToHour(time: string): number {
-  return Number(time.split(':')[0]) || 0;
-}
-
-function inferScheduleMode(queue: { intervalType: string; intervalValue: number; intervalUnit: string }) {
-  if (queue.intervalType === 'variable') return 'variable';
-  if (queue.intervalType === 'fixed' && queue.intervalValue === 1 && queue.intervalUnit === 'hours') {
-    return 'specific';
-  }
-  return 'fixed';
-}
-
 function readQueueProfileId(queue: { profileId?: string } | null | undefined): string {
-  return queue?.profileId ?? (queue as { profile_id?: string } | null | undefined)?.profile_id ?? '';
+  return queue?.profileId ?? '';
 }
 
 function isApiValidationIssue(value: unknown): value is ApiValidationIssue {
@@ -148,7 +151,7 @@ export function formatQueueSaveError(error: unknown): string {
   return "Couldn't save queue. Try again.";
 }
 
-export default function QueueDetailPage() {
+export default function QueueFormPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
@@ -200,6 +203,8 @@ export default function QueueDetailPage() {
     if (!isEditing && copiedConfig) {
       form.reset({
         ...DEFAULT_VALUES,
+        name: copiedConfig.name,
+        profileId: copiedConfig.profileId,
         scheduleMode: inferScheduleMode(copiedConfig),
         specificTimes: copiedConfig.hourSlots.map(hourToTime),
         intervalType: copiedConfig.intervalType as 'fixed' | 'variable',
@@ -212,6 +217,7 @@ export default function QueueDetailPage() {
         seasonalEnd: copiedConfig.seasonalEnd ?? undefined,
         seasonalRepeat: copiedConfig.seasonalRepeat,
         isRecycling: copiedConfig.isRecycling,
+        notes: copiedConfig.notes ?? undefined,
       });
     }
   }, [copiedConfig, isEditing]); // eslint-disable-line react-hooks/exhaustive-deps -- form.reset is stable
@@ -220,12 +226,24 @@ export default function QueueDetailPage() {
 
   function onSubmit(values: QueueFormValues) {
     setSaveError(null);
+    if (
+      values.scheduleMode === 'specific' &&
+      values.specificTimes.some((time) => !WHOLE_HOUR_TIME_PATTERN.test(time))
+    ) {
+      form.setError('specificTimes', {
+        type: 'manual',
+        message: WHOLE_HOUR_TIME_MESSAGE,
+      });
+      return;
+    }
+
     const hourSlots = values.scheduleMode === 'specific'
       ? [...new Set(values.specificTimes.map(timeToHour))].sort((a, b) => a - b)
       : values.hourSlots;
     const payload = {
       name: values.name,
       profileId: values.profileId || readQueueProfileId(existingQueue),
+      scheduleMode: values.scheduleMode,
       intervalType: values.scheduleMode === 'variable' ? 'variable' as const : 'fixed' as const,
       intervalValue: values.scheduleMode === 'specific' ? 1 : values.intervalValue,
       intervalUnit: values.scheduleMode === 'specific' ? 'hours' as const : values.intervalUnit,
@@ -282,7 +300,7 @@ export default function QueueDetailPage() {
   return (
     <main className="px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
-        breadcrumb="Queues / New"
+        breadcrumb={isEditing ? `Queues / ${existingQueue?.name ?? 'Edit'}` : 'Queues / New'}
         title={isEditing ? `Edit ${existingQueue?.name ?? 'queue'}` : 'New queue'}
         subtitle="Set a recurring schedule. Posts in this queue auto-publish on the cadence you choose."
         actions={
@@ -299,7 +317,7 @@ export default function QueueDetailPage() {
       />
 
       <Form {...form}>
-        <form id="queue-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+        <form id="queue-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
           <Card title="Basics" padded>
             <div className="grid gap-4 lg:grid-cols-2">
               <FormField

@@ -1,9 +1,10 @@
 import { formatDistanceToNow } from 'date-fns';
+import { useEffect, useRef, type RefObject } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon';
-import { X } from 'lucide-react';
+import { ExternalLink, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { NotificationRow as NotificationRowData } from '@/hooks/use-notifications';
 
@@ -21,7 +22,8 @@ const severityDotClass: Record<NotificationRowData['severity'], string> = {
 };
 
 function isSafeLinkPath(linkPath: string | null): linkPath is string {
-  return Boolean(linkPath && /^\/(?:posts|profiles|queues|notifications)(?:\/[a-z0-9-]+)*(?:\?[a-z0-9=&_-]+)?$/i.test(linkPath));
+  // Match route prefixes exactly; uppercase prefixes would miss the router and 404.
+  return Boolean(linkPath && /^\/(?:posts|profiles|queues|notifications)(?:\/[a-zA-Z0-9-]+)?$/.test(linkPath));
 }
 
 function getErrorReportUrl(payload: Record<string, unknown>): string | null {
@@ -33,9 +35,37 @@ function getErrorReportUrl(payload: Record<string, unknown>): string | null {
 }
 
 function actionLabel(notification: NotificationRowData): string {
+  if (getErrorReportUrl(notification.payload)) return 'Open report';
+  if (notification.severity === 'info' && isSafeLinkPath(notification.linkPath)) return 'View';
   if (notification.severity === 'error') return 'View post';
   if (notification.severity === 'warning') return 'Reconnect';
   return 'Dismiss';
+}
+
+function focusAdjacentNotificationAction(
+  row: HTMLDivElement | null,
+  mountedRef: RefObject<boolean>,
+) {
+  window.setTimeout(() => {
+    if (!mountedRef.current) return;
+
+    const rows = Array.from(
+      document.querySelectorAll<HTMLDivElement>('[data-notification-row]'),
+    );
+    const rowIndex = row ? rows.indexOf(row) : -1;
+    const candidates =
+      rowIndex >= 0
+        ? [rows[rowIndex + 1], rows[rowIndex - 1]]
+        : rows;
+    const nextAction = candidates
+      .filter(Boolean)
+      .map((candidate) =>
+        candidate.querySelector<HTMLElement>('[data-notification-action]'),
+      )
+      .find(Boolean);
+
+    nextAction?.focus();
+  }, 0);
 }
 
 function NotificationRowView({
@@ -45,6 +75,14 @@ function NotificationRowView({
   onNavigate,
 }: NotificationRowProps & { onNavigate: (linkPath: string) => void }) {
   const isUnread = notification.readAt === null;
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const mountedRef = useRef(true);
+  const errorReportUrl = getErrorReportUrl(notification.payload);
+  const safeLinkPath = isSafeLinkPath(notification.linkPath) ? notification.linkPath : null;
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
 
   async function handleAction() {
     try {
@@ -52,19 +90,23 @@ function NotificationRowView({
         await onMarkRead?.(notification.id);
       }
 
-      const errorReportUrl = getErrorReportUrl(notification.payload);
-      if (notification.severity === 'error' && errorReportUrl) {
+      if (errorReportUrl) {
         window.open(errorReportUrl, '_blank', 'noopener,noreferrer');
         return;
       }
 
-      if (notification.severity === 'error' && isSafeLinkPath(notification.linkPath)) {
-        onNavigate(notification.linkPath);
+      if (safeLinkPath) {
+        onNavigate(safeLinkPath);
         return;
       }
 
       if (notification.severity === 'warning') {
-        onNavigate(isSafeLinkPath(notification.linkPath) ? notification.linkPath : '/profiles');
+        onNavigate('/profiles');
+        return;
+      }
+
+      if (notification.severity === 'info') {
+        focusAdjacentNotificationAction(rowRef.current, mountedRef);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not update notification');
@@ -73,6 +115,8 @@ function NotificationRowView({
 
   return (
     <div
+      ref={rowRef}
+      data-notification-row
       className={cn(
         'grid grid-cols-[auto_1fr_auto_auto] items-start gap-3 px-3 py-3',
         compact ? 'gap-2 px-3 py-2.5' : 'px-4 py-3',
@@ -106,10 +150,11 @@ function NotificationRowView({
         {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
       </time>
 
-      {notification.severity === 'info' ? (
+      {notification.severity === 'info' && !safeLinkPath ? (
         <IconButton
           icon={X}
           label={`Dismiss ${notification.title}`}
+          data-notification-action
           className="h-7 w-7"
           onClick={() => void handleAction()}
         />
@@ -118,10 +163,12 @@ function NotificationRowView({
           type="button"
           variant="outline"
           size="sm"
+          data-notification-action
           className="h-7 shrink-0"
           onClick={() => void handleAction()}
         >
           {actionLabel(notification)}
+          {errorReportUrl ? <ExternalLink className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" /> : null}
         </Button>
       )}
     </div>

@@ -1,4 +1,5 @@
-import { addDays, format, formatDistanceToNowStrict, isAfter } from "date-fns";
+import { format, formatDistanceStrict } from "date-fns";
+import { DateTime } from "luxon";
 import type { QueueListItem } from "@/hooks/use-queues";
 
 export type ScheduleMode = "specific" | "fixed" | "variable";
@@ -13,10 +14,40 @@ export const WEEK_DAYS = [
   { index: 6, short: "Sat", full: "Saturday" },
 ] as const;
 
-export function inferScheduleMode(queue?: Pick<QueueListItem, "intervalType" | "intervalValue" | "intervalUnit">): ScheduleMode {
+const INTERVAL_UNIT_ABBREVIATIONS: Record<string, string> = {
+  minutes: "min",
+  hours: "h",
+  days: "d",
+  weeks: "wk",
+  months: "mo",
+  years: "yr",
+};
+
+function intervalUnitAbbreviation(unit: string): string {
+  return INTERVAL_UNIT_ABBREVIATIONS[unit] ?? unit;
+}
+
+function parsePreviewTime(time: string): { hour: number; minute: number } | null {
+  const [hour, minute] = time.split(":").map(Number);
+  if (
+    !Number.isFinite(hour) ||
+    !Number.isFinite(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+  return { hour, minute };
+}
+
+export function inferScheduleMode(
+  queue?: Pick<QueueListItem, "intervalType" | "intervalValue" | "intervalUnit"> & { scheduleMode?: ScheduleMode | null },
+): ScheduleMode {
   if (!queue) return "specific";
+  if (queue.scheduleMode) return queue.scheduleMode;
   if (queue.intervalType === "variable") return "variable";
-  if (queue.intervalValue === 1 && queue.intervalUnit === "hours") return "specific";
   return "fixed";
 }
 
@@ -64,14 +95,14 @@ export function cadenceSummary(queue: QueueListItem): { primary: string; seconda
 
   if (queue.intervalType === "variable") {
     return {
-      primary: `${queue.intervalValue}${queue.intervalUnit[0]} after last publish`,
+      primary: `${queue.intervalValue}${intervalUnitAbbreviation(queue.intervalUnit)} after last publish`,
       secondary: days,
       mono: `${queue.intervalValue} ${queue.intervalUnit} after last publish on ${days}`,
     };
   }
 
   return {
-    primary: `Every ${queue.intervalValue}${queue.intervalUnit[0]}`,
+    primary: `Every ${queue.intervalValue}${intervalUnitAbbreviation(queue.intervalUnit)}`,
     secondary: days,
     mono: `Every ${queue.intervalValue} ${queue.intervalUnit} on ${days}`,
   };
@@ -85,31 +116,43 @@ export function nextPublishPreview(input: {
   unit: string;
   hourWindows: number[];
   now?: Date;
+  timeZone?: string;
 }): Date[] {
   const now = input.now ?? new Date();
+  const timeZone = input.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const localNow = DateTime.fromJSDate(now).setZone(timeZone);
   const results: Date[] = [];
   const days = new Set(input.days);
   const windows = [...input.hourWindows].sort((a, b) => a - b);
   const every = Math.max(1, Number(input.every) || 1);
 
   for (let offset = 0; offset < 14 && results.length < 5; offset += 1) {
-    const date = addDays(now, offset);
-    if (!days.has(date.getDay())) continue;
+    const date = localNow.plus({ days: offset });
+    // App day indexes follow Date.getDay(): Sunday = 0 ... Saturday = 6.
+    // Luxon uses ISO weekdays, so modulo maps Luxon Sunday 7 back to 0.
+    const dayIndex = date.weekday % 7;
+    if (!days.has(dayIndex)) continue;
 
     const candidates =
       input.mode === "specific"
-        ? input.times.map((time) => {
-            const [hour, minute] = time.split(":").map(Number);
-            return { hour: hour || 0, minute: minute || 0 };
+        ? input.times.flatMap((time) => {
+            const parsed = parsePreviewTime(time);
+            return parsed ? [parsed] : [];
           })
         : windows
+            // Minute cadences can fire multiple times inside an hour window; the compact
+            // preview lists the first opportunity in each selected window.
             .filter((hour) => input.mode === "variable" || (input.unit === "hours" ? hour % every === 0 : true))
             .map((hour) => ({ hour, minute: 0 }));
 
     for (const candidate of candidates) {
-      const publishAt = new Date(date);
-      publishAt.setHours(candidate.hour, candidate.minute, 0, 0);
-      if (isAfter(publishAt, now)) results.push(publishAt);
+      const publishAt = date.set({
+        hour: candidate.hour,
+        minute: candidate.minute,
+        second: 0,
+        millisecond: 0,
+      });
+      if (publishAt > localNow) results.push(publishAt.toJSDate());
       if (results.length === 5) break;
     }
   }
@@ -118,7 +161,10 @@ export function nextPublishPreview(input: {
 }
 
 export function formatPreviewDistance(date: Date, now = new Date()): string {
-  return `in ${formatDistanceToNowStrict(date, { addSuffix: false, unit: date.getTime() - now.getTime() > 36 * 60 * 60 * 1000 ? "day" : undefined })}`;
+  return `in ${formatDistanceStrict(date, now, {
+    addSuffix: false,
+    unit: date.getTime() - now.getTime() > 36 * 60 * 60 * 1000 ? "day" : undefined,
+  })}`;
 }
 
 export function formatNextRun(value: string | null | undefined): string {

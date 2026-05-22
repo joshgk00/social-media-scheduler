@@ -1,37 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import express from "express";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 import { createNotificationsRouter } from "../notifications.js";
-
-function collectConditionSignals(condition: unknown): {
-  columns: string[];
-  params: unknown[];
-} {
-  const columns: string[] = [];
-  const params: unknown[] = [];
-  const seen = new Set<unknown>();
-
-  function visit(value: unknown) {
-    if (!value || typeof value !== "object" || seen.has(value)) return;
-    seen.add(value);
-
-    const record = value as Record<string | symbol, unknown>;
-    if (typeof record.name === "string") columns.push(record.name);
-    if ("value" in record && "encoder" in record) params.push(record.value);
-
-    for (const child of Object.values(record)) {
-      if (Array.isArray(child)) {
-        for (const item of child) visit(item);
-      } else {
-        visit(child);
-      }
-    }
-  }
-
-  visit(condition);
-  return { columns, params };
-}
 
 function createTestApp(userId = "user-a") {
   const app = express();
@@ -47,7 +19,9 @@ function createTestApp(userId = "user-a") {
     },
   );
   app.use(
-    createNotificationsRouter({ db: { select: vi.fn(), update: vi.fn() } }),
+    createNotificationsRouter({
+      db: { select: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    }),
   );
   return app;
 }
@@ -89,12 +63,19 @@ describe("notifications routes", () => {
     expect([200, 404]).toContain(response.status);
   });
 
-  it("bulk marks read for current user only", async () => {
-    const response = await request(createTestApp())
+  it("supports the deprecated read-all alias for authenticated users", async () => {
+    const legacyResponse = await request(createTestApp())
       .post("/api/notifications/read-all")
       .set("x-csrf-token", "token");
+    const canonicalResponse = await request(createTestApp())
+      .post("/api/notifications/mark-all-read")
+      .set("x-csrf-token", "token");
 
-    expect(response.status).toBe(200);
+    expect(legacyResponse.status).toBe(200);
+    expect(canonicalResponse.status).toBe(200);
+    expect(legacyResponse.body).toEqual(canonicalResponse.body);
+    expect(legacyResponse.headers.deprecation).toBe("true");
+    expect(legacyResponse.headers.sunset).toBe("2026-08-01");
   });
 
   it("clears read notifications for current user only", async () => {
@@ -128,14 +109,14 @@ describe("notifications routes", () => {
     const response = await request(app)
       .post("/api/notifications/clear-read")
       .set("x-csrf-token", "token");
-    const conditionSignals = collectConditionSignals(whereCondition);
+    const whereQuery = new PgDialect().sqlToQuery(whereCondition as never);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true, deleted: 1 });
     expect(db.delete).toHaveBeenCalledTimes(1);
     expect(deleteChain.where).toHaveBeenCalledTimes(1);
-    expect(conditionSignals.params).toContain("user-a");
-    expect(conditionSignals.columns).toContain("user_id");
-    expect(conditionSignals.columns).toContain("read_at");
+    expect(whereQuery.params).toEqual(["user-a"]);
+    expect(whereQuery.sql).toContain('"notifications"."user_id" = $1');
+    expect(whereQuery.sql).toContain('"notifications"."read_at" is not null');
   });
 });

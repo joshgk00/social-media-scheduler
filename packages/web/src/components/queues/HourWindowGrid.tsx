@@ -10,6 +10,12 @@ interface HourWindowGridProps {
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
+function formatVerboseHour(hour: number): string {
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 || 12;
+  return `${displayHour} ${period}`;
+}
+
 export function HourWindowGrid({ value, onChange, is24Hour = false }: HourWindowGridProps) {
   function handleToggle(hour: number, checked: boolean) {
     if (checked) {
@@ -55,7 +61,7 @@ export function HourWindowGrid({ value, onChange, is24Hour = false }: HourWindow
       <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-12">
         {HOURS.map((hour) => {
           const isChecked = value.includes(hour);
-          const hourLabel = is24Hour ? String(hour).padStart(2, '0') : formatCompactHour(hour);
+          const hourLabel = is24Hour ? String(hour).padStart(2, '0') : formatHour(hour);
           return (
             <label
               key={hour}
@@ -80,14 +86,4 @@ export function HourWindowGrid({ value, onChange, is24Hour = false }: HourWindow
       </div>
     </fieldset>
   );
-}
-
-function formatCompactHour(hour: number): string {
-  return formatHour(hour);
-}
-
-function formatVerboseHour(hour: number): string {
-  const period = hour >= 12 ? 'PM' : 'AM';
-  const displayHour = hour % 12 || 12;
-  return `${displayHour} ${period}`;
 }

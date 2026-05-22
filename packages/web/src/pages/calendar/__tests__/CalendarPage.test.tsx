@@ -28,6 +28,18 @@ vi.mock("@/hooks/use-profiles", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-tags", () => ({
+  useTags: () => ({
+    data: [
+      {
+        id: "550e8400-e29b-41d4-a716-446655440777",
+        name: "Launch",
+        color: "#9b1c1c",
+      },
+    ],
+  }),
+}));
+
 vi.mock("@/hooks/use-calendar-posts", () => ({
   useCalendarPosts: (query: CalendarQuery | undefined) => useCalendarPostsMock(query),
 }));
@@ -167,6 +179,24 @@ describe("CalendarPage", () => {
     expect(latestCalendarQuery()).toMatchObject({
       scope: "queued",
       profileIds: ["profile-1"],
+    });
+  });
+
+  it("includes search, platform, and tag filters in the calendar query", () => {
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText("Search calendar posts"), {
+      target: { value: "launch preview" },
+    });
+    fireEvent.change(screen.getByLabelText("Platform filter"), { target: { value: "twitter" } });
+    fireEvent.change(screen.getByLabelText("Tag filter"), {
+      target: { value: "550e8400-e29b-41d4-a716-446655440777" },
+    });
+
+    expect(latestCalendarQuery()).toMatchObject({
+      search: "launch preview",
+      platforms: ["twitter"],
+      tagIds: ["550e8400-e29b-41d4-a716-446655440777"],
     });
   });
 

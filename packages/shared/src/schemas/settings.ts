@@ -20,7 +20,7 @@ export const preferencesUpdateSchema = z.object({
   timezone: z.string().min(1),
   dateFormat: z.string().min(1),
   entriesPerPage: z.number().int().min(10).max(100),
-  defaultLandingPage: defaultLandingPageSchema,
+  defaultLandingPage: defaultLandingPageSchema.optional(),
 });
 
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;

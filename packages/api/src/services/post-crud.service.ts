@@ -10,6 +10,17 @@ import { softDeleteMediaForPost, associateMediaToPost } from './media.service.js
 const logger = createLogger('post-service');
 
 type Platform = 'twitter' | 'linkedin' | 'facebook';
+const POST_STATUSES: PostStatus[] = [
+  'draft',
+  'scheduled',
+  'queued',
+  'paused',
+  'publishing',
+  'published',
+  'failed',
+  'auto_destructing',
+  'destroyed',
+];
 
 interface CreatePostInput {
   profileId: string;
@@ -60,6 +71,8 @@ interface PostQuery {
   limit?: number;
 }
 
+type DashboardWindowRange = '24h' | '7d' | '30d';
+
 type PostServiceErrorKind = 'profile_not_found' | 'tag_not_found';
 
 const POST_SERVICE_ERROR_DETAILS: Record<
@@ -78,6 +91,55 @@ export class PostServiceError extends AppError {
     super(details.message, details.statusCode);
     this.name = 'PostServiceError';
   }
+}
+
+function dashboardRangeEnd(now: Date, range: DashboardWindowRange): Date {
+  const end = new Date(now);
+  const hours = range === '24h' ? 24 : range === '7d' ? 24 * 7 : 24 * 30;
+  end.setHours(end.getHours() + hours);
+  return end;
+}
+
+function buildPostFilterConditions(
+  db: Db,
+  userId: string,
+  query: PostQuery,
+  options: { includeStatus: boolean; applySearchScopeDefault: boolean },
+): SQL[] {
+  const conditions = [eq(posts.userId, userId)];
+
+  if (options.includeStatus && query.status) {
+    conditions.push(eq(posts.status, query.status));
+  }
+  if (query.profileId) {
+    conditions.push(eq(posts.profileId, query.profileId));
+  }
+  if (query.search) {
+    const tsQuery = sql`plainto_tsquery('english', ${query.search})`;
+    if (options.applySearchScopeDefault && !query.status && query.searchScope === 'posts') {
+      conditions.push(sql`${posts.status} IN ('draft', 'scheduled', 'failed')`);
+    } else if (options.applySearchScopeDefault && !query.status && query.searchScope === 'queue') {
+      conditions.push(eq(posts.status, 'queued'));
+    }
+    conditions.push(sql`(${posts.searchVector} || ${posts.tagSearchVector}) @@ ${tsQuery}`);
+  }
+  if (query.tagId) {
+    const postIdsWithTag = db
+      .select({ postId: postTags.postId })
+      .from(postTags)
+      .where(eq(postTags.tagId, query.tagId));
+
+    conditions.push(inArray(posts.id, postIdsWithTag));
+  }
+
+  return conditions;
+}
+
+function serializePostForList(post: typeof posts.$inferSelect) {
+  return {
+    ...post,
+    tags: [],
+  };
 }
 
 function toPostAppError(err: PostInvariantError): AppError {
@@ -447,37 +509,19 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
   const limit = query.limit ?? 25;
   const offset = (page - 1) * limit;
 
-  const conditions = [eq(posts.userId, userId)];
+  const conditions = buildPostFilterConditions(db, userId, query, {
+    includeStatus: true,
+    applySearchScopeDefault: true,
+  });
   let orderClause: SQL = sql`${posts.scheduledAt} DESC NULLS LAST, ${posts.createdAt} DESC`;
   let headlineColumn: SQL.Aliased<string> | undefined;
   let rankColumn: SQL.Aliased<number> | undefined;
 
-  if (query.status) {
-    conditions.push(eq(posts.status, query.status));
-  }
-  if (query.profileId) {
-    conditions.push(eq(posts.profileId, query.profileId));
-  }
   if (query.search) {
     const tsQuery = sql`plainto_tsquery('english', ${query.search})`;
-    if (!query.status && query.searchScope === 'posts') {
-      conditions.push(sql`${posts.status} IN ('draft', 'scheduled', 'failed')`);
-    } else if (!query.status && query.searchScope === 'queue') {
-      conditions.push(eq(posts.status, 'queued'));
-    }
-    conditions.push(sql`(${posts.searchVector} || ${posts.tagSearchVector}) @@ ${tsQuery}`);
     headlineColumn = sql<string>`ts_headline('english', ${posts.text}, ${tsQuery}, 'StartSel=<b>, StopSel=</b>, MaxWords=20, MinWords=10, ShortWord=2')`.as('headline');
     rankColumn = sql<number>`ts_rank(${posts.searchVector} || ${posts.tagSearchVector}, ${tsQuery})`.as('rank');
     orderClause = sql`rank DESC, ${posts.scheduledAt} DESC NULLS LAST, ${posts.createdAt} DESC`;
-  }
-
-  if (query.tagId) {
-    const postIdsWithTag = db
-      .select({ postId: postTags.postId })
-      .from(postTags)
-      .where(eq(postTags.tagId, query.tagId));
-
-    conditions.push(inArray(posts.id, postIdsWithTag));
   }
 
   const baseSelect = {
@@ -547,6 +591,115 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
   }));
 
   return { posts: postsWithTags, total, page, limit };
+}
+
+export async function getPostStatusCounts(db: Db, userId: string, query: PostQuery) {
+  const conditions = buildPostFilterConditions(db, userId, query, {
+    includeStatus: false,
+    applySearchScopeDefault: false,
+  });
+
+  const rows = await db
+    .select({
+      status: posts.status,
+      count: drizzleCount(),
+    })
+    .from(posts)
+    .where(and(...conditions))
+    .groupBy(posts.status);
+
+  const byStatus = Object.fromEntries(POST_STATUSES.map((status) => [status, 0])) as Record<PostStatus, number>;
+  let total = 0;
+  for (const row of rows) {
+    const status = row.status as PostStatus;
+    const count = Number(row.count ?? 0);
+    byStatus[status] = count;
+    total += count;
+  }
+
+  return { total, byStatus };
+}
+
+export async function getDashboardPostStats(
+  db: Db,
+  userId: string,
+  range: DashboardWindowRange,
+  now = new Date(),
+) {
+  const next24End = dashboardRangeEnd(now, '24h');
+  const rangeEnd = dashboardRangeEnd(now, range);
+  const failedTodayStart = new Date(now);
+  failedTodayStart.setHours(0, 0, 0, 0);
+  const failed7dStart = new Date(now);
+  failed7dStart.setDate(failed7dStart.getDate() - 7);
+  const nowIso = now.toISOString();
+  const next24EndIso = next24End.toISOString();
+  const rangeEndIso = rangeEnd.toISOString();
+  const failedTodayStartIso = failedTodayStart.toISOString();
+  const failed7dStartIso = failed7dStart.toISOString();
+
+  const scheduled24Rows = await db
+    .select()
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'scheduled'),
+      sql`${posts.scheduledAt} >= ${nowIso}::timestamptz`,
+      sql`${posts.scheduledAt} <= ${next24EndIso}::timestamptz`,
+    ))
+    .orderBy(sql`${posts.scheduledAt} ASC`);
+
+  const [{ scheduled24Count = 0 } = { scheduled24Count: 0 }] = await db
+    .select({ scheduled24Count: drizzleCount() })
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'scheduled'),
+      sql`${posts.scheduledAt} >= ${nowIso}::timestamptz`,
+      sql`${posts.scheduledAt} <= ${next24EndIso}::timestamptz`,
+    ));
+
+  const scheduledInRangeRows = await db
+    .select()
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'scheduled'),
+      sql`${posts.scheduledAt} >= ${nowIso}::timestamptz`,
+      sql`${posts.scheduledAt} <= ${rangeEndIso}::timestamptz`,
+    ))
+    .orderBy(sql`${posts.scheduledAt} ASC`)
+    .limit(4);
+
+  const failed24Rows = await db
+    .select()
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'failed'),
+      sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) >= ${failedTodayStartIso}::timestamptz`,
+      sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) <= ${nowIso}::timestamptz`,
+    ))
+    .orderBy(sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) ASC`);
+
+  const [{ failed7dCount = 0 } = { failed7dCount: 0 }] = await db
+    .select({ failed7dCount: drizzleCount() })
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'failed'),
+      sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) >= ${failed7dStartIso}::timestamptz`,
+      sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) <= ${nowIso}::timestamptz`,
+    ));
+
+  return {
+    scheduled24Count: Number(scheduled24Count),
+    scheduled24: scheduled24Rows.map(serializePostForList),
+    scheduledInRange: scheduledInRangeRows.map(serializePostForList),
+    failed24: failed24Rows.map(serializePostForList),
+    failed7dCount: Number(failed7dCount),
+    scheduledProfileCount: new Set(scheduled24Rows.map((post) => post.profileId).filter(Boolean)).size,
+  };
 }
 
 export async function checkConflicts(

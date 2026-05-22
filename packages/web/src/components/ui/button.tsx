@@ -10,7 +10,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-secondary text-secondary-foreground hover:bg-accent",
+        default:
+          "bg-primary text-primary-foreground hover:bg-[var(--brand-primary-hover)]",
         primary:
           "bg-primary text-primary-foreground hover:bg-[var(--brand-primary-hover)]",
         accent:
@@ -46,6 +47,7 @@ export interface ButtonProps
   asChild?: boolean;
   leadingIcon?: React.ReactNode;
   trailingIcon?: React.ReactNode;
+  /** Visual loading state is rendered only for native button usage. */
   loading?: boolean;
 }
 
@@ -66,11 +68,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref,
   ) => {
     const Comp = asChild ? Slot : "button";
+    const isLoading = !asChild && loading;
     const content = asChild ? (
       children
     ) : (
       <>
-        {loading ? (
+        {isLoading ? (
           <LoaderCircle className="animate-spin" aria-hidden="true" />
         ) : (
           leadingIcon
@@ -84,7 +87,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        disabled={disabled || loading}
+        disabled={disabled || isLoading}
         {...props}
       >
         {content}

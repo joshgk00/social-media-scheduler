@@ -13,6 +13,7 @@ export interface QueueListItem {
   id: string;
   name: string;
   profileId: string;
+  scheduleMode: 'specific' | 'fixed' | 'variable';
   intervalType: string;
   intervalValue: number;
   intervalUnit: string;
@@ -38,6 +39,9 @@ interface QueueDetail extends QueueListItem {
 }
 
 interface QueueConfig {
+  name: string;
+  profileId: string;
+  scheduleMode: 'specific' | 'fixed' | 'variable';
   intervalType: string;
   intervalValue: number;
   intervalUnit: string;
@@ -48,6 +52,7 @@ interface QueueConfig {
   seasonalEnd: string | null;
   seasonalRepeat: boolean;
   isRecycling: boolean;
+  notes: string | null;
 }
 
 export interface QueueFilters {

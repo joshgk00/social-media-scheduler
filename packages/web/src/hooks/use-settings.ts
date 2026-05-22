@@ -112,6 +112,9 @@ export function useSystemHealth() {
     queryFn: async () => {
       const res = await fetch('/health', { credentials: 'include', cache: 'no-store' });
       const body = await res.json();
+      if (!res.ok && res.status !== 503) {
+        throw new Error(`Health check failed: ${res.status}`);
+      }
       return body as SystemHealthResponse;
     },
     retry: false,

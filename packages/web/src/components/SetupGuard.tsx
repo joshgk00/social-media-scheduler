@@ -13,7 +13,7 @@ export function SetupGuard({ children }: { children: React.ReactNode }) {
   }
   if (data && !data.needsSetup && location.pathname === "/setup") {
     if (auth.isLoading) return <PageSkeleton />;
-    if (auth.data) return <Navigate to="/dashboard" replace />;
+    if (auth.data) return <Navigate to={auth.data.defaultLandingPage || "/dashboard"} replace />;
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;

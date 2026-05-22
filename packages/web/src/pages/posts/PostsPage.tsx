@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
@@ -18,8 +18,16 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { PostQueryInput } from "@sms/shared";
+import {
+  DELETABLE_STATES,
+  POST_STATUSES,
+  type PostQueryInput,
+  type PostStatus,
+} from "@sms/shared";
 
+import { BulkDeleteDialog } from "@/components/bulk/BulkDeleteDialog";
+import { ConfirmDestructiveDialog } from "@/components/bulk/ConfirmDestructiveDialog";
+import { ModifyTagsDialog } from "@/components/bulk/ModifyTagsDialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -41,24 +49,48 @@ import {
 import { Pill, StatusPill, type StatusPillStatus } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useBulkDelete, useBulkExport, useBulkPause, useBulkResume } from "@/hooks/use-bulk-ops";
+import {
+  useBulkDelete,
+  useBulkExport,
+  useBulkModifyTags,
+  useBulkPause,
+  useBulkResume,
+} from "@/hooks/use-bulk-ops";
 import { useAuth } from "@/hooks/use-auth";
-import { usePosts, useDeletePost, type Post, type PostFilters } from "@/hooks/use-posts";
+import {
+  useDeletePost,
+  usePosts,
+  usePostStatusCounts,
+  type Post,
+  type PostFilters,
+} from "@/hooks/use-posts";
 import { useProfiles, type SocialProfile } from "@/hooks/use-profiles";
 import { useTags } from "@/hooks/use-tags";
 import { apiClient } from "@/lib/api-client";
 import { renderHeadline } from "@/lib/headline-to-mark";
 import { cn } from "@/lib/utils";
 
-type StatusFilter = "all" | "scheduled" | "queued" | "draft" | "failed";
+type StatusFilter = "all" | PostStatus;
 
-const statusOptions = [
+const statusFilterLabels: Record<PostStatus, string> = {
+  draft: "Drafts",
+  scheduled: "Scheduled",
+  queued: "Queued",
+  paused: "Paused",
+  publishing: "Publishing",
+  published: "Published",
+  failed: "Failed",
+  auto_destructing: "Auto-destructing",
+  destroyed: "Destroyed",
+};
+
+const statusOptions: ReadonlyArray<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "All" },
-  { value: "scheduled", label: "Scheduled" },
-  { value: "queued", label: "Queued" },
-  { value: "draft", label: "Drafts" },
-  { value: "failed", label: "Failed" },
-] as const;
+  ...POST_STATUSES.map((status) => ({
+    value: status,
+    label: statusFilterLabels[status],
+  })),
+];
 
 function normalizePlatform(platform?: string | null): Platform {
   if (platform === "linkedin" || platform === "facebook") return platform;
@@ -73,15 +105,7 @@ function profileFor(
 }
 
 function statusForPill(status: string): StatusPillStatus {
-  if (
-    status === "scheduled" ||
-    status === "queued" ||
-    status === "draft" ||
-    status === "published" ||
-    status === "failed"
-  ) {
-    return status;
-  }
+  if (POST_STATUSES.includes(status as PostStatus)) return status as StatusPillStatus;
   return "queued";
 }
 
@@ -179,6 +203,7 @@ export default function PostsPage() {
   const deletePostMutation = useDeletePost();
   const bulkDeleteMutation = useBulkDelete();
   const bulkExportMutation = useBulkExport();
+  const bulkModifyTagsMutation = useBulkModifyTags();
   const bulkPauseMutation = useBulkPause();
   const bulkResumeMutation = useBulkResume();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -192,15 +217,22 @@ export default function PostsPage() {
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set());
   const [expandedPostIds, setExpandedPostIds] = useState<Set<string>>(new Set());
   const [retryingPostIds, setRetryingPostIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkModifyTagsOpen, setBulkModifyTagsOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Post | null>(null);
   const { data: postsResponse, isLoading, isError, refetch } = usePosts({
     ...filters,
     searchScope: filters.search ? "posts" : undefined,
   });
-  const { data: countResponse } = usePosts({ limit: 100 });
+  const { data: countResponse } = usePostStatusCounts({
+    profileId: filters.profileId,
+    tagId: filters.tagId,
+    search: filters.search,
+    searchScope: filters.search ? "posts" : undefined,
+  });
   const posts = postsResponse?.posts ?? [];
   const hasActiveFilters = !!(filters.status || filters.profileId || filters.tagId || filters.search);
   const counts = useMemo(() => {
-    const allPosts = countResponse?.posts ?? posts;
     return statusOptions.reduce(
       (acc, option) => {
         const visibleCount =
@@ -209,15 +241,15 @@ export default function PostsPage() {
             : posts.filter((post) => post.status === option.value).length;
         const backgroundCount =
           option.value === "all"
-            ? countResponse?.total ?? allPosts.length
-            : allPosts.filter((post) => post.status === option.value).length;
+            ? countResponse?.total ?? postsResponse?.total ?? posts.length
+            : countResponse?.byStatus[option.value] ?? 0;
         acc[option.value] =
           hasActiveFilters ? Math.max(visibleCount, backgroundCount) : backgroundCount;
         return acc;
       },
       {} as Record<StatusFilter, number>,
     );
-  }, [countResponse?.posts, countResponse?.total, posts, postsResponse?.total, hasActiveFilters]);
+  }, [countResponse?.byStatus, countResponse?.total, posts, postsResponse?.total, hasActiveFilters]);
   const currentStatus = (filters.status as StatusFilter | undefined) ?? "all";
   const totalPages = postsResponse ? Math.ceil(postsResponse.total / postsResponse.limit) : 0;
   const pagePostIds = posts.map((post) => post.id);
@@ -282,6 +314,8 @@ export default function PostsPage() {
 
   function clearSelection() {
     setSelectedPostIds(new Set());
+    setBulkDeleteOpen(false);
+    setBulkModifyTagsOpen(false);
   }
 
   function selectorPayload(): { postIds?: string[]; filter?: Partial<PostQueryInput> } {
@@ -318,7 +352,7 @@ export default function PostsPage() {
       });
   }
 
-  function handleDeletePost(postId: string) {
+  function handleDeletePost(postId: string, onSuccess?: () => void) {
     deletePostMutation.mutate(postId, {
       onSuccess: () => {
         setSelectedPostIds((prev) => {
@@ -326,11 +360,27 @@ export default function PostsPage() {
           next.delete(postId);
           return next;
         });
+        onSuccess?.();
       },
       onError: (error) => {
         toast.error(error instanceof Error ? error.message : "Failed to delete post");
       },
     });
+  }
+
+  function handleBulkDeleteConfirmed() {
+    bulkDeleteMutation.mutate(
+      {
+        ...selectorPayload(),
+        typedConfirmation: `DELETE ${selectedPostIds.size} POSTS`,
+      },
+      {
+        onSuccess: () => {
+          clearSelection();
+          setBulkDeleteOpen(false);
+        },
+      },
+    );
   }
 
   function handleBulkPublishing(action: "pause" | "resume") {
@@ -482,7 +532,10 @@ export default function PostsPage() {
             </MenuItem>
             <MenuDivider />
             <MenuSectionLabel>Edit</MenuSectionLabel>
-            <MenuItem icon={Tags} disabled>
+            <MenuItem
+              icon={Tags}
+              onSelect={() => setBulkModifyTagsOpen(true)}
+            >
               Modify tags...
             </MenuItem>
             <MenuItem icon={FileText} disabled>
@@ -508,15 +561,7 @@ export default function PostsPage() {
             <MenuItem
               icon={Trash2}
               danger
-              onSelect={() =>
-                bulkDeleteMutation.mutate(
-                  {
-                    ...selectorPayload(),
-                    typedConfirmation: `DELETE ${selectedPostIds.size} POSTS`,
-                  },
-                  { onSuccess: clearSelection },
-                )
-              }
+              onSelect={() => setBulkDeleteOpen(true)}
             >
               Delete {selectedPostIds.size} posts
             </MenuItem>
@@ -589,11 +634,11 @@ export default function PostsPage() {
                   const profile = profileFor(post, profiles);
                   const platform = normalizePlatform(profile?.platform);
                   const isFailed = post.status === "failed";
+                  const isDeletable = DELETABLE_STATES.includes(post.status as PostStatus);
 
                   return (
-                    <>
+                    <Fragment key={post.id}>
                       <tr
-                        key={post.id}
                         className={cn(
                           "transition-colors hover:bg-[var(--bg-hover)]",
                           isSelected && "bg-[var(--brand-primary-soft)]",
@@ -707,9 +752,10 @@ export default function PostsPage() {
                             <MenuItem
                               icon={Trash2}
                               danger
-                              onSelect={() => handleDeletePost(post.id)}
+                              disabled={!isDeletable}
+                              onSelect={() => setDeleteTarget(post)}
                             >
-                              Delete
+                              {isDeletable ? "Delete" : "Delete unavailable"}
                             </MenuItem>
                           </Menu>
                         </td>
@@ -722,7 +768,7 @@ export default function PostsPage() {
                           onRetry={() => handleRetry(post.id)}
                         />
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -760,6 +806,48 @@ export default function PostsPage() {
           </div>
         </div>
       )}
+
+      <BulkDeleteDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        selectionCount={selectedPostIds.size}
+        onConfirm={handleBulkDeleteConfirmed}
+        isPending={bulkDeleteMutation.isPending}
+      />
+      <ModifyTagsDialog
+        open={bulkModifyTagsOpen}
+        onOpenChange={setBulkModifyTagsOpen}
+        selectionCount={selectedPostIds.size}
+        tags={tags ?? []}
+        onManageTags={() => navigate("/settings")}
+        onConfirm={({ mode, tagIds }) => {
+          bulkModifyTagsMutation.mutate(
+            {
+              ...selectorPayload(),
+              mode,
+              tagIds,
+            },
+            { onSuccess: clearSelection },
+          );
+        }}
+        isPending={bulkModifyTagsMutation.isPending}
+      />
+      <ConfirmDestructiveDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          handleDeletePost(deleteTarget.id, () => setDeleteTarget(null));
+        }}
+        title="Delete post?"
+        description={`This permanently deletes "${deleteTarget ? postTitle(deleteTarget) : "this post"}" from the scheduler. Already-published posts on social platforms are NOT affected.`}
+        confirmLabel="Delete Post"
+        dismissLabel="Keep Post"
+        confirmationPhrase="DELETE POST"
+        isPending={deletePostMutation.isPending}
+      />
     </main>
   );
 }

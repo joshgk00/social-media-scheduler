@@ -20,6 +20,16 @@ interface SetupStatus {
   needsSetup: boolean;
 }
 
+interface LoginResponse {
+  requiresTwoFactor: boolean;
+  defaultLandingPage?: string;
+}
+
+interface Verify2FAResponse {
+  success: boolean;
+  defaultLandingPage?: string;
+}
+
 export function useAuth() {
   return useQuery({
     queryKey: ['auth', 'me'],
@@ -41,7 +51,7 @@ export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (credentials: { email: string; password: string }) =>
-      apiClient.post<{ requiresTwoFactor: boolean }>('/api/auth/login', credentials),
+      apiClient.post<LoginResponse>('/api/auth/login', credentials),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['auth'] }); },
   });
 }
@@ -50,7 +60,7 @@ export function useVerify2FA() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { code: string }) =>
-      apiClient.post('/api/auth/login/verify-2fa', data),
+      apiClient.post<Verify2FAResponse>('/api/auth/login/verify-2fa', data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['auth'] }); },
   });
 }

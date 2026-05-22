@@ -57,7 +57,7 @@ const sections = [
         action: false,
       },
       {
-        to: "/settings/profile",
+        to: "/settings",
         icon: Settings,
         label: "Settings",
         action: false,

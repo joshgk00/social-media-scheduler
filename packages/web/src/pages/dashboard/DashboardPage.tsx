@@ -23,11 +23,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pill, StatusPill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePosts, type Post } from "@/hooks/use-posts";
+import { useDashboardPostStats, type Post } from "@/hooks/use-posts";
 import { useProfiles, type SocialProfile } from "@/hooks/use-profiles";
 import { useQueues, type QueueListItem } from "@/hooks/use-queues";
 import { useAllProfilesRateLimits } from "@/hooks/use-rate-limit";
 import { formatResetTime } from "@/lib/format-reset-time";
+import { cadenceSummary } from "@/lib/queue-schedule";
 import { cn } from "@/lib/utils";
 
 type WindowRange = "24h" | "7d" | "30d";
@@ -63,18 +64,6 @@ function toDate(value: string | null | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function addRange(now: Date, range: WindowRange): Date {
-  const end = new Date(now);
-  const hours = range === "24h" ? 24 : range === "7d" ? 24 * 7 : 24 * 30;
-  end.setHours(end.getHours() + hours);
-  return end;
-}
-
-function isWithin(date: Date | null, start: Date, end: Date): boolean {
-  if (!date) return false;
-  return date >= start && date <= end;
-}
-
 function profileFor(
   profiles: SocialProfile[],
   profileId: string | null,
@@ -88,18 +77,6 @@ function postPlatform(post: Post, profiles: SocialProfile[]): Platform {
 
 function postTitle(post: Post): string {
   return post.headline || post.text || "Untitled post";
-}
-
-function formatQueueCadence(queue: QueueListItem): string {
-  if (queue.intervalType === "fixed") {
-    return `Every ${queue.intervalValue} ${queue.intervalUnit}`;
-  }
-
-  if (queue.hourSlots.length > 0) {
-    return `${queue.hourSlots.length} time slot${queue.hourSlots.length === 1 ? "" : "s"}`;
-  }
-
-  return "Queue schedule";
 }
 
 function StatCard({
@@ -364,7 +341,7 @@ function ActiveQueuesCard({
                 <StatusPill status={queue.isPaused ? "paused" : "active"} />
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                {queue.postCount} posts · {formatQueueCadence(queue)}
+                {queue.postCount} posts · {cadenceSummary(queue).primary}
                 {queue.nextRunAt
                   ? ` · next ${formatDistanceToNowStrict(new Date(queue.nextRunAt), { addSuffix: true })}`
                   : ""}
@@ -470,50 +447,34 @@ function RateLimitsPanel({
 export default function DashboardPage() {
   const [windowRange, setWindowRange] = useState<WindowRange>("24h");
   const now = useMemo(() => new Date(), []);
-  const rangeEnd = addRange(now, windowRange);
-  const scheduledPostsQuery = usePosts({ status: "scheduled", limit: 100 });
-  const failedPostsQuery = usePosts({ status: "failed", limit: 100 });
+  const postStatsQuery = useDashboardPostStats(windowRange);
   const queuesQuery = useQueues();
   const profilesQuery = useProfiles();
   const rateLimitsQuery = useAllProfilesRateLimits();
 
-  const scheduledPosts = scheduledPostsQuery.data?.posts ?? [];
-  const failedPosts = failedPostsQuery.data?.posts ?? [];
   const queues = queuesQuery.data ?? [];
   const profiles = profilesQuery.data ?? [];
   const rateRows = (rateLimitsQuery.data ?? []) as RateLimitRow[];
 
-  const next24End = addRange(now, "24h");
-  const scheduled24 = scheduledPosts.filter((post) =>
-    isWithin(toDate(post.scheduledAt), now, next24End),
-  );
-  const scheduledInRange = scheduledPosts
-    .filter((post) => isWithin(toDate(post.scheduledAt), now, rangeEnd))
-    .sort(
-      (a, b) =>
-        (toDate(a.scheduledAt)?.getTime() ?? 0) -
-        (toDate(b.scheduledAt)?.getTime() ?? 0),
-    );
-  const failed7d = failedPosts.filter((post) => {
-    const start = new Date(now);
-    start.setDate(start.getDate() - 7);
-    return isWithin(toDate(post.updatedAt ?? post.scheduledAt), start, now);
-  });
-  const failed24 = failedPosts.filter((post) =>
-    isWithin(toDate(post.scheduledAt ?? post.updatedAt), now, next24End),
-  );
+  const scheduled24 = postStatsQuery.data?.scheduled24 ?? [];
+  const scheduled24Count = postStatsQuery.data?.scheduled24Count ?? 0;
+  const scheduledInRange = postStatsQuery.data?.scheduledInRange ?? [];
+  const failed24 = postStatsQuery.data?.failed24 ?? [];
+  const failed7dCount = postStatsQuery.data?.failed7dCount ?? 0;
   const activeQueues = queues.filter((queue) => !queue.isPaused);
   const pausedQueues = queues.length - activeQueues.length;
-  const scheduledProfileCount = new Set(
-    scheduled24.map((post) => post.profileId).filter(Boolean),
-  ).size;
+  const scheduledProfileCount = postStatsQuery.data?.scheduledProfileCount ?? 0;
   const totalUsed = rateRows.reduce((sum, row) => sum + row.currentCount, 0);
   const totalLimit = rateRows.reduce((sum, row) => sum + readLimit(row), 0);
+  const hasBlockedProfile = rateRows.some((row) => readLimit(row) === 0);
   const headroom =
-    totalLimit > 0 ? Math.max(0, Math.round(100 - (totalUsed / totalLimit) * 100)) : 100;
+    rateRows.length === 0
+      ? 100
+      : hasBlockedProfile
+        ? 0
+        : Math.max(0, Math.round(100 - (totalUsed / totalLimit) * 100));
   const isLoading =
-    scheduledPostsQuery.isLoading ||
-    failedPostsQuery.isLoading ||
+    postStatsQuery.isLoading ||
     queuesQuery.isLoading ||
     profilesQuery.isLoading ||
     rateLimitsQuery.isLoading;
@@ -544,11 +505,10 @@ export default function DashboardPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Scheduled (24h)"
-          value={String(scheduled24.length)}
+          value={String(scheduled24Count)}
           meta={`Across ${scheduledProfileCount} profile${scheduledProfileCount === 1 ? "" : "s"}`}
           tone="info"
           icon={Info}
-          trend="+3 vs yesterday"
           to="/calendar"
         />
         <StatCard
@@ -561,7 +521,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Errors (7d)"
-          value={String(failed7d.length)}
+          value={String(failed7dCount)}
           meta="Needs attention"
           tone="danger"
           icon={AlertTriangle}

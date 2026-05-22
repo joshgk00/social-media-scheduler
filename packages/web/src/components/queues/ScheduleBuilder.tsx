@@ -1,4 +1,5 @@
-import { type Control, type UseFormWatch, Controller, useFormContext } from 'react-hook-form';
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type Control, type UseFormWatch, Controller, useFormContext, useWatch } from 'react-hook-form';
 import { Clock, Grid3X3, Plus, RefreshCw, Repeat, X, Zap } from 'lucide-react';
 import { format } from 'date-fns';
 import { HourWindowGrid } from './HourWindowGrid';
@@ -25,12 +26,12 @@ import {
   formatPreviewDistance,
   hourToTime,
   nextPublishPreview,
-  timeToHour,
   type ScheduleMode,
 } from '../../lib/queue-schedule';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../hooks/use-auth';
 
-interface QueueFormValues {
+export interface QueueFormValues {
   name: string;
   profileId: string;
   scheduleMode: ScheduleMode;
@@ -88,22 +89,44 @@ const intervalUnits = [
 
 export function ScheduleBuilder({ control, watch }: ScheduleBuilderProps) {
   const form = useFormContext<QueueFormValues>();
+  const { data: user } = useAuth();
+  const modeButtonRefs = useRef<Record<ScheduleMode, HTMLButtonElement | null>>({
+    specific: null,
+    fixed: null,
+    variable: null,
+  });
   const mode = watch('scheduleMode');
   const days = watch('daysOfWeek') ?? [];
   const times = watch('specificTimes') ?? [];
   const intervalValue = watch('intervalValue');
   const intervalUnit = watch('intervalUnit');
   const hourSlots = watch('hourSlots') ?? [];
-  const preview = nextPublishPreview({
-    mode,
-    times,
-    days,
-    every: intervalValue,
-    unit: intervalUnit,
-    hourWindows: mode === 'specific' ? times.map(timeToHour) : hourSlots,
-  });
+  const previewTimeZone = user?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const preview = useMemo(
+    () =>
+      nextPublishPreview({
+        mode,
+        times,
+        days,
+        every: intervalValue,
+        unit: intervalUnit,
+        hourWindows: mode === 'specific' ? [] : hourSlots,
+        timeZone: previewTimeZone,
+      }),
+    [days, hourSlots, intervalUnit, intervalValue, mode, previewTimeZone, times],
+  );
+  const previewTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: previewTimeZone,
+        timeZoneName: 'short',
+      }),
+    [previewTimeZone],
+  );
 
-  function selectMode(nextMode: ScheduleMode) {
+  function selectMode(nextMode: ScheduleMode, shouldFocus = false) {
     form.setValue('scheduleMode', nextMode, { shouldDirty: true, shouldValidate: true });
     form.setValue('intervalType', nextMode === 'variable' ? 'variable' : 'fixed', {
       shouldDirty: true,
@@ -115,6 +138,27 @@ export function ScheduleBuilder({ control, watch }: ScheduleBuilderProps) {
         shouldValidate: true,
       });
     }
+    if (shouldFocus) {
+      window.requestAnimationFrame(() => modeButtonRefs.current[nextMode]?.focus());
+    }
+  }
+
+  function handleModeKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentIndex: number,
+  ) {
+    const keyOffsets: Record<string, number> = {
+      ArrowRight: 1,
+      ArrowDown: 1,
+      ArrowLeft: -1,
+      ArrowUp: -1,
+    };
+    const offset = keyOffsets[event.key];
+    if (!offset) return;
+
+    event.preventDefault();
+    const nextIndex = (currentIndex + offset + modeCards.length) % modeCards.length;
+    selectMode(modeCards[nextIndex].value, true);
   }
 
   return (
@@ -123,22 +167,35 @@ export function ScheduleBuilder({ control, watch }: ScheduleBuilderProps) {
         <Card title="When should this queue publish?" padded>
           <div className="space-y-5">
             <div>
-              <p className="mb-2 text-[10px] font-semibold uppercase text-muted-foreground">
+              <p
+                id="schedule-mode-label"
+                className="mb-2 text-[10px] font-semibold uppercase text-muted-foreground"
+              >
                 Schedule mode
               </p>
-              <div className="grid gap-2 md:grid-cols-3">
-                {modeCards.map((card) => {
+              <div
+                role="radiogroup"
+                aria-labelledby="schedule-mode-label"
+                className="grid gap-2 md:grid-cols-3"
+              >
+                {modeCards.map((card, index) => {
                   const isSelected = mode === card.value;
                   return (
                     <button
                       key={card.value}
+                      ref={(node) => {
+                        modeButtonRefs.current[card.value] = node;
+                      }}
                       type="button"
+                      role="radio"
                       className={cn(
                         "relative rounded-md border bg-[var(--bg-elevated)] p-3 text-left transition-colors focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
                         isSelected && "border-[var(--brand-accent)] bg-[var(--brand-accent-soft)]",
                       )}
                       onClick={() => selectMode(card.value)}
-                      aria-pressed={isSelected}
+                      onKeyDown={(event) => handleModeKeyDown(event, index)}
+                      aria-checked={isSelected}
+                      tabIndex={isSelected ? 0 : -1}
                     >
                       {card.recommended && (
                         <span className="absolute right-2 top-2 rounded-full bg-[var(--brand-accent-soft)] px-2 py-0.5 text-[9px] font-bold uppercase text-[var(--brand-accent)]">
@@ -233,7 +290,7 @@ export function ScheduleBuilder({ control, watch }: ScheduleBuilderProps) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground">{format(date, 'EEE, MMM d')}</p>
                   <p className="mono text-xs text-muted-foreground">
-                    {format(date, 'h:mm a')} - America/Detroit
+                    {previewTimeFormatter.format(date)}
                   </p>
                 </div>
                 <span className="mono text-xs text-muted-foreground">
@@ -244,7 +301,11 @@ export function ScheduleBuilder({ control, watch }: ScheduleBuilderProps) {
             <p className="border-t pt-3 text-xs text-muted-foreground">
               {mode === 'specific'
                 ? `${days.length} days x ${times.length} times = ~${days.length * times.length} posts/week`
-                : `${daySummary(days)} within ${hourSlots.length} selected hour windows`}
+                : `${daySummary(days)} within ${hourSlots.length} selected hour windows${
+                    intervalUnit === 'minutes'
+                      ? `; preview shows the first opportunity in each hour window, while the queue can run every ${intervalValue || 1} minutes within those windows`
+                      : ''
+                  }`}
             </p>
           </div>
         )}
@@ -254,61 +315,102 @@ export function ScheduleBuilder({ control, watch }: ScheduleBuilderProps) {
 }
 
 function SpecificTimes({ control }: { control: Control<QueueFormValues> }) {
+  const specificTimes = useWatch({ control, name: 'specificTimes' }) ?? [];
+  const nextTimeIdRef = useRef(specificTimes.length);
+  const [timeIds, setTimeIds] = useState(() =>
+    specificTimes.map((_, index) => `specific-time-${index}`),
+  );
+
+  const createTimeId = useCallback(() => {
+    const nextId = `specific-time-${nextTimeIdRef.current}`;
+    nextTimeIdRef.current += 1;
+    return nextId;
+  }, []);
+
+  useEffect(() => {
+    setTimeIds((current) => {
+      if (current.length === specificTimes.length) {
+        return current;
+      }
+
+      if (current.length > specificTimes.length) {
+        return current.slice(0, specificTimes.length);
+      }
+
+      return [
+        ...current,
+        ...Array.from(
+          { length: specificTimes.length - current.length },
+          () => createTimeId(),
+        ),
+      ];
+    });
+  }, [createTimeId, specificTimes.length]);
+
   return (
     <div className="space-y-5">
       <Controller
         control={control}
         name="specificTimes"
-        render={({ field, fieldState }) => (
-          <div>
-            <Label className="text-sm font-semibold">Publish times</Label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {field.value.map((time, index) => (
-                <span
-                  key={`${time}-${index}`}
-                  className="inline-flex items-center gap-1 rounded-md border bg-[var(--bg-elevated)] p-1"
-                >
-                  <Input
-                    aria-label={`Publish time ${index + 1}`}
-                    type="time"
-                    value={time}
-                    className="h-8 w-[112px]"
-                    onChange={(event) => {
-                      const next = [...field.value];
-                      next[index] = event.target.value;
-                      field.onChange(next);
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    aria-label={`Remove publish time ${time}`}
-                    onClick={() => field.onChange(field.value.filter((_, itemIndex) => itemIndex !== index))}
+        render={({ field, fieldState }) => {
+          return (
+            <div>
+              <Label className="text-sm font-semibold">Publish times</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {field.value.map((time, index) => (
+                  <span
+                    key={timeIds[index] ?? `specific-time-pending-${index}`}
+                    className="inline-flex items-center gap-1 rounded-md border bg-[var(--bg-elevated)] p-1"
                   >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </span>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="border-dashed"
-                onClick={() => field.onChange([...field.value, hourToTime(9)])}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add time
-              </Button>
+                    <Input
+                      aria-label={`Publish time ${index + 1}`}
+                      type="time"
+                      step={3600}
+                      value={time}
+                      className="h-8 w-[112px]"
+                      onChange={(event) => {
+                        const next = [...field.value];
+                        next[index] = event.target.value;
+                        field.onChange(next);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label={`Remove publish time ${time}`}
+                      onClick={() => {
+                        setTimeIds((current) => current.filter((_, itemIndex) => itemIndex !== index));
+                        field.onChange(field.value.filter((_, itemIndex) => itemIndex !== index));
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </span>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-dashed"
+                  onClick={() => {
+                    setTimeIds((current) => [...current, createTimeId()]);
+                    field.onChange([...field.value, hourToTime(9)]);
+                  }}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add time
+                </Button>
+              </div>
+              {fieldState.error && (
+                <p className="mt-2 text-sm font-medium text-destructive">
+                  {fieldState.error.message ?? 'Add at least one publish time.'}
+                </p>
+              )}
             </div>
-            {fieldState.error && (
-              <p className="mt-2 text-sm font-medium text-destructive">
-                {fieldState.error.message ?? 'Add at least one publish time.'}
-              </p>
-            )}
-          </div>
-        )}
+          );
+        }}
       />
       <Controller
         control={control}
@@ -403,5 +505,3 @@ function IntervalConfig({ control, mode }: { control: Control<QueueFormValues>; 
     </div>
   );
 }
-
-export type { QueueFormValues };

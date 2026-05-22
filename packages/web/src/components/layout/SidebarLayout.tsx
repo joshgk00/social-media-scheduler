@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router";
 import { LogOut, Menu, PenSquare, Search, UserRound } from "lucide-react";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,9 +18,22 @@ import { cn } from "@/lib/utils";
 import { NotificationBell } from "./NotificationBell";
 import { Sidebar } from "./Sidebar";
 
+const searchTargets = [
+  { label: "dashboard", path: "/dashboard", aliases: ["home", "overview"] },
+  { label: "posts", path: "/posts", aliases: ["post", "drafts", "scheduled"] },
+  { label: "queues", path: "/queues", aliases: ["queue", "schedule", "scheduler"] },
+  { label: "calendar", path: "/calendar", aliases: ["dates"] },
+  { label: "new post", path: "/posts/new", aliases: ["compose", "create post"] },
+  { label: "import csv", path: "/posts/import", aliases: ["csv", "bulk import"] },
+  { label: "profiles", path: "/profiles", aliases: ["profile", "accounts"] },
+  { label: "notifications", path: "/notifications", aliases: ["alerts", "inbox"] },
+  { label: "settings", path: "/settings", aliases: ["preferences", "account"] },
+] as const;
+
 export function SidebarLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { data: user } = useAuth();
   const logout = useLogout();
@@ -38,8 +52,29 @@ export function SidebarLayout() {
   }, []);
 
   async function handleSignOut() {
-    await logout.mutateAsync();
-    navigate("/login", { replace: true });
+    try {
+      await logout.mutateAsync();
+    } catch {
+      toast.error("Could not sign out cleanly. Returning to sign in.");
+    } finally {
+      navigate("/login", { replace: true });
+    }
+  }
+
+  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchValue.trim().toLowerCase();
+    if (!query) return;
+
+    const target = searchTargets.find((item) => {
+      if (item.label.includes(query) || query.includes(item.label)) return true;
+      return item.aliases.some((alias) => alias.includes(query) || query.includes(alias));
+    });
+
+    if (!target) return;
+    navigate(target.path);
+    setSearchValue("");
+    searchInputRef.current?.blur();
   }
 
   return (
@@ -85,17 +120,26 @@ export function SidebarLayout() {
             <Menu className="h-4 w-4" />
           </Button>
 
-          <label className="relative hidden w-full max-w-[480px] sm:block">
-            <span className="sr-only">Search posts, queues, profiles</span>
+          <form
+            role="search"
+            className="relative hidden w-full max-w-[480px] sm:block"
+            onSubmit={handleSearchSubmit}
+          >
+            <label htmlFor="global-nav-search" className="sr-only">
+              Jump to a page
+            </label>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
+              id="global-nav-search"
               ref={searchInputRef}
               type="search"
               aria-keyshortcuts="Meta+K Control+K"
-              placeholder="Search posts, queues, profiles… ⌘ K"
+              placeholder="Jump to… ⌘ K"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
               className="h-8 w-full rounded-md border border-input bg-[var(--bg-canvas)] pl-9 pr-3 text-[13px] text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:shadow-[var(--shadow-focus)]"
             />
-          </label>
+          </form>
 
           <div className="flex-1" />
 

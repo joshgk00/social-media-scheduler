@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import {
   addDays,
   addMonths,
@@ -15,9 +15,10 @@ import {
   subMonths,
   subWeeks,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 import type { CalendarEvent, CalendarQuery } from "@sms/shared";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
 import { PlatformGlyph, type Platform } from "@/components/ui/platform-glyph";
@@ -25,10 +26,12 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCalendarPosts } from "@/hooks/use-calendar-posts";
 import { useProfiles } from "@/hooks/use-profiles";
+import { useTags } from "@/hooks/use-tags";
 import { cn } from "@/lib/utils";
 
 type CalendarView = "month" | "week" | "day";
 type CalendarScope = CalendarQuery["scope"];
+type CalendarPlatform = NonNullable<CalendarQuery["platforms"]>[number];
 
 interface CalendarEventViewModel {
   id: string;
@@ -54,7 +57,7 @@ const viewOptions: ReadonlyArray<{ value: CalendarView; label: string }> = [
 ];
 
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const weekHours = Array.from({ length: 13 }, (_, index) => index + 7);
+const weekHours = Array.from({ length: 24 }, (_, index) => index);
 const dayHours = Array.from({ length: 24 }, (_, index) => index);
 
 export function normalizeRange(input: Date | Date[] | { start: Date; end: Date }): { from: string; to: string } {
@@ -401,21 +404,37 @@ function DayView({
 
 export default function CalendarPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<CalendarView>("month");
   const [cursorDate, setCursorDate] = useState(() => new Date());
   const [scope, setScope] = useState<CalendarScope>("both");
   const [profileId, setProfileId] = useState("all");
+  const [platform, setPlatform] = useState<"all" | CalendarPlatform>("all");
+  const [tagId, setTagId] = useState("all");
+  const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
   const visibleRange = useMemo(() => getVisibleRange(cursorDate, view), [cursorDate, view]);
   const { data: profiles } = useProfiles();
+  const { data: tags } = useTags();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmedSearch = searchInput.trim();
+      setSearchParams(trimmedSearch ? { search: trimmedSearch } : {}, { replace: true });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchInput, setSearchParams]);
 
   const query = useMemo<CalendarQuery>(
     () => ({
       from: visibleRange.from.toISOString(),
       to: visibleRange.to.toISOString(),
       scope,
+      platforms: platform === "all" ? undefined : [platform],
       profileIds: profileId === "all" ? undefined : [profileId],
+      tagIds: tagId === "all" ? undefined : [tagId],
+      search: searchInput.trim() || undefined,
     }),
-    [profileId, scope, visibleRange.from, visibleRange.to],
+    [platform, profileId, scope, searchInput, tagId, visibleRange.from, visibleRange.to],
   );
   const { data, isLoading, isError } = useCalendarPosts(query);
 
@@ -462,10 +481,37 @@ export default function CalendarPage() {
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
+          <div className="relative min-w-48 flex-1">
+            <Search
+              className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              aria-label="Search calendar posts"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search posts..."
+              className="h-[30px] pl-8 text-xs"
+            />
+          </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="font-medium">Show:</span>
             <Segmented label="Show calendar items" value={scope} options={showOptions} onChange={setScope} />
           </div>
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span>Platform:</span>
+            <NativeSelect
+              aria-label="Platform filter"
+              value={platform}
+              onChange={(event) => setPlatform(event.target.value as "all" | CalendarPlatform)}
+              className="h-[30px] w-36 text-xs"
+            >
+              <option value="all">All platforms</option>
+              <option value="twitter">Twitter/X</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="facebook">Facebook</option>
+            </NativeSelect>
+          </label>
           <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <span>Profile:</span>
             <NativeSelect
@@ -478,6 +524,22 @@ export default function CalendarPage() {
               {(profiles ?? []).map((profile) => (
                 <option key={profile.id} value={profile.id}>
                   {profile.displayName}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span>Tag:</span>
+            <NativeSelect
+              aria-label="Tag filter"
+              value={tagId}
+              onChange={(event) => setTagId(event.target.value)}
+              className="h-[30px] w-36 text-xs"
+            >
+              <option value="all">All tags</option>
+              {(tags ?? []).map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
                 </option>
               ))}
             </NativeSelect>

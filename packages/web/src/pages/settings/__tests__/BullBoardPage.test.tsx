@@ -48,6 +48,9 @@ describe("BullBoardPage", () => {
       "src",
       "/admin/queues",
     );
+    expect(screen.getByTitle("Embedded Bull Board")).not.toHaveAttribute(
+      "sandbox",
+    );
     expect(
       screen.getAllByRole("link", { name: /open in new tab/i }),
     ).toHaveLength(2);
@@ -55,7 +58,7 @@ describe("BullBoardPage", () => {
       await screen.findByText("12 completed jobs recorded."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("1 active jobs are running now."),
+      screen.getByText("1 active jobs running; 20 completed."),
     ).toBeInTheDocument();
     expect(screen.getByText("1 failed jobs need review.")).toBeInTheDocument();
   });

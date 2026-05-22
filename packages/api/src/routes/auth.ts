@@ -73,7 +73,10 @@ export function createAuthRouter({ db }: AuthDependencies) {
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
     updateLastLogin(db, user.id).catch((err) => logger.warn({ err, userId: user.id }, 'Failed to update last login'));
-    res.json({ requiresTwoFactor: false });
+    res.json({
+      requiresTwoFactor: false,
+      defaultLandingPage: user.defaultLandingPage ?? '/dashboard',
+    });
   });
 
   router.post('/api/auth/login/verify-2fa', loginLimiter, async (req, res) => {
@@ -118,7 +121,10 @@ export function createAuthRouter({ db }: AuthDependencies) {
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
     updateLastLogin(db, user.id).catch((err) => logger.warn({ err, userId: user.id }, 'Failed to update last login'));
-    res.json({ success: true });
+    res.json({
+      success: true,
+      defaultLandingPage: user.defaultLandingPage ?? '/dashboard',
+    });
   });
 
   router.post('/api/auth/logout', requireAuth, (req, res) => {
