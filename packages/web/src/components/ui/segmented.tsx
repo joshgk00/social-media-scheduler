@@ -42,7 +42,7 @@ export function Segmented<TValue extends string>({
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              "h-[26px] rounded-sm px-2.5 text-[12px] font-medium text-muted-foreground transition-[background,color,box-shadow] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)] disabled:pointer-events-none disabled:opacity-40",
+              "h-[26px] shrink-0 whitespace-nowrap rounded-sm px-2.5 text-[12px] font-medium text-muted-foreground transition-[background,color,box-shadow] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)] disabled:pointer-events-none disabled:opacity-40",
               isActive &&
                 "bg-[var(--bg-active)] text-foreground shadow-[var(--shadow-sm)]",
               !isActive && "hover:bg-accent hover:text-foreground",

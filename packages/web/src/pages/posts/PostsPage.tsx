@@ -429,68 +429,72 @@ export default function PostsPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <Segmented
-          label="Filter posts by status"
-          value={currentStatus}
-          options={statusOptions.map((option) => ({
-            value: option.value,
-            label: `${option.label} (${counts[option.value] ?? 0})`,
-          }))}
-          onChange={updateStatus}
-          className="w-full overflow-x-auto lg:w-auto"
-        />
-        <div className="relative min-w-0 flex-1">
-          <Search
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            aria-label="Search posts"
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Search posts..."
-            className="pl-9"
+      <div className="space-y-3">
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+          <Segmented
+            label="Filter posts by status"
+            value={currentStatus}
+            options={statusOptions.map((option) => ({
+              value: option.value,
+              label: `${option.label} (${counts[option.value] ?? 0})`,
+            }))}
+            onChange={updateStatus}
+            className="min-w-max"
           />
         </div>
-        <NativeSelect
-          aria-label="Filter by profile"
-          value={filters.profileId ?? "all"}
-          onChange={(event) =>
-            setFilters((prev) => ({
-              ...prev,
-              profileId: event.target.value === "all" ? undefined : event.target.value,
-              page: 1,
-            }))
-          }
-          className="lg:w-44"
-        >
-          <option value="all">All profiles</option>
-          {profiles?.map((profile) => (
-            <option key={profile.id} value={profile.id}>
-              @{profile.handle}
-            </option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          aria-label="Filter by tag"
-          value={filters.tagId ?? "all"}
-          onChange={(event) =>
-            setFilters((prev) => ({
-              ...prev,
-              tagId: event.target.value === "all" ? undefined : event.target.value,
-              page: 1,
-            }))
-          }
-          className="lg:w-36"
-        >
-          <option value="all">All tags</option>
-          {tags?.map((tag) => (
-            <option key={tag.id} value={tag.id}>
-              {tag.name}
-            </option>
-          ))}
-        </NativeSelect>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_10rem]">
+          <div className="relative min-w-0">
+            <Search
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              aria-label="Search posts"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search posts..."
+              className="pl-9"
+            />
+          </div>
+          <NativeSelect
+            aria-label="Filter by profile"
+            value={filters.profileId ?? "all"}
+            onChange={(event) =>
+              setFilters((prev) => ({
+                ...prev,
+                profileId: event.target.value === "all" ? undefined : event.target.value,
+                page: 1,
+              }))
+            }
+            className="w-full"
+          >
+            <option value="all">All profiles</option>
+            {profiles?.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                @{profile.handle}
+              </option>
+            ))}
+          </NativeSelect>
+          <NativeSelect
+            aria-label="Filter by tag"
+            value={filters.tagId ?? "all"}
+            onChange={(event) =>
+              setFilters((prev) => ({
+                ...prev,
+                tagId: event.target.value === "all" ? undefined : event.target.value,
+                page: 1,
+              }))
+            }
+            className="w-full"
+          >
+            <option value="all">All tags</option>
+            {tags?.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
       </div>
 
       {selectedPostIds.size > 0 && (
