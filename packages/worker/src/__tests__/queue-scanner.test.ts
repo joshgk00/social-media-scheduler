@@ -324,7 +324,7 @@ describe('Queue Scanner', () => {
           queueName: 'Test Queue',
           profileId,
           correlationId: expect.any(String),
-          occurredAt: expect.any(String),
+          occurredAt: NOW.toJSDate().toISOString(),
         }),
       );
       const payload = vi.mocked(notificationQueue.add).mock.calls[0]?.[1];

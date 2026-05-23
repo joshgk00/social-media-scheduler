@@ -275,7 +275,7 @@ export async function evaluateQueues(
           queueName: queue.name,
           profileId: queue.profileId,
           correlationId: randomUUID(),
-          occurredAt: new Date().toISOString(),
+          occurredAt: currentNow.toJSDate().toISOString(),
         }).catch((err: unknown) => {
           notificationThrottle.set(queue.id, Date.now());
           logger.error({ err, queueId: queue.id }, 'Failed to enqueue queue-empty notification');

@@ -24,7 +24,7 @@ const severityDotClass: Record<NotificationRowData['severity'], string> = {
 function isSafeLinkPath(linkPath: string | null): linkPath is string {
   // Match route prefixes exactly; uppercase prefixes would miss the router and 404.
   const safeEntityPath = /^\/(?:posts|profiles|queues|notifications)(?:\/[a-zA-Z0-9-]+)?$/;
-  const safeBulkOpPath = /^\/posts\?bulkOp=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const safeBulkOpPath = /^\/posts\?bulkOp=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
   return Boolean(linkPath && (safeEntityPath.test(linkPath) || safeBulkOpPath.test(linkPath)));
 }
 
