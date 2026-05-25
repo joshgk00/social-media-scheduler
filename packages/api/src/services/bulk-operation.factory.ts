@@ -50,6 +50,14 @@ function parseOrGenerateIdempotencyKey(rawHeader: string | undefined): string {
   return parseClientIdempotencyKey(rawHeader) ?? randomUUID();
 }
 
+function resolveCorrelationId(rawCorrelationId: string | undefined): string {
+  const correlationId = rawCorrelationId?.trim();
+  if (correlationId && UUID_PATTERN.test(correlationId)) {
+    return correlationId;
+  }
+  return randomUUID();
+}
+
 export function createBulkOperationFactory(
   db: Db,
   bulkOpsQueueService: BulkOpsQueueService,
@@ -133,7 +141,7 @@ export function createBulkOperationFactory(
             targetId: args.targetId,
             idempotencyKey,
             params: args.params,
-            correlationId: args.correlationId ?? randomUUID(),
+            correlationId: resolveCorrelationId(args.correlationId),
           },
           Math.floor(Date.now() / 1000),
         );

@@ -131,6 +131,21 @@ describe('createBulkOperationFactory', () => {
     expect(queueService.enqueueBulkOp.mock.calls[0]?.[1].idempotencyKey).toBe(values.idempotencyKey);
   });
 
+  it('generates a UUID correlation id when the incoming request id is not a UUID', async () => {
+    const db = createDb({});
+    const queueService = createQueueService();
+    const factory = createBulkOperationFactory(db as never, queueService);
+
+    await factory.startBulkOperation({
+      ...baseArgs,
+      correlationId: 'b810e1a0aa0f8d2ff3cbf90ac24eb9bb',
+    });
+
+    const payload = queueService.enqueueBulkOp.mock.calls[0]?.[1];
+    expect(payload.correlationId).not.toBe('b810e1a0aa0f8d2ff3cbf90ac24eb9bb');
+    expect(payload.correlationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+
   it('accepts newer UUID versions for client idempotency keys', async () => {
     const uuidV7Key = '018f6d5e-9b8c-7c2d-9a1b-abcdefabcdef';
     const db = createDb({});
