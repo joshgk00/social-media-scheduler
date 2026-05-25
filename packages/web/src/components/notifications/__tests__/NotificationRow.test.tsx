@@ -40,4 +40,44 @@ describe('NotificationRow', () => {
     expect(onMarkRead).toHaveBeenCalledWith('notification-1');
     expect(onNavigate).toHaveBeenCalledWith('/queues/queue-1');
   });
+
+  it('allows bulk import completion links with bulk operation ids', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+
+    render(
+      <NotificationRow
+        notification={makeNotification({
+          eventType: 'bulk_completed',
+          title: 'Import complete',
+          linkPath: '/posts?bulkOp=55555555-5555-4555-8555-555555555555',
+        })}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'View' }));
+
+    expect(onNavigate).toHaveBeenCalledWith('/posts?bulkOp=55555555-5555-4555-8555-555555555555');
+  });
+
+  it('does not navigate uppercase bulk operation route or query keys', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+
+    render(
+      <NotificationRow
+        notification={makeNotification({
+          eventType: 'bulk_completed',
+          title: 'Import complete',
+          linkPath: '/POSTS?BULKOP=55555555-5555-4555-8555-555555555555',
+        })}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss Import complete' }));
+
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
 });

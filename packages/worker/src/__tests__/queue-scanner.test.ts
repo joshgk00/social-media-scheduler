@@ -41,6 +41,7 @@ import {
   hasIntervalElapsed,
   isWithinSeasonalWindow,
   resolveSpinnableText,
+  queueEmptyNotificationSchema,
 } from '@sms/shared';
 import { evaluateQueues, QUEUE_SCANNER_QUEUE_NAME, QUEUE_SCAN_INTERVAL_MS } from '../queue-scanner.js';
 
@@ -306,8 +307,10 @@ describe('Queue Scanner', () => {
     it('emits queue-empty notification when no posts available', async () => {
       const publishQueue = createMockQueue();
       const notificationQueue = createMockQueue();
+      const queueId = '55555555-5555-4555-8555-555555555555';
+      const profileId = '22222222-2222-4222-8222-222222222222';
       const db = createMockDb({
-        activeQueues: [makeQueue()],
+        activeQueues: [makeQueue({ id: queueId, profileId })],
         nextPost: null,
       });
 
@@ -317,10 +320,15 @@ describe('Queue Scanner', () => {
       expect(notificationQueue.add).toHaveBeenCalledWith(
         'queue-empty',
         expect.objectContaining({
-          queueId: 'queue-1',
+          queueId,
           queueName: 'Test Queue',
+          profileId,
+          correlationId: expect.any(String),
+          occurredAt: NOW.toJSDate().toISOString(),
         }),
       );
+      const payload = vi.mocked(notificationQueue.add).mock.calls[0]?.[1];
+      expect(queueEmptyNotificationSchema.safeParse(payload).success).toBe(true);
     });
 
     it('advances cursor from position N to next queued post via transaction', async () => {
