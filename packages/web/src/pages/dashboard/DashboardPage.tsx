@@ -144,24 +144,24 @@ function DashboardSkeleton() {
 }
 
 function Timeline({
-  scheduledPosts,
+  upcomingPosts,
   failedPosts,
   now,
 }: {
-  scheduledPosts: Post[];
+  upcomingPosts: Post[];
   failedPosts: Post[];
   now: Date;
 }) {
   const currentHour = now.getHours();
   const markerLeft = ((currentHour + now.getMinutes() / 60) / 24) * 100;
 
-  const scheduledByHour = new Map<number, number>();
+  const upcomingByHour = new Map<number, number>();
   const failedByHour = new Map<number, number>();
 
-  scheduledPosts.forEach((post) => {
+  upcomingPosts.forEach((post) => {
     const date = toDate(post.scheduledAt);
     if (date && date.toDateString() === now.toDateString()) {
-      scheduledByHour.set(date.getHours(), (scheduledByHour.get(date.getHours()) ?? 0) + 1);
+      upcomingByHour.set(date.getHours(), (upcomingByHour.get(date.getHours()) ?? 0) + 1);
     }
   });
 
@@ -188,10 +188,10 @@ function Timeline({
         </div>
         <div className="grid h-20 grid-cols-[repeat(24,minmax(0,1fr))] gap-px overflow-hidden rounded-md border border-border bg-border">
           {Array.from({ length: 24 }, (_, hour) => {
-            const scheduledCount = scheduledByHour.get(hour) ?? 0;
+            const upcomingCount = upcomingByHour.get(hour) ?? 0;
             const failedCount = failedByHour.get(hour) ?? 0;
             const isPast = hour < currentHour;
-            const title = `${format(new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour), "HH:00")} · ${scheduledCount} scheduled · ${failedCount} failed`;
+            const title = `${format(new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour), "HH:00")} · ${upcomingCount} upcoming · ${failedCount} failed`;
 
             return (
               <button
@@ -201,7 +201,7 @@ function Timeline({
                 aria-label={title}
                 className={cn(
                   "h-full min-w-0 bg-[var(--bg-elevated)] transition-opacity focus-visible:z-20 focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]",
-                  scheduledCount > 0 && "bg-[var(--brand-accent)]",
+                  upcomingCount > 0 && "bg-[var(--brand-accent)]",
                   failedCount > 0 &&
                     "bg-[repeating-linear-gradient(135deg,var(--status-danger)_0,var(--status-danger)_4px,var(--status-danger-soft)_4px,var(--status-danger-soft)_8px)]",
                   isPast && "opacity-40",
@@ -217,7 +217,7 @@ function Timeline({
         ))}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <LegendSwatch className="bg-[var(--brand-accent)]" label="Scheduled" />
+        <LegendSwatch className="bg-[var(--brand-accent)]" label="Upcoming" />
         <LegendSwatch
           className="bg-[repeating-linear-gradient(135deg,var(--status-danger)_0,var(--status-danger)_4px,var(--status-danger-soft)_4px,var(--status-danger-soft)_8px)]"
           label="Failed"
@@ -249,14 +249,16 @@ function LegendSwatch({
 function UpcomingPosts({
   posts,
   profiles,
+  now,
 }: {
   posts: Post[];
   profiles: SocialProfile[];
+  now: Date;
 }) {
   if (posts.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-input px-4 py-5 text-center text-sm text-muted-foreground">
-        No posts scheduled in this window.
+        No posts queued or scheduled in this window.
       </div>
     );
   }
@@ -265,20 +267,21 @@ function UpcomingPosts({
     <div className="divide-y divide-border">
       {posts.slice(0, 4).map((post) => {
         const scheduledAt = toDate(post.scheduledAt);
+        const isToday = scheduledAt?.toDateString() === now.toDateString();
         return (
           <Link
             key={post.id}
             to={`/posts/${post.id}/edit`}
-            className="grid grid-cols-[54px_minmax(0,1fr)_auto] items-center gap-3 py-3 text-sm transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
+            className="grid grid-cols-[86px_minmax(0,1fr)_auto] items-center gap-3 py-3 text-sm transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
           >
             <span className="text-xs font-medium text-muted-foreground">
-              {scheduledAt ? format(scheduledAt, "HH:mm") : "--:--"}
+              {scheduledAt ? format(scheduledAt, isToday ? "HH:mm" : "MMM d, HH:mm") : "--:--"}
             </span>
             <span className="flex min-w-0 items-center gap-2">
               <PlatformGlyph platform={postPlatform(post, profiles)} size={14} />
               <span className="truncate text-foreground">{postTitle(post)}</span>
             </span>
-            <StatusPill status="scheduled" />
+            <StatusPill status={post.status === "queued" ? "queued" : "scheduled"} />
           </Link>
         );
       })}
@@ -456,9 +459,9 @@ export default function DashboardPage() {
   const profiles = profilesQuery.data ?? [];
   const rateRows = (rateLimitsQuery.data ?? []) as RateLimitRow[];
 
-  const scheduled24 = postStatsQuery.data?.scheduled24 ?? [];
-  const scheduled24Count = postStatsQuery.data?.scheduled24Count ?? 0;
-  const scheduledInRange = postStatsQuery.data?.scheduledInRange ?? [];
+  const upcoming24 = postStatsQuery.data?.scheduled24 ?? [];
+  const upcoming24Count = postStatsQuery.data?.scheduled24Count ?? 0;
+  const upcomingInRange = postStatsQuery.data?.scheduledInRange ?? [];
   const failed24 = postStatsQuery.data?.failed24 ?? [];
   const failed7dCount = postStatsQuery.data?.failed7dCount ?? 0;
   const activeQueues = queues.filter((queue) => !queue.isPaused);
@@ -504,8 +507,8 @@ export default function DashboardPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title="Scheduled (24h)"
-          value={String(scheduled24Count)}
+          title="Upcoming (24h)"
+          value={String(upcoming24Count)}
           meta={`Across ${scheduledProfileCount} profile${scheduledProfileCount === 1 ? "" : "s"}`}
           tone="info"
           icon={Info}
@@ -539,7 +542,7 @@ export default function DashboardPage() {
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[2fr_1fr]">
         <Card
-          title="Next 24 hours"
+          title="Upcoming schedule"
           action={
             <Segmented
               label="Schedule window"
@@ -554,7 +557,7 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-6">
               <Timeline
-                scheduledPosts={scheduled24}
+                upcomingPosts={upcoming24}
                 failedPosts={failed24}
                 now={now}
               />
@@ -569,7 +572,7 @@ export default function DashboardPage() {
                         : "Next 30d"}
                   </Pill>
                 </div>
-                <UpcomingPosts posts={scheduledInRange} profiles={profiles} />
+                <UpcomingPosts posts={upcomingInRange} profiles={profiles} now={now} />
               </div>
             </div>
           )}
