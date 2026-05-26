@@ -11,7 +11,7 @@ interface SplitButtonProps {
   onSchedule: () => void;
   onDraft: () => void;
   onPublishNow?: () => void;
-  scheduleLabel?: string;
+  primaryLabel?: string;
   isLoading: boolean;
   disabled: boolean;
 }
@@ -20,7 +20,7 @@ export function SplitButton({
   onSchedule,
   onDraft,
   onPublishNow,
-  scheduleLabel = 'Schedule Post',
+  primaryLabel = 'Schedule Post',
   isLoading,
   disabled,
 }: SplitButtonProps) {
@@ -32,7 +32,7 @@ export function SplitButton({
         className="rounded-r-none"
       >
         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-        {scheduleLabel}
+        {primaryLabel}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

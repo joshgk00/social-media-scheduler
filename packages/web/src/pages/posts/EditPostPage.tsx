@@ -683,7 +683,7 @@ export default function EditPostPage() {
               <SplitButton
                 onSchedule={() => handleSubmit(primaryAction)}
                 onDraft={() => handleSubmit('draft')}
-                scheduleLabel={post.status === 'queued' ? 'Update Queued Post' : 'Schedule Post'}
+                primaryLabel={post.status === 'queued' ? 'Update Queued Post' : 'Schedule Post'}
                 isLoading={updatePostMutation.isPending}
                 disabled={scheduleDisabled}
               />
