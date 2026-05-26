@@ -7,7 +7,7 @@
     "build": "pnpm -r build",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm --filter @sms/shared build && pnpm --filter @sms/db build && pnpm -r typecheck",
     "pretest": "pnpm -r build",
     "test": "pnpm -r test -- --run",
     "clawpatch:import-gh": "node scripts/import-github-issues-to-clawpatch.mjs",

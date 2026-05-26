@@ -68,23 +68,23 @@ describe('post state machine', () => {
   });
 
   describe('EDITABLE_STATES contains correct values', () => {
-    it('includes draft, scheduled, paused, failed', () => {
+    it('includes draft, scheduled, queued, paused, failed', () => {
       expect(EDITABLE_STATES).toContain('draft');
       expect(EDITABLE_STATES).toContain('scheduled');
+      expect(EDITABLE_STATES).toContain('queued');
       expect(EDITABLE_STATES).toContain('paused');
       expect(EDITABLE_STATES).toContain('failed');
     });
 
-    it('excludes queued, publishing, published, auto_destructing, destroyed', () => {
-      expect(EDITABLE_STATES).not.toContain('queued');
+    it('excludes publishing, published, auto_destructing, destroyed', () => {
       expect(EDITABLE_STATES).not.toContain('publishing');
       expect(EDITABLE_STATES).not.toContain('published');
       expect(EDITABLE_STATES).not.toContain('auto_destructing');
       expect(EDITABLE_STATES).not.toContain('destroyed');
     });
 
-    it('has exactly 4 states', () => {
-      expect(EDITABLE_STATES).toHaveLength(4);
+    it('has exactly 5 states', () => {
+      expect(EDITABLE_STATES).toHaveLength(5);
     });
   });
 

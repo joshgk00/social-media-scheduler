@@ -54,15 +54,16 @@ const mockCreateLogger = vi.fn().mockReturnValue({
 vi.mock('@sms/shared', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sms/shared')>();
 
-  const EDITABLE: readonly string[] = ['draft', 'scheduled', 'failed'];
-  const DELETABLE: readonly string[] = ['draft', 'scheduled', 'published', 'failed'];
+  const EDITABLE: readonly string[] = ['draft', 'scheduled', 'queued', 'paused', 'failed'];
+  const DELETABLE: readonly string[] = ['draft', 'scheduled', 'paused', 'published', 'failed'];
 
   const POST_STATE_TRANSITIONS: Record<string, readonly string[]> = {
-    draft: ['scheduled', 'publishing'],
-    scheduled: ['draft', 'queued', 'publishing'],
-    queued: ['publishing'],
+    draft: ['scheduled', 'queued', 'publishing'],
+    scheduled: ['draft', 'queued', 'publishing', 'paused'],
+    queued: ['draft', 'publishing'],
+    paused: ['scheduled', 'draft'],
     publishing: ['published', 'failed'],
-    published: ['auto_destructing'],
+    published: ['queued', 'auto_destructing'],
     failed: ['draft', 'scheduled'],
     auto_destructing: ['destroyed'],
     destroyed: [],
@@ -732,6 +733,56 @@ describe('post.service', () => {
       const setCall = db._updateChain.set.mock.calls[0][0];
       expect(setCall.text).toBe('new text');
       expect(setCall.notes).toBe('a note');
+    });
+
+    it('updates queued posts without changing their queue status', async () => {
+      const updatedPost = {
+        id: 'post-1', userId: 'user-1', profileId: 'profile-1',
+        text: 'typo fixed', status: 'queued', postVersion: 2,
+        isThread: false, scheduledAt: null, hasSpinnableText: false,
+        autoDestructAfter: null, notes: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      };
+
+      const db = createPostUpdateMockDb({
+        updateResult: [updatedPost],
+        existingPost: { id: 'post-1', status: 'queued', postVersion: 1, scheduledAt: null },
+      });
+
+      await updatePost(db, 'user-1', 'post-1', {
+        text: 'typo fixed',
+        postVersion: 1,
+      });
+
+      const setCall = db._updateChain.set.mock.calls[0][0];
+      expect(setCall.text).toBe('typo fixed');
+      expect(setCall.status).toBeUndefined();
+      expect(setCall.scheduledAt).toBeUndefined();
+    });
+
+    it('moves queued posts back to draft when requested', async () => {
+      const updatedPost = {
+        id: 'post-1', userId: 'user-1', profileId: 'profile-1',
+        text: 'queued text', status: 'draft', postVersion: 2,
+        isThread: false, scheduledAt: null, hasSpinnableText: false,
+        autoDestructAfter: null, notes: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      };
+
+      const db = createPostUpdateMockDb({
+        updateResult: [updatedPost],
+        existingPost: { id: 'post-1', status: 'queued', postVersion: 1, scheduledAt: null },
+      });
+
+      await updatePost(db, 'user-1', 'post-1', {
+        status: 'draft',
+        scheduledAt: null,
+        postVersion: 1,
+      });
+
+      const setCall = db._updateChain.set.mock.calls[0][0];
+      expect(setCall.status).toBe('draft');
+      expect(setCall.scheduledAt).toBeNull();
     });
 
     it('clears old associations and calls associateMediaToPost when mediaIds provided', async () => {
