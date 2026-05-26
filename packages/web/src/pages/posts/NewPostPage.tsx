@@ -614,7 +614,7 @@ export default function NewPostPage() {
               </Button>
             ) : (
               <SplitButton
-                onSchedule={() => validateAndSubmit('schedule')}
+                onPrimary={() => validateAndSubmit('schedule')}
                 onDraft={() => validateAndSubmit('draft')}
                 isLoading={createPostMutation.isPending}
                 disabled={scheduleDisabled}

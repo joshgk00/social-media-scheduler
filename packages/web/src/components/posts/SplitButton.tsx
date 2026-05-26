@@ -8,7 +8,7 @@ import {
 } from '../ui/dropdown-menu';
 
 interface SplitButtonProps {
-  onSchedule: () => void;
+  onPrimary: () => void;
   onDraft: () => void;
   onPublishNow?: () => void;
   primaryLabel?: string;
@@ -17,7 +17,7 @@ interface SplitButtonProps {
 }
 
 export function SplitButton({
-  onSchedule,
+  onPrimary,
   onDraft,
   onPublishNow,
   primaryLabel = 'Schedule Post',
@@ -27,7 +27,7 @@ export function SplitButton({
   return (
     <div className="flex">
       <Button
-        onClick={onSchedule}
+        onClick={onPrimary}
         disabled={disabled || isLoading}
         className="rounded-r-none"
       >

@@ -540,6 +540,7 @@ export default function EditPostPage() {
     .map((m) => m.thumbnailUrl ?? '');
   const previewVideoUrl = mediaItems.find((m) => m.mimeType.startsWith('video/'))?.thumbnailUrl ?? null;
   const primaryAction = post.status === 'queued' ? 'keepQueued' : 'schedule';
+  const primaryLabel = primaryAction === 'keepQueued' ? 'Update Queued Post' : 'Schedule Post';
 
   return (
     <main className="px-4 py-6 sm:px-6 lg:px-8">
@@ -681,9 +682,9 @@ export default function EditPostPage() {
 
             const submitContent = (
               <SplitButton
-                onSchedule={() => handleSubmit(primaryAction)}
+                onPrimary={() => handleSubmit(primaryAction)}
                 onDraft={() => handleSubmit('draft')}
-                primaryLabel={post.status === 'queued' ? 'Update Queued Post' : 'Schedule Post'}
+                primaryLabel={primaryLabel}
                 isLoading={updatePostMutation.isPending}
                 disabled={scheduleDisabled}
               />
