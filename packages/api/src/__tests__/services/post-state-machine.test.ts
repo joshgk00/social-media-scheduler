@@ -80,10 +80,11 @@ describe('post state machine', () => {
   });
 
   describe('EDITABLE_STATES', () => {
-    it('includes draft, scheduled, queued, failed', () => {
+    it('includes draft, scheduled, queued, paused, failed', () => {
       expect(EDITABLE_STATES).toContain('draft');
       expect(EDITABLE_STATES).toContain('scheduled');
       expect(EDITABLE_STATES).toContain('queued');
+      expect(EDITABLE_STATES).toContain('paused');
       expect(EDITABLE_STATES).toContain('failed');
     });
 
