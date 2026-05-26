@@ -353,16 +353,19 @@ function createCheckConflictsMockDb(options: {
 function createDashboardStatsMockDb(options: {
   scheduled24Rows?: unknown[];
   scheduledInRangeRows?: unknown[];
-  queuedCandidateRows?: unknown[];
+  queuedDashboardQueueRows?: unknown[];
+  queuedPostRowsBySelect?: unknown[][];
   failed24Rows?: unknown[];
   failed7dCount?: number;
 }) {
   const scheduled24Rows = options.scheduled24Rows ?? [];
   const scheduledInRangeRows = options.scheduledInRangeRows ?? [];
-  const queuedCandidateRows = options.queuedCandidateRows ?? [];
+  const queuedDashboardQueueRows = options.queuedDashboardQueueRows ?? [];
+  const queuedPostRowsBySelect = [...(options.queuedPostRowsBySelect ?? [])];
   const failed24Rows = options.failed24Rows ?? [];
   const failed7dCount = options.failed7dCount ?? 0;
   let selectCallIndex = 0;
+  const chains: Array<Record<string, any>> = [];
 
   function makeSelectChain(result: unknown[]) {
     const chain: Record<string, any> = {};
@@ -372,6 +375,7 @@ function createDashboardStatsMockDb(options: {
     chain.orderBy = vi.fn().mockReturnValue(chain);
     chain.limit = vi.fn().mockReturnValue(chain);
     chain.then = (resolve: (v: unknown) => void) => resolve(result);
+    chains.push(chain);
     return chain;
   }
 
@@ -380,11 +384,13 @@ function createDashboardStatsMockDb(options: {
       selectCallIndex++;
       if (selectCallIndex === 1) return makeSelectChain(scheduled24Rows);
       if (selectCallIndex === 2) return makeSelectChain(scheduledInRangeRows);
-      if (selectCallIndex === 3) return makeSelectChain(queuedCandidateRows);
-      if (selectCallIndex === 4) return makeSelectChain(failed24Rows);
-      if (selectCallIndex === 5) return makeSelectChain([{ failed7dCount }]);
+      if (selectCallIndex === 3) return makeSelectChain(queuedDashboardQueueRows);
+      if (queuedPostRowsBySelect.length > 0) return makeSelectChain(queuedPostRowsBySelect.shift()!);
+      if (selectCallIndex === queuedDashboardQueueRows.length + 4) return makeSelectChain(failed24Rows);
+      if (selectCallIndex === queuedDashboardQueueRows.length + 5) return makeSelectChain([{ failed7dCount }]);
       return makeSelectChain([]);
     }),
+    _chains: chains,
   } as any;
 }
 
@@ -983,10 +989,10 @@ describe('post.service', () => {
       const db = createDashboardStatsMockDb({
         scheduled24Rows: [scheduledPost],
         scheduledInRangeRows: [scheduledPost],
-        queuedCandidateRows: [{
-          post: queuedPost,
+        queuedDashboardQueueRows: [{
           queue: {
             id: 'queue-1',
+            cursorPosition: 0,
             intervalType: 'fixed',
             intervalValue: 4,
             intervalUnit: 'hours',
@@ -998,6 +1004,7 @@ describe('post.service', () => {
           },
           user: { timezone: 'UTC' },
         }],
+        queuedPostRowsBySelect: [[queuedPost]],
       });
 
       const result = await getDashboardPostStats(db, 'user-1', '24h', now);
@@ -1008,6 +1015,7 @@ describe('post.service', () => {
       expect(result.scheduled24[0].scheduledAt?.toISOString()).toBe('2026-05-26T14:00:00.000Z');
       expect(result.scheduledInRange.map((post) => post.id)).toEqual(['queued-1', 'scheduled-1']);
       expect(result.scheduledProfileCount).toBe(1);
+      expect(db._chains[3].limit).toHaveBeenCalledWith(2);
     });
   });
 

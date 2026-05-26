@@ -74,6 +74,8 @@ interface PostQuery {
 
 type DashboardWindowRange = '24h' | '7d' | '30d';
 type SerializedPostForList = ReturnType<typeof serializePostForList>;
+const DASHBOARD_UPCOMING_PREVIEW_LIMIT = 4;
+const DASHBOARD_MAX_QUEUED_SLOTS_PER_QUEUE = 24 * 60;
 
 type PostServiceErrorKind = 'profile_not_found' | 'tag_not_found';
 
@@ -152,10 +154,10 @@ function sortDashboardPosts(postsForDashboard: SerializedPostForList[]): Seriali
   });
 }
 
-type QueuedDashboardCandidate = {
-  post: typeof posts.$inferSelect;
+type QueuedDashboardQueue = {
   queue: {
     id: string;
+    cursorPosition: number;
     intervalType: string;
     intervalValue: number;
     intervalUnit: string;
@@ -174,54 +176,56 @@ function numberArray(value: unknown): number[] {
   return Array.isArray(value) ? value.filter((item): item is number => typeof item === 'number') : [];
 }
 
-function projectQueuedDashboardPosts(
-  candidates: QueuedDashboardCandidate[],
+function dashboardQueueSlots(
+  queue: QueuedDashboardQueue['queue'],
+  timezone: string,
+  next24End: Date,
   rangeEnd: Date,
-): SerializedPostForList[] {
-  const candidatesByQueueId = new Map<string, QueuedDashboardCandidate[]>();
-  for (const candidate of candidates) {
-    const queueId = candidate.queue.id;
-    const queueCandidates = candidatesByQueueId.get(queueId) ?? [];
-    queueCandidates.push(candidate);
-    candidatesByQueueId.set(queueId, queueCandidates);
-  }
-
-  const projectedPosts: SerializedPostForList[] = [];
+): Date[] {
+  const slots: Date[] = [];
+  let nextRunAt = queue.nextRunAt;
+  const next24EndTime = next24End.getTime();
   const rangeEndTime = rangeEnd.getTime();
 
-  for (const queueCandidates of candidatesByQueueId.values()) {
-    const firstCandidate = queueCandidates[0];
-    const queue = firstCandidate.queue;
-    const timezone = firstCandidate.user.timezone ?? 'UTC';
-    let nextRunAt = queue.nextRunAt;
+  while (
+    nextRunAt &&
+    nextRunAt.getTime() <= rangeEndTime &&
+    slots.length < DASHBOARD_MAX_QUEUED_SLOTS_PER_QUEUE &&
+    (nextRunAt.getTime() <= next24EndTime || slots.length < DASHBOARD_UPCOMING_PREVIEW_LIMIT)
+  ) {
+    slots.push(nextRunAt);
 
-    for (const candidate of queueCandidates) {
-      if (!nextRunAt || nextRunAt.getTime() > rangeEndTime) break;
-
-      projectedPosts.push(serializePostForList({
-        ...candidate.post,
-        scheduledAt: nextRunAt,
-      }));
-
-      const nextSlot = calculateNextRunAt(
-        {
-          intervalType: queue.intervalType,
-          intervalValue: queue.intervalValue,
-          intervalUnit: queue.intervalUnit,
-          hourSlots: numberArray(queue.hourSlots),
-          daysOfWeek: numberArray(queue.daysOfWeek),
-          lastPublishedAt: nextRunAt,
-          startDate: queue.startDate,
-        },
-        timezone,
-        DateTime.fromJSDate(nextRunAt).setZone(timezone),
-      );
-
-      nextRunAt = nextSlot?.toJSDate() ?? null;
+    const nextSlot = calculateNextRunAt(
+      {
+        intervalType: queue.intervalType,
+        intervalValue: queue.intervalValue,
+        intervalUnit: queue.intervalUnit,
+        hourSlots: numberArray(queue.hourSlots),
+        daysOfWeek: numberArray(queue.daysOfWeek),
+        lastPublishedAt: nextRunAt,
+        startDate: queue.startDate,
+      },
+      timezone,
+      DateTime.fromJSDate(nextRunAt).setZone(timezone),
+    );
+    const nextSlotDate = nextSlot?.toJSDate() ?? null;
+    if (nextSlotDate && nextSlotDate.getTime() <= nextRunAt.getTime()) {
+      break;
     }
+    nextRunAt = nextSlotDate;
   }
 
-  return projectedPosts;
+  return slots;
+}
+
+function projectQueuedDashboardPosts(
+  queuedPosts: Array<typeof posts.$inferSelect>,
+  slots: Date[],
+): SerializedPostForList[] {
+  return queuedPosts.slice(0, slots.length).map((post, index) => serializePostForList({
+    ...post,
+    scheduledAt: slots[index],
+  }));
 }
 
 function toPostAppError(err: PostInvariantError): AppError {
@@ -741,13 +745,13 @@ export async function getDashboardPostStats(
       sql`${posts.scheduledAt} <= ${rangeEndIso}::timestamptz`,
     ))
     .orderBy(sql`${posts.scheduledAt} ASC`)
-    .limit(4);
+    .limit(DASHBOARD_UPCOMING_PREVIEW_LIMIT);
 
-  const queuedCandidates = await db
+  const queuedDashboardQueues = await db
     .select({
-      post: posts,
       queue: {
         id: queues.id,
+        cursorPosition: queues.cursorPosition,
         intervalType: queues.intervalType,
         intervalValue: queues.intervalValue,
         intervalUnit: queues.intervalUnit,
@@ -761,24 +765,36 @@ export async function getDashboardPostStats(
         timezone: users.timezone,
       },
     })
-    .from(posts)
-    .innerJoin(queues, eq(posts.queueId, queues.id))
+    .from(queues)
     .innerJoin(users, eq(queues.userId, users.id))
     .where(and(
-      eq(posts.userId, userId),
-      eq(posts.status, 'queued'),
       eq(queues.userId, userId),
       eq(queues.isPaused, false),
       sql`${queues.nextRunAt} >= ${nowIso}::timestamptz`,
       sql`${queues.nextRunAt} <= ${rangeEndIso}::timestamptz`,
-      sql`${posts.queuePosition} > ${queues.cursorPosition}`,
     ))
-    .orderBy(sql`${queues.nextRunAt} ASC, ${queues.id} ASC, ${posts.queuePosition} ASC`);
+    .orderBy(sql`${queues.nextRunAt} ASC, ${queues.id} ASC`);
 
-  const queuedUpcoming = projectQueuedDashboardPosts(
-    queuedCandidates as QueuedDashboardCandidate[],
-    rangeEnd,
-  );
+  const queuedUpcoming: SerializedPostForList[] = [];
+  for (const queueRow of queuedDashboardQueues as QueuedDashboardQueue[]) {
+    const timezone = queueRow.user.timezone ?? 'UTC';
+    const slots = dashboardQueueSlots(queueRow.queue, timezone, next24End, rangeEnd);
+    if (slots.length === 0) continue;
+
+    const queuedPosts = await db
+      .select()
+      .from(posts)
+      .where(and(
+        eq(posts.userId, userId),
+        eq(posts.status, 'queued'),
+        eq(posts.queueId, queueRow.queue.id),
+        sql`${posts.queuePosition} > ${queueRow.queue.cursorPosition}`,
+      ))
+      .orderBy(sql`${posts.queuePosition} ASC`)
+      .limit(slots.length);
+
+    queuedUpcoming.push(...projectQueuedDashboardPosts(queuedPosts, slots));
+  }
   const queued24 = queuedUpcoming.filter((post) => {
     const scheduledAt = post.scheduledAt?.getTime();
     return scheduledAt !== undefined && scheduledAt >= now.getTime() && scheduledAt <= next24End.getTime();
@@ -791,7 +807,7 @@ export async function getDashboardPostStats(
   const scheduledInRange = sortDashboardPosts([
     ...scheduledInRangeRows.map(serializePostForList),
     ...queuedUpcoming,
-  ]).slice(0, 4);
+  ]).slice(0, DASHBOARD_UPCOMING_PREVIEW_LIMIT);
 
   const failed24Rows = await db
     .select()
