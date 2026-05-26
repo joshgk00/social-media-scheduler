@@ -9,6 +9,8 @@ describe('SplitButton', () => {
         onPrimary={vi.fn()}
         onDraft={vi.fn()}
         primaryLabel="Update Queued Post"
+        isLoading={false}
+        disabled={false}
       />,
     );
 
