@@ -652,7 +652,7 @@ export default function EditPostPage() {
 
           {/* SHARED POST-CMN BLOCK (B-03) — every common control lives here */}
           <SharedPostFields
-            mode="edit"
+            mode={post.status === 'queued' ? 'queue' : 'edit'}
             platform={formState.platform}
             userTimezone={userTimezone}
             effectiveProfileId={formState.profileId}
