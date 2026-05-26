@@ -15,5 +15,6 @@ describe('SplitButton', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Update Queued Post' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
   });
 });

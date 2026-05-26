@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EditPostPage from '../EditPostPage';
@@ -85,13 +86,25 @@ vi.mock('../../../components/posts/ProfilePicker', () => ({
 }));
 
 vi.mock('../../../components/posts/TwitterPostFields', () => ({
-  TwitterPostFields: ({ text }: { text: string }) => (
-    <textarea aria-label="Tweet text" readOnly value={text} />
+  TwitterPostFields: ({
+    text,
+    onTextChange,
+  }: {
+    text: string;
+    onTextChange: (value: string) => void;
+  }) => (
+    <textarea
+      aria-label="Tweet text"
+      value={text}
+      onChange={(event) => onTextChange(event.target.value)}
+    />
   ),
 }));
 
 vi.mock('../../../components/posts/SharedPostFields', () => ({
-  SharedPostFields: () => <div>Shared fields</div>,
+  SharedPostFields: ({ mode }: { mode: string }) => (
+    <div data-testid="shared-fields-mode">{mode}</div>
+  ),
 }));
 
 vi.mock('../../../components/posts/TweetPreview', () => ({
@@ -159,5 +172,31 @@ describe('EditPostPage', () => {
     renderPage();
 
     expect(screen.getByRole('button', { name: 'Update Queued Post' })).toBeInTheDocument();
+  });
+
+  it('keeps queued edits queued when the primary action is submitted', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.getByTestId('shared-fields-mode')).toHaveTextContent('queue');
+
+    const textarea = await screen.findByDisplayValue('Queued import with typo');
+    await user.clear(textarea);
+    await user.type(textarea, 'Queued import typo fixed');
+    await user.click(screen.getByRole('button', { name: 'Update Queued Post' }));
+
+    expect(updatePostMutate).toHaveBeenCalledTimes(1);
+    const [mutationInput] = updatePostMutate.mock.calls[0];
+    expect(mutationInput).toMatchObject({
+      postId: 'post-1',
+      postVersion: 1,
+      postInput: {
+        platform: 'twitter',
+        text: 'Queued import typo fixed',
+        isThread: false,
+      },
+    });
+    expect(mutationInput.postInput).not.toHaveProperty('status');
+    expect(mutationInput.postInput).not.toHaveProperty('scheduledAt');
   });
 });

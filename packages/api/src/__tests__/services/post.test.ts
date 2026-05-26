@@ -46,13 +46,14 @@ const mockCreateLogger = vi.fn().mockReturnValue({
 vi.mock('@sms/shared', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sms/shared')>();
 
-  const EDITABLE: readonly string[] = ['draft', 'scheduled', 'queued', 'failed'];
-  const DELETABLE: readonly string[] = ['draft', 'scheduled', 'published', 'failed'];
+  const EDITABLE: readonly string[] = ['draft', 'scheduled', 'queued', 'paused', 'failed'];
+  const DELETABLE: readonly string[] = ['draft', 'scheduled', 'paused', 'published', 'failed'];
 
   const POST_STATE_TRANSITIONS: Record<string, readonly string[]> = {
     draft: ['scheduled', 'queued', 'publishing'],
-    scheduled: ['draft', 'queued', 'publishing'],
+    scheduled: ['draft', 'queued', 'publishing', 'paused'],
     queued: ['draft', 'publishing'],
+    paused: ['scheduled', 'draft'],
     publishing: ['published', 'failed'],
     published: ['queued', 'auto_destructing'],
     failed: ['draft', 'scheduled'],
