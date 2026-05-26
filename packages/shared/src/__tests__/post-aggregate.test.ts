@@ -209,6 +209,32 @@ describe('planUpdate', () => {
     expect(patch).toMatchObject({ bumpVersion: true, text: 'typo fix' });
     expect(patch).not.toHaveProperty('scheduledAt');
   });
+
+  it('allows editing a queued post without changing queue status', () => {
+    const patch = planUpdate(
+      { ...baseState, status: 'queued' },
+      { text: 'typo fix', postVersion: 1 },
+      1,
+    );
+
+    expect(patch).toMatchObject({ bumpVersion: true, text: 'typo fix' });
+    expect(patch).not.toHaveProperty('status');
+    expect(patch).not.toHaveProperty('scheduledAt');
+  });
+
+  it('allows moving a queued post back to draft', () => {
+    expect(
+      planUpdate(
+        { ...baseState, status: 'queued' },
+        { status: 'draft', scheduledAt: null, postVersion: 1 },
+        1,
+      ),
+    ).toMatchObject({
+      bumpVersion: true,
+      status: 'draft',
+      scheduledAt: null,
+    });
+  });
 });
 
 describe('planTransitionToPublishing', () => {

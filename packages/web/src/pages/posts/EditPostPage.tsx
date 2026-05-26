@@ -418,24 +418,28 @@ export default function EditPostPage() {
     }
   }
 
-  function buildUpdatePayload(action: 'schedule' | 'draft', text: string) {
-    const status = action === 'draft' ? ('draft' as const) : ('scheduled' as const);
-    const scheduledAt = action === 'schedule' ? formState.scheduledAt : null;
+  function buildUpdatePayload(action: 'schedule' | 'draft' | 'keepQueued', text: string) {
     const base = {
       text,
-      status,
-      scheduledAt,
       hasSpinnableText: formState.hasSpinnableText,
       autoDestructAfter: formState.autoDestructAfter,
       notes: formState.notes || null,
       tagIds: formState.tagIds,
       mediaIds: mediaItems.map((m) => m.id),
     };
+    const statusFields =
+      action === 'keepQueued'
+        ? {}
+        : {
+            status: action === 'draft' ? ('draft' as const) : ('scheduled' as const),
+            scheduledAt: action === 'schedule' ? formState.scheduledAt : null,
+          };
 
     if (formState.platform === 'twitter') {
       return {
         platform: 'twitter' as const,
         ...base,
+        ...statusFields,
         isThread: formState.isThread,
       };
     }
@@ -443,17 +447,19 @@ export default function EditPostPage() {
       return {
         platform: 'linkedin' as const,
         ...base,
+        ...statusFields,
         visibility: formState.visibility,
       };
     }
     return {
       platform: 'facebook' as const,
       ...base,
+      ...statusFields,
       linkUrl: formState.linkUrl ? formState.linkUrl : null,
     };
   }
 
-  function handleSubmit(action: 'schedule' | 'draft') {
+  function handleSubmit(action: 'schedule' | 'draft' | 'keepQueued') {
     const text = formState.isThread ? serializeThread(tweets) : formState.text;
 
     if (!text.trim() && mediaItems.length === 0 && !(formState.platform === 'facebook' && formState.linkUrl)) {
@@ -533,6 +539,7 @@ export default function EditPostPage() {
     .filter((m) => m.mimeType.startsWith('image/'))
     .map((m) => m.thumbnailUrl ?? '');
   const previewVideoUrl = mediaItems.find((m) => m.mimeType.startsWith('video/'))?.thumbnailUrl ?? null;
+  const primaryAction = post.status === 'queued' ? 'keepQueued' : 'schedule';
 
   return (
     <main className="px-4 py-6 sm:px-6 lg:px-8">
@@ -674,8 +681,9 @@ export default function EditPostPage() {
 
             const submitContent = (
               <SplitButton
-                onSchedule={() => handleSubmit('schedule')}
+                onSchedule={() => handleSubmit(primaryAction)}
                 onDraft={() => handleSubmit('draft')}
+                scheduleLabel={post.status === 'queued' ? 'Update Queued Post' : 'Schedule Post'}
                 isLoading={updatePostMutation.isPending}
                 disabled={scheduleDisabled}
               />

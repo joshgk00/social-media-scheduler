@@ -49,5 +49,5 @@ export function transitionPost(currentStatus: PostStatus, targetStatus: PostStat
   return targetStatus;
 }
 
-export const EDITABLE_STATES: readonly PostStatus[] = ['draft', 'scheduled', 'paused', 'failed'];
+export const EDITABLE_STATES: readonly PostStatus[] = ['draft', 'scheduled', 'queued', 'paused', 'failed'];
 export const DELETABLE_STATES: readonly PostStatus[] = ['draft', 'scheduled', 'paused', 'published', 'failed'];

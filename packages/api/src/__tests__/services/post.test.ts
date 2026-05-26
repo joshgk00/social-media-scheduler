@@ -46,15 +46,15 @@ const mockCreateLogger = vi.fn().mockReturnValue({
 vi.mock('@sms/shared', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sms/shared')>();
 
-  const EDITABLE: readonly string[] = ['draft', 'scheduled', 'failed'];
+  const EDITABLE: readonly string[] = ['draft', 'scheduled', 'queued', 'failed'];
   const DELETABLE: readonly string[] = ['draft', 'scheduled', 'published', 'failed'];
 
   const POST_STATE_TRANSITIONS: Record<string, readonly string[]> = {
-    draft: ['scheduled', 'publishing'],
+    draft: ['scheduled', 'queued', 'publishing'],
     scheduled: ['draft', 'queued', 'publishing'],
-    queued: ['publishing'],
+    queued: ['draft', 'publishing'],
     publishing: ['published', 'failed'],
-    published: ['auto_destructing'],
+    published: ['queued', 'auto_destructing'],
     failed: ['draft', 'scheduled'],
     auto_destructing: ['destroyed'],
     destroyed: [],
@@ -678,6 +678,31 @@ describe('post.service', () => {
       const setCall = db._updateChain.set.mock.calls[0][0];
       expect(setCall.text).toBe('new text');
       expect(setCall.notes).toBe('a note');
+    });
+
+    it('updates queued posts without changing their queue status', async () => {
+      const updatedPost = {
+        id: 'post-1', userId: 'user-1', profileId: 'profile-1',
+        text: 'typo fixed', status: 'queued', postVersion: 2,
+        isThread: false, scheduledAt: null, hasSpinnableText: false,
+        autoDestructAfter: null, notes: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      };
+
+      const db = createPostUpdateMockDb({
+        updateResult: [updatedPost],
+        existingPost: { id: 'post-1', status: 'queued', postVersion: 1, scheduledAt: null },
+      });
+
+      await updatePost(db, 'user-1', 'post-1', {
+        text: 'typo fixed',
+        postVersion: 1,
+      });
+
+      const setCall = db._updateChain.set.mock.calls[0][0];
+      expect(setCall.text).toBe('typo fixed');
+      expect(setCall.status).toBeUndefined();
+      expect(setCall.scheduledAt).toBeUndefined();
     });
 
     it('clears old associations and calls associateMediaToPost when mediaIds provided', async () => {
