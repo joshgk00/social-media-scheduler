@@ -436,8 +436,7 @@ export function createPostsRouter({
         post.scheduledAt &&
         publishQueueService
       ) {
-        const correlationId =
-          typeof req.id === 'string' ? req.id : randomUUID();
+        const correlationId = requestCorrelationId(req);
         await publishQueueService.enqueuePublish(
           post.id,
           post.postVersion,
@@ -797,8 +796,7 @@ export function createPostsRouter({
         updatedPost.scheduledAt &&
         publishQueueService
       ) {
-        const correlationId =
-          typeof req.id === 'string' ? req.id : randomUUID();
+        const correlationId = requestCorrelationId(req);
         await publishQueueService.enqueuePublish(
           updatedPost.id,
           updatedPost.postVersion,
@@ -887,8 +885,7 @@ export function createPostsRouter({
       });
 
       if (publishQueueService) {
-        const correlationId =
-          typeof req.id === 'string' ? req.id : randomUUID();
+        const correlationId = requestCorrelationId(req);
         await publishQueueService.enqueuePublish(
           updated.id,
           updated.postVersion,
