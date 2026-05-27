@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-41_f1090fbcfd",
+  "title": "gh#41: Phase 11 follow-up: SnippetPicker arrow-nav + Enter regression test",
+  "summary": "Imported from GitHub issue gh#41 in BACKLOG.md section \"Tests\".",
+  "kind": "test-suite",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/ui/command.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/web/src/components/snippets/__tests__/SnippetPicker.test.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/ui/command.tsx",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/web/src/components/snippets/__tests__/SnippetPicker.test.tsx",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#41"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/components/snippets/__tests__/SnippetPicker.test.tsx",
+      "command": null
+    }
+  ],
+  "tags": [
+    "github-issue",
+    "gh#41",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/41",
+    "backlog-order:0059",
+    "backlog-section:tests",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "filesystem"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-41-91be4b7347_f5a08a89cc"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#41",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

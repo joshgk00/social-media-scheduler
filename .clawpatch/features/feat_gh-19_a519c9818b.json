@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-19_a519c9818b",
+  "title": "gh#19: Config: Add transcode retries and align auto-destruct backoff",
+  "summary": "Imported from GitHub issue gh#19 in BACKLOG.md section \"Enhancements / config\".",
+  "kind": "infra",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/api/src/services/auto-destruct-queue.service.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/worker/src/transcode-worker.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/api/src/services/auto-destruct-queue.service.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/transcode-worker.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/auto-destruct-worker.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/worker/src/backoff.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#19"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#19",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/19",
+    "backlog-order:0065",
+    "backlog-section:enhancements-config"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem",
+    "concurrency"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-19-13e110964b_dbd17c46ce"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#19",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

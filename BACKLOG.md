@@ -32,7 +32,7 @@ Top-of-queue. An automated workflow should pull from here first.
 - [x] **gh#26** — Web-production Docker stage runs as root *(merged in #82 / 8e32ee8)*
 - [x] **gh#25** — Add nginx security headers and rate limiting *(implemented in PR #83)*
 - [x] **gh#15** — Auto-destruct 401/403 should throw `UnrecoverableError` *(merged in #84, released in v1.0.1)*
-- [~] **gh#18** — Media cleanup deletes storage before DB row (ordering risk) *(in worktree `.claude/worktrees/18-fix-media-cleanup-deletes-storage-before-db-row/`)*
+- [~] **gh#18** — Media cleanup deletes storage before DB row (ordering risk) *(in worktree `.claude/worktrees/18-fix-media-cleanup-deletes-storage-before-db-row/`; file: `packages/worker/src/media-cleanup-worker.ts`)*
 - [x] **gh#36** — Dev images bake `packages/shared/dist` at build time, breaking after shared exports change *(merged in #90 / 4b35a56)*
 
 ---
@@ -109,9 +109,9 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 ### Bugs
 
 - [x] **gh#87** — nginx: add real_ip module support so rate limits + audit logs key on real client IP behind layered proxies *(closed 2026-05-21 — wired via `NGINX_TRUSTED_PROXY_CIDR`, generated config, nginx include, middleware tests, changelog notes)*
-- [ ] **gh#112** — queue-empty notification payload doesn't match `queueEmptyNotificationSchema` — 8,297 silent failures accumulated *(sibling of gh#85, surfaced during 2026-05-21 Bull Board screenshot pass)*
+- [x] **gh#112** — queue-empty notification payload doesn't match `queueEmptyNotificationSchema` — 8,297 silent failures accumulated *(closed 2026-05-26)*
 - [x] **gh#85** — Auto-destruct failure notification payload doesn't match `autoDestructFailedNotificationSchema` *(closed 2026-05-21 — payload now matches schema; regression tests cover sanitized payloads)*
-- [ ] **gh#52** — Date picker icon barely visible on new-post page in dark mode
+- [x] **gh#52** — Date picker icon barely visible on new-post page in dark mode *(fixed in #120 / 60ac9cf)*
 - [x] **gh#50** — Secure cookies + CSRF fail behind reverse proxy (trust proxy + nginx X-Forwarded-Proto) *(merged in #51 / 0824e22)*
 - [x] **gh#34** — Auto-destruct help copy hardcoded to "Twitter/X" on LinkedIn and Facebook composer forms *(closed 2026-05-21 — help copy is platform-aware/gated in `SharedPostFields`; coverage added)*
 - [x] **gh#31** — Phase 6 leftovers: worker TS build errors + posts-api test failure on develop *(closed 2026-05-21 — worker lifecycle abort typing fixed in dfa12ea; verification: worker tsc clean + posts-api integration pass)*
@@ -121,9 +121,9 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 
 - [x] **gh#7** — Sharp triple-decode in `processImageUpload` *(closed 2026-05-21 — redundant Sharp decodes removed in 6424642)*
 - [x] **gh#8** — Serial UPDATE loop in `associateMediaToPost` *(closed 2026-05-21 — serial loop replaced with bulk CASE/inArray update in fe08818)*
-- [ ] **gh#9** — Cache `/api/settings/storage` aggregate query
+- [x] **gh#9** — Cache `/api/settings/storage` aggregate query *(fixed in #120 / 60ac9cf)*
 - [ ] **gh#16** — N+1 DELETE and unbounded SELECT in `media-cleanup-worker`
-- [ ] **gh#24** — Upload files concurrently instead of sequentially
+- [ ] **gh#24** — Upload files concurrently instead of sequentially *(files: `packages/web/src/pages/posts/NewPostPage.tsx`, `packages/web/src/pages/posts/EditPostPage.tsx`)*
 
 ### Refactoring / type safety
 
@@ -134,7 +134,7 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 - [ ] **gh#22** — Extract shared `usePostMedia` hook from `NewPostPage`/`EditPostPage`
 - [ ] **gh#23** — Add `media` field to `Post` interface instead of `as unknown` cast
 - [ ] **gh#27** — `StorageBackend` interface gaps — `contentType` discard, no destroy lifecycle
-- [ ] **gh#29** — Nginx `proxy_pass` URI inconsistency between prod and dev
+- [x] **gh#29** — Nginx `proxy_pass` URI inconsistency between prod and dev *(closed 2026-05-26)*
 
 ### Tests
 
@@ -142,6 +142,7 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 - [ ] **gh#13** — Fix mock-db `updateChainable` and centralize mock factories
 - [ ] **gh#20** — Transcode worker processor has zero test coverage
 - [ ] **gh#28** — Shared storage test coverage gaps
+- [ ] **gh#119** — Extract and cover `MediaDropZone` file validation *(split out from gh#28; pure helper + focused web tests)*
 - [ ] **gh#41** — Phase 11 follow-up: SnippetPicker arrow-nav + Enter regression test
 - [ ] **gh#42** — Phase 11 follow-up: calendar today-cell highlighting regression test
 - [ ] **gh#43** — Phase 11 follow-up: calendar conflict tooltip interaction regression test
@@ -150,7 +151,7 @@ These are tracked in GitHub. Listed here for completeness so an automated workfl
 
 ### Enhancements / config
 
-- [ ] **gh#94** — Queue creation: add inline help + live "Next 5 publish times" preview *(operator confusion — interval modes vs hour windows aren't legible from the form alone)*
+- [x] **gh#94** — Queue creation: add inline help + live "Next 5 publish times" preview *(closed 2026-05-26)*
 - [ ] **gh#19** — Transcode worker missing retry attempts and backoff
 
 ---

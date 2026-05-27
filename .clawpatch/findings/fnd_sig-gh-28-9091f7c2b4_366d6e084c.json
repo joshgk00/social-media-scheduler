@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-28-9091f7c2b4_366d6e084c",
+  "featureId": "feat_gh-28_5d6f2e5a41",
+  "title": "gh#28: Tests: Shared storage backend coverage gaps",
+  "category": "test-gap",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "test-gap",
+  "evidence": [
+    {
+      "path": "packages/shared/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/__tests__/storage.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/28.\nBacklog section: Tests.\n\n## Problem\n\nShared storage has several missing regression tests around stream handling, S3 error behavior, backend factory validation, and lifecycle cleanup.\n\nThe original issue also included `MediaDropZone` validation tests. That web/component work has been split into #119 so this issue can stay focused on `@sms/shared` storage behavior.\n\n## Scope\n\nAdd focused tests in `packages/shared/src/__tests__/storage.test.ts` for the shared storage layer.\n\n## Acceptance criteria\n\n- `LocalStorage.save()` is tested with a `ReadableStream` or Node readable input path, not only `Buffer` input.\n- `S3Storage.exists()` returns `false` for a thrown `NoSuchKey` error name.\n- `S3Storage.exists()` rethrows non-404/non-missing errors.\n- `S3Storage.get()` throws a clear error when `response.Body` is undefined.\n- `createStorageBackend()` throws for an invalid `MEDIA_STORAGE_BACKEND` value.\n- If #27 lands first, storage lifecycle tests cover:\n  - `LocalStorage.destroy()` resolves without side effects.\n  - `S3Storage.destroy()` calls the mocked client's `destroy()` method.\n- `pnpm --filter @sms/shared test -- storage` passes, or the closest focused storage test command.\n\n## Out of scope\n\n- `MediaDropZone` validation tests; tracked in #119.\n- Changing storage backend behavior beyond what #27 requires.\n- Moving or lazy-loading the AWS SDK; tracked in #11.\n\n## References\n\n- Storage lifecycle/contentType decision: #27\n- Optional AWS dependency cleanup: #11\n- MediaDropZone validation test split: #119",
+  "reproduction": "Shared storage has several missing regression tests around stream handling, S3 error behavior, backend factory validation, and lifecycle cleanup.\n\nThe original issue also included `MediaDropZone` validation tests. That web/component work has been split into #119 so this issue can stay focused on `@sms/shared` storage behavior.",
+  "recommendation": "Add focused tests in `packages/shared/src/__tests__/storage.test.ts` for the shared storage layer.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/shared/src/index.ts, packages/shared/src/__tests__/storage.test.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-28_9091f7c2b4",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-43-4c75fa7f7d_a468ec441c",
+  "featureId": "feat_gh-43_69ac44a7e3",
+  "title": "gh#43: Phase 11 follow-up: calendar conflict tooltip interaction regression test",
+  "category": "test-gap",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "test-gap",
+  "evidence": [
+    {
+      "path": "packages/api/src/__tests__/integration/calendar-api.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/43.\nBacklog section: Tests.\n\n## Context\n\nPhase 11 UAT (test 18) confirmed the conflict-indicator path end-to-end:\n\n- Server annotates events with `hasConflict: boolean` (verified by `packages/api/src/__tests__/integration/calendar-api.test.ts`)\n- `eventPropGetter` applies `!border-l-destructive` when `event.hasConflict` (verified by `packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx`)\n- The tooltip's text is rendered in `CalendarEventContent` with the exact UI-SPEC line 159 wording: `Another post on this profile is scheduled within 5 minutes of this time: \"{textPreview}\" at {date}.`\n\nWhat's missing is a Vitest assertion that **the tooltip actually opens on hover/focus and renders that text in the DOM**. Today this is confirmed only by code inspection.\n\n## Acceptance criteria\n\n- Add to `packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx`:\n  1. Render with at least two events on the same profile within 5 minutes (both `hasConflict: true`)\n  2. Hover (or keyboard-focus) one of the conflict events\n  3. Assert the tooltip content with the exact UI-SPEC line 159 wording is present in the DOM\n- All existing tests in the file still pass.\n\n## Why now\n\nDiscovered during Phase 11 UAT (see `.planning/phases/11-snippets-search-calendar-polish/11-UAT.md` test 18 note). The interaction works in production — this is regression insurance, not a defect.",
+  "reproduction": "Phase 11 UAT (test 18) confirmed the conflict-indicator path end-to-end:\n\n- Server annotates events with `hasConflict: boolean` (verified by `packages/api/src/__tests__/integration/calendar-api.test.ts`)\n- `eventPropGetter` applies `!border-l-destructive` when `event.hasConflict` (verified by `packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx`)\n- The tooltip's text is rendered in `CalendarEventContent` with the exact UI-SPEC line 159 wording: `Another post on this profile is scheduled within 5 minutes of this time: \"{textPreview}\" at {date}.`\n\nWhat's missing is a Vitest assertion that **the tooltip actually opens on hover/focus and renders that text in the DOM**. Today this is confirmed only by code inspection.",
+  "recommendation": "Implement the fix described by GitHub issue gh#43 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/__tests__/integration/calendar-api.test.ts, packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-43_4c75fa7f7d",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-13-143df79474_d6ec6b12fb",
+  "featureId": "feat_gh-13_8d6644f878",
+  "title": "gh#13: Tests: Fix mock-db updateChainable and centralize mock factories",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/api/src/__tests__/helpers/mock-db.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/__tests__/services/media.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/__tests__/routes/media.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/__tests__/routes/settings.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/13.\nBacklog section: Tests.\n\n## Problem\n\nmock-db.ts updateChainable always resolves returning() to a populated row, hiding optimistic-lock failures. Also, createMockDb is duplicated across 4 test files with subtle differences.\n\n## Identified by\n\nCode quality review Run 1 — test-quality-analyzer (findings 1, 10)\n\n## Fix\n\nAccept an explicit returningResult parameter in updateChainable. Centralize all mock-db factories into __tests__/helpers/mock-db.ts.\n\n## Files\n\n- `packages/api/src/__tests__/helpers/mock-db.ts`\n- `packages/api/src/__tests__/services/media.test.ts`\n- `packages/api/src/__tests__/routes/media.test.ts`\n- `packages/api/src/__tests__/routes/settings.test.ts`",
+  "reproduction": "mock-db.ts updateChainable always resolves returning() to a populated row, hiding optimistic-lock failures. Also, createMockDb is duplicated across 4 test files with subtle differences.",
+  "recommendation": "Accept an explicit returningResult parameter in updateChainable. Centralize all mock-db factories into __tests__/helpers/mock-db.ts.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/__tests__/helpers/mock-db.ts, packages/api/src/__tests__/services/media.test.ts, packages/api/src/__tests__/routes/media.test.ts, packages/api/src/__tests__/routes/settings.test.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-13_143df79474",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-80_7c7b04b8a3",
+  "title": "gh#80: Refactor error-handler tests: hoist logger.error spy setup to helper or beforeEach",
+  "summary": "Imported from GitHub issue gh#80 in BACKLOG.md section \"Tests\".",
+  "kind": "test-suite",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/api/src/__tests__/error-handler.test.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/__tests__/error-handler.test.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#80"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/api/src/__tests__/error-handler.test.ts",
+      "command": null
+    }
+  ],
+  "tags": [
+    "github-issue",
+    "gh#80",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/80",
+    "backlog-order:0063",
+    "backlog-section:tests",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-80-600bf72291_f9af2680f2"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#80",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

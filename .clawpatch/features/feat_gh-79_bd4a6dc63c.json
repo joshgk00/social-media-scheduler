@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-79_bd4a6dc63c",
+  "title": "gh#79: Assert handler-level + central log both fire on PATCH 500 (prevent silent regression)",
+  "summary": "Imported from GitHub issue gh#79 in BACKLOG.md section \"Tests\".",
+  "kind": "test-suite",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/api/src/__tests__/routes/profiles.test.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/__tests__/routes/profiles.test.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#79"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/api/src/__tests__/routes/profiles.test.ts",
+      "command": null
+    }
+  ],
+  "tags": [
+    "github-issue",
+    "gh#79",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/79",
+    "backlog-order:0062",
+    "backlog-section:tests",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-79-c6f48108c3_98bf1a61bc"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#79",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

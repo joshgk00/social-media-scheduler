@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-119_e7ffbb4d06",
+  "title": "gh#119: Tests: Extract and cover MediaDropZone file validation",
+  "summary": "Imported from GitHub issue gh#119 in BACKLOG.md section \"Tests\".",
+  "kind": "test-suite",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/components/posts/MediaDropZone.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/components/posts/MediaDropZone.tsx",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#119"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#119",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/119",
+    "backlog-order:0058",
+    "backlog-section:tests"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-119-ea06cc5f01_1e00dc12a6"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#119",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}
