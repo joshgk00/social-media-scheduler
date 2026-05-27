@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-22-7d002311ef_9bb9359c10",
+  "featureId": "feat_gh-22_163c9fcc31",
+  "title": "gh#22: Refactor: Extract shared usePostMedia hook from NewPostPage/EditPostPage",
+  "category": "api-contract",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "contract-mismatch",
+  "evidence": [
+    {
+      "path": "packages/web/src/pages/posts/NewPostPage.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/pages/posts/EditPostPage.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/22.\nBacklog section: Refactoring / type safety.\n\n## Problem\n\n~120 lines of identical media logic duplicated between NewPostPage and EditPostPage: mediaItems state, upload/delete/retry hooks, platform limits, hasTranscodingMedia/hasFailedMedia/isMediaBlocking derived state, all handlers, getSubmitDisabledReason(), and the tooltip-wrapped submit button.\n\n## Identified by\n\nCode quality review Run 3 — web comprehensive review (H-3)\n\n## Fix\n\nExtract a usePostMedia(profileId, platform) custom hook encapsulating all media state, handlers, and derived values. Extract the tooltip-wrapped submit into a shared component.\n\n## Files\n\n- `packages/web/src/pages/posts/NewPostPage.tsx`\n- `packages/web/src/pages/posts/EditPostPage.tsx`",
+  "reproduction": "~120 lines of identical media logic duplicated between NewPostPage and EditPostPage: mediaItems state, upload/delete/retry hooks, platform limits, hasTranscodingMedia/hasFailedMedia/isMediaBlocking derived state, all handlers, getSubmitDisabledReason(), and the tooltip-wrapped submit button.",
+  "recommendation": "Extract a usePostMedia(profileId, platform) custom hook encapsulating all media state, handlers, and derived values. Extract the tooltip-wrapped submit into a shared component.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/pages/posts/NewPostPage.tsx, packages/web/src/pages/posts/EditPostPage.tsx",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T052439-d79612",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. Current NewPostPage.tsx still defines its own mediaItems state/upload/delete/retry hooks, platform limits, blocking derived state, media handlers, getSubmitDisabledReason(), and tooltip-wrapped submit at lines 97-100, 124-135, 167-250, 291-298, and 609-650. EditPostPage.tsx still has the same separate media logic and tooltip submit at lines 88-91, 154-165, 167-252, 254-260, and 686-719. rg found no usePostMedia hook or shared post submit component under packages/web/src/hooks or packages/web/src/components/posts. Focused Vitest could not run in the read-only sandbox because Vite tried to write packages/web/node_modules/.vite-temp/vitest.config... and received EPERM, so tests do not contradict the code evidence.",
+      "commands": [
+        "pwd",
+        "git status --short",
+        "rg --files | rg '(^|/)(NewPostPage|EditPostPage|usePostMedia|PostMedia|Submit).*'",
+        "rg -n \"usePostMedia|mediaItems|setMediaItems|upload|delete|retry|hasTranscodingMedia|hasFailedMedia|isMediaBlocking|getSubmitDisabledReason|Tooltip|submit\" packages/web/src/pages/posts/NewPostPage.tsx packages/web/src/pages/posts/EditPostPage.tsx",
+        "sed -n '1,260p' packages/web/src/pages/posts/NewPostPage.tsx",
+        "sed -n '1,320p' packages/web/src/pages/posts/EditPostPage.tsx",
+        "rg -n \"PostMedia|MediaUpload|usePostMedia|SubmitButton|submit button|disabledReason|isMediaBlocking\" packages/web/src",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '88,250p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '84,260p'",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '286,390p;604,652p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '252,265p;486,494p;682,721p'",
+        "sed -n '1,220p' package.json",
+        "sed -n '1,220p' packages/web/package.json",
+        "rg -n \"NewPostPage|EditPostPage|media|transcoding|failed|tooltip|submit-disabled-reason\" packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx packages/web/src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "pnpm --filter @sms/web test -- --run packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx packages/web/src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "rg --files packages/web/src/hooks packages/web/src/components/posts | sort",
+        "rg -n \"usePostMedia|PostSubmit|Submit.*Button|getSubmitDisabledReason|submit-disabled-reason|TooltipProvider\" packages/web/src/hooks packages/web/src/components/posts packages/web/src/pages/posts"
+      ],
+      "createdAt": "2026-05-27T05:25:53.525Z"
+    },
+    {
+      "runId": "20260527T053511-098305",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist, but the duplicated media logic has been extracted. NewPostPage.tsx imports usePostMedia and destructures shared media state/handlers at lines 11 and 94-108; EditPostPage.tsx does the same at lines 10 and 84-98. The upload/delete/retry hooks, platform limits, mediaItems state, derived blocking flags, and media handlers now live in packages/web/src/hooks/use-post-media.ts lines 9-135. The tooltip-wrapped submit and getPostSubmitDisabledReason now live in packages/web/src/components/posts/PostSubmitActions.tsx lines 19-105, and both pages render PostSubmitActions. rg found none of the prior duplicate useMediaUpload/useDeleteMedia/useRetryTranscode/PLATFORM_MEDIA_LIMITS/getSubmitDisabledReason/TooltipProvider implementations in the two page files. Focused Vitest could not start in the read-only sandbox because Vite tried to write packages/web/node_modules/.vite-temp/vitest.config... and got EPERM, but the @sms/web no-emit TypeScript check passed.",
+      "commands": [
+        "pwd && git status --short && rg --files | rg '(^|/)(NewPostPage|EditPostPage|usePostMedia|PostMedia|Submit).*'",
+        "rg -n \"usePostMedia|use-post-media|mediaItems|setMediaItems|upload|delete|retry|hasTranscodingMedia|hasFailedMedia|isMediaBlocking|getSubmitDisabledReason|PostSubmitActions|Tooltip|submit\" packages/web/src/pages/posts/NewPostPage.tsx packages/web/src/pages/posts/EditPostPage.tsx packages/web/src/hooks/use-post-media.ts packages/web/src/components/posts/PostSubmitActions.tsx",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '1,260p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '1,280p'",
+        "nl -ba packages/web/src/hooks/use-post-media.ts | sed -n '1,320p'",
+        "nl -ba packages/web/src/components/posts/PostSubmitActions.tsx | sed -n '1,180p'",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '340,535p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '430,610p'",
+        "rg -n \"function getSubmitDisabledReason|const getSubmitDisabledReason|Video is still transcoding|Fix or remove failed media|TooltipProvider|useMediaUpload|useDeleteMedia|useRetryTranscode|PLATFORM_MEDIA_LIMITS|const \\\\[mediaItems\" packages/web/src/pages/posts/NewPostPage.tsx packages/web/src/pages/posts/EditPostPage.tsx",
+        "nl -ba packages/web/src/hooks/__tests__/use-post-media.test.ts | sed -n '1,280p'",
+        "nl -ba packages/web/src/components/posts/__tests__/PostSubmitActions.test.tsx | sed -n '1,260p'",
+        "pnpm --filter @sms/web test --run packages/web/src/hooks/__tests__/use-post-media.test.ts packages/web/src/components/posts/__tests__/PostSubmitActions.test.tsx packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx packages/web/src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "pnpm --filter @sms/web exec tsc -p tsconfig.app.json --noEmit"
+      ],
+      "createdAt": "2026-05-27T05:37:42.201Z"
+    }
+  ],
+  "signature": "sig_gh-22_7d002311ef",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T05:37:42.201Z"
+}

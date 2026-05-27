@@ -2,15 +2,13 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { DateTime } from 'luxon';
 import { toast } from 'sonner';
-import { PLATFORM_MEDIA_LIMITS } from '@sms/shared';
 import type { Platform } from '../../hooks/use-profiles';
 import { useAuth } from '../../hooks/use-auth';
 import { useProfiles } from '../../hooks/use-profiles';
 import { useCreatePost } from '../../hooks/use-posts';
 import { useQueue } from '../../hooks/use-queues';
 import { useAddToQueue } from '../../hooks/use-queue-posts';
-import { useMediaUpload } from '../../hooks/use-media-upload';
-import { useDeleteMedia, useRetryTranscode } from '../../hooks/use-media';
+import { usePostMedia } from '../../hooks/use-post-media';
 import { applyPlatformSwitch } from '../../lib/apply-platform-switch';
 import { serializeThread, deserializeThread, type TweetSegment } from '../../lib/thread';
 import { ProfilePicker } from '../../components/posts/ProfilePicker';
@@ -22,24 +20,20 @@ import { TweetPreview } from '../../components/posts/TweetPreview';
 import { LinkedInPreview } from '../../components/posts/LinkedInPreview';
 import { FacebookPreview } from '../../components/posts/FacebookPreview';
 import { CharacterCountRing } from '../../components/posts/CharacterCountRing';
-import { SplitButton } from '../../components/posts/SplitButton';
 import { TagManagementDialog } from '../../components/posts/TagManagementDialog';
 import { RateLimitBanner } from '../../components/posts/RateLimitBanner';
 import { RateLimitBlockError, type RateLimitBlockErrorDetail } from '../../components/posts/RateLimitBlockError';
 import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
-import type { MediaItem } from '../../components/posts/MediaThumbnail';
-import { Button } from '../../components/ui/button';
+import {
+  INVALID_POST_LINK_URL_MESSAGE,
+  PostSubmitActions,
+  getPostSubmitDisabledReason,
+  isPostLinkUrlValid,
+} from '../../components/posts/PostSubmitActions';
 import { Textarea } from '../../components/ui/textarea';
 import { Label } from '../../components/ui/label';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../../components/ui/tooltip';
 
 const SPINNABLE_PATTERN = /\{[^{}|]+\|[^{}|]+\}/;
-const URL_REGEX = /^https?:\/\/.+/i;
 
 interface PostFormState {
   platform: Platform;
@@ -94,10 +88,24 @@ export default function NewPostPage() {
   const scheduleInputRef = useRef<HTMLInputElement>(null);
   const [scheduledAtError, setScheduledAtError] = useState<string | null>(null);
 
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
-  const { upload, uploadingFiles, isUploading } = useMediaUpload();
-  const deleteMediaMutation = useDeleteMedia();
-  const retryTranscodeMutation = useRetryTranscode();
+  const effectiveProfileId = isQueueMode ? (queueData?.profileId ?? '') : formState.profileId;
+  const selectedProfile = profiles?.find((p) => p.id === effectiveProfileId) ?? null;
+  const platform = selectedProfile?.platform ?? formState.platform;
+  const {
+    mediaItems,
+    setMediaItems,
+    uploadingFiles,
+    isUploading,
+    maxFilesForPlatform,
+    hasTranscodingMedia,
+    hasFailedMedia,
+    isMediaBlocking,
+    handleFilesSelected,
+    handleRemoveMedia,
+    handleReorderMedia,
+    handleRetryTranscode,
+    handleMediaStatusUpdate,
+  } = usePostMedia(effectiveProfileId, platform);
 
   const updateForm = useCallback(<K extends keyof PostFormState>(key: K, value: PostFormState[K]) => {
     setFormState((prev) => ({ ...prev, [key]: value }));
@@ -116,23 +124,6 @@ export default function NewPostPage() {
     if (!DateTime.fromISO(scheduledAtParam).isValid) return;
     updateForm('scheduledAt', scheduledAtParam);
   }, [formState.scheduledAt, queueId, scheduledAtParam, updateForm]);
-
-  const effectiveProfileId = isQueueMode ? (queueData?.profileId ?? '') : formState.profileId;
-  const selectedProfile = profiles?.find((p) => p.id === effectiveProfileId) ?? null;
-  const platform = selectedProfile?.platform ?? formState.platform;
-
-  const platformLimits = PLATFORM_MEDIA_LIMITS[platform];
-  const maxFilesForPlatform = (() => {
-    if (!platformLimits) return 4;
-    const hasVideo = mediaItems.some((m) => m.mimeType.startsWith('video/'));
-    return hasVideo ? platformLimits.maxVideos : platformLimits.maxImages;
-  })();
-
-  const hasTranscodingMedia = mediaItems.some(
-    (m) => m.transcodeStatus === 'pending' || m.transcodeStatus === 'processing',
-  );
-  const hasFailedMedia = mediaItems.some((m) => m.transcodeStatus === 'failed');
-  const isMediaBlocking = hasTranscodingMedia || hasFailedMedia;
 
   function handleProfileChange(profileId: string, newPlatform: Platform) {
     const oldPlatform = formState.platform;
@@ -163,93 +154,6 @@ export default function NewPostPage() {
     }
     if (result.toast) toast.info(result.toast);
   }
-
-  const handleFilesSelected = useCallback(
-    async (files: File[]) => {
-      if (!platform) return;
-      const uploadResults = await Promise.allSettled(
-        files.map((file) => upload(file, effectiveProfileId, platform)),
-      );
-      const uploadedMediaItems: MediaItem[] = [];
-
-      for (const result of uploadResults) {
-        if (result.status === 'fulfilled') {
-          const response = result.value;
-          uploadedMediaItems.push({
-            id: response.id,
-            fileName: response.fileName,
-            mimeType: response.mimeType,
-            thumbnailUrl: response.thumbnailUrl,
-            transcodeStatus: response.transcodeStatus,
-            transcodeError: null,
-          });
-          toast.success('File uploaded.');
-        } else {
-          const errorMessage = result.reason instanceof Error ? result.reason.message : 'Upload failed';
-          toast.error(`Upload failed: ${errorMessage}`);
-        }
-      }
-
-      if (uploadedMediaItems.length > 0) {
-        setMediaItems((prev) => [...prev, ...uploadedMediaItems]);
-      }
-    },
-    [effectiveProfileId, platform, upload],
-  );
-
-  function handleRemoveMedia(mediaId: string) {
-    deleteMediaMutation.mutate(mediaId, {
-      onSuccess: () => {
-        setMediaItems((prev) => prev.filter((m) => m.id !== mediaId));
-      },
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Failed to remove media.');
-      },
-    });
-  }
-
-  function handleReorderMedia(newOrder: string[]) {
-    setMediaItems((prev) => {
-      const itemMap = new Map(prev.map((m) => [m.id, m]));
-      return newOrder.map((id) => itemMap.get(id)).filter((m): m is MediaItem => m !== undefined);
-    });
-  }
-
-  function handleRetryTranscode(mediaId: string) {
-    retryTranscodeMutation.mutate(mediaId, {
-      onSuccess: () => {
-        setMediaItems((prev) =>
-          prev.map((m) =>
-            m.id === mediaId
-              ? { ...m, transcodeStatus: 'pending' as const, transcodeError: null }
-              : m,
-          ),
-        );
-      },
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Retry failed.');
-      },
-    });
-  }
-
-  const handleMediaStatusUpdate = useCallback(
-    (
-      mediaId: string,
-      status: MediaItem['transcodeStatus'],
-      error: string | null,
-    ) => {
-      setMediaItems((prev) =>
-        prev.map((m) => {
-          if (m.id !== mediaId) return m;
-          if (m.transcodeStatus === status && m.transcodeError === error) {
-            return m;
-          }
-          return { ...m, transcodeStatus: status, transcodeError: error };
-        }),
-      );
-    },
-    [],
-  );
 
   function handleThreadToggle(checked: boolean) {
     if (checked) {
@@ -287,15 +191,6 @@ export default function NewPostPage() {
   }
 
   const isSubmitting = createPostMutation.isPending || addToQueueMutation.isPending || isUploading;
-
-  function getSubmitDisabledReason(): string | null {
-    if (hasTranscodingMedia) return 'Video is still transcoding.';
-    if (hasFailedMedia) return 'Fix or remove failed media before submitting.';
-    if (formState.platform === 'facebook' && formState.linkUrl && !URL_REGEX.test(formState.linkUrl)) {
-      return 'Enter a valid http or https URL.';
-    }
-    return null;
-  }
 
   function buildBasePayload(text: string) {
     return {
@@ -461,6 +356,12 @@ export default function NewPostPage() {
     .filter((m) => m.mimeType.startsWith('image/'))
     .map((m) => m.thumbnailUrl ?? '');
   const previewVideoUrl = mediaItems.find((m) => m.mimeType.startsWith('video/'))?.thumbnailUrl ?? null;
+  const submitDisabledReason = getPostSubmitDisabledReason({
+    hasTranscodingMedia,
+    hasFailedMedia,
+    platform: formState.platform,
+    linkUrl: formState.linkUrl,
+  });
 
   return (
     <main className="px-4 py-6 sm:px-6 lg:px-8">
@@ -558,8 +459,8 @@ export default function NewPostPage() {
                 linkUrl={formState.linkUrl}
                 onLinkUrlChange={(value) => updateForm('linkUrl', value)}
                 linkUrlError={
-                  formState.linkUrl && !URL_REGEX.test(formState.linkUrl)
-                    ? 'Enter a valid http or https URL.'
+                  formState.linkUrl && !isPostLinkUrlValid(formState.linkUrl)
+                    ? INVALID_POST_LINK_URL_MESSAGE
                     : null
                 }
                 mediaItems={mediaItems}
@@ -605,50 +506,24 @@ export default function NewPostPage() {
           )}
 
           {/* POST-CMN-06: Save as Draft is delivered by SplitButton's draft option. */}
-          {(() => {
-            const disabledReason = getSubmitDisabledReason();
-            const scheduleDisabled = isSubmitting || !!disabledReason;
-
-            const submitContent = isQueueMode ? (
-              <Button
-                onClick={() => validateAndSubmit('queue')}
-                disabled={scheduleDisabled}
-              >
-                {createPostMutation.isPending || addToQueueMutation.isPending
-                  ? 'Saving...'
-                  : 'Save to Queue'}
-              </Button>
-            ) : (
-              <SplitButton
-                onPrimary={() => validateAndSubmit('schedule')}
-                onDraft={() => validateAndSubmit('draft')}
-                isLoading={createPostMutation.isPending}
-                disabled={scheduleDisabled}
-              />
-            );
-
-            if (disabledReason) {
-              return (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span aria-describedby="submit-disabled-reason">
-                        {submitContent}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{disabledReason}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <span id="submit-disabled-reason" className="sr-only">
-                    {disabledReason}
-                  </span>
-                </TooltipProvider>
-              );
-            }
-
-            return submitContent;
-          })()}
+          {isQueueMode ? (
+            <PostSubmitActions
+              mode="queue"
+              onSubmit={() => validateAndSubmit('queue')}
+              isSaving={createPostMutation.isPending || addToQueueMutation.isPending}
+              disabled={isSubmitting}
+              disabledReason={submitDisabledReason}
+            />
+          ) : (
+            <PostSubmitActions
+              mode="split"
+              onPrimary={() => validateAndSubmit('schedule')}
+              onDraft={() => validateAndSubmit('draft')}
+              isLoading={createPostMutation.isPending}
+              disabled={isSubmitting}
+              disabledReason={submitDisabledReason}
+            />
+          )}
         </div>
 
         {/* Right column: live preview */}
