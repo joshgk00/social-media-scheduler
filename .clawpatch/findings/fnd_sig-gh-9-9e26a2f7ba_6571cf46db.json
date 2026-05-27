@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-9-9e26a2f7ba_6571cf46db",
+  "featureId": "feat_gh-9_9d2eb77dd2",
+  "title": "gh#9: Perf: Cache /api/settings/storage aggregate query",
+  "category": "performance",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/api/src/routes/settings.ts",
+      "startLine": 285,
+      "endLine": 307,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/9.\nBacklog section: Performance.\n\n## Problem\n\n`GET /api/settings/storage` runs an unbounded SUM/COUNT aggregate across the entire post_media table on every request. No cache, no user scoping.\n\n## Identified by\n\nCode quality review Run 1 — performance-optimizer (perf-004)\n\n## Fix\n\nAdd a 5-minute Redis cache keyed by userId. Also scope the query to the authenticated user's media.\n\n## Files\n\n- `packages/api/src/routes/settings.ts:285-307`",
+  "reproduction": "`GET /api/settings/storage` runs an unbounded SUM/COUNT aggregate across the entire post_media table on every request. No cache, no user scoping.",
+  "recommendation": "Add a 5-minute Redis cache keyed by userId. Also scope the query to the authenticated user's media.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/routes/settings.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T032855-7efb97",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists. The storage endpoint has moved to packages/api/src/routes/settings.ts:303-323, but it still executes a direct aggregate over FROM post_media with only WHERE deleted_at IS NULL. There is no user_id/userId predicate and no Redis get/set/cache use in that handler; redis is only used by the sessions route. packages/db/src/schema/post-media.ts confirms post_media has a user_id column and index, so user scoping remains applicable. Current route tests in packages/api/src/__tests__/routes/settings.test.ts only assert 401 and response shape/value mapping for mocked db.execute results; they do not assert user scoping or caching, and the mock Redis only exposes scanStream. I attempted focused Vitest runs, but they could not execute in this read-only sandbox because Vite/Vitest tried to create temp/cache directories. The current code evidence is sufficient that the finding remains open.",
+      "commands": [
+        "pwd && git status --short",
+        "rg -n \"settings/storage|storage\" packages/api/src/routes/settings.ts packages/api -S",
+        "nl -ba packages/api/src/routes/settings.ts | sed -n '250,330p'",
+        "nl -ba packages/api/src/__tests__/routes/settings.test.ts | sed -n '90,180p'",
+        "rg -n \"postMedia|post_media|file_size|deleted_at|profile_id|user_id\" packages -S",
+        "sed -n '1,90p' packages/api/src/routes/settings.ts",
+        "sed -n '1,220p' package.json",
+        "sed -n '1,220p' packages/api/package.json",
+        "sed -n '1,80p' packages/db/src/schema/post-media.ts",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/routes/settings.test.ts",
+        "sed -n '1,220p' packages/api/vitest.config.ts",
+        "rg -n \"redis\\.|get\\(|setex|expire|cache|settings:storage|storage.*cache|user_id =|userId\" packages/api/src/routes/settings.ts packages/api/src/__tests__/routes/settings.test.ts -S",
+        "nl -ba packages/api/src/__tests__/routes/settings.test.ts | sed -n '1,115p'",
+        "pnpm --filter @sms/api exec vitest --help | sed -n '1,180p'",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/routes/settings.test.ts --configLoader runner"
+      ],
+      "createdAt": "2026-05-27T03:30:10.655Z"
+    },
+    {
+      "runId": "20260527T033526-21a3a1",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists. The storage handler is now at packages/api/src/routes/settings.ts:304-334 and no longer performs the original unscoped uncached aggregate: it defines a 5-minute TTL constant, reads Redis key settings:storage:${userId}, returns cached JSON when present, scopes the aggregate with WHERE user_id = ${req.session.userId!} AND deleted_at IS NULL, then writes the computed usage back to Redis with EX 300. The post_media schema still has user_id and a user index, so the scope is meaningful. Current tests in packages/api/src/__tests__/routes/settings.test.ts now assert the Redis get/set key and TTL, the user-scoped SQL predicate, and the cached path avoiding db.execute. I attempted focused Vitest runs, but this read-only sandbox prevents Vite/Vitest from creating temp/cache directories, so tests could not execute here. Current code and test evidence indicate the finding is fixed.",
+      "commands": [
+        "pwd && git status --short",
+        "rg -n \"settings/storage|post_media|postMedia|settings:storage|storage.*cache|redis|user_id|userId|file_size|deleted_at\" packages/api/src/routes/settings.ts packages/api/src/__tests__/routes/settings.test.ts packages/db/src/schema -S",
+        "nl -ba packages/api/src/routes/settings.ts | sed -n '260,350p'",
+        "nl -ba packages/api/src/__tests__/routes/settings.test.ts | sed -n '1,220p'",
+        "nl -ba packages/api/src/routes/settings.ts | sed -n '1,80p'",
+        "nl -ba packages/db/src/schema/post-media.ts | sed -n '1,70p'",
+        "sed -n '1,220p' packages/api/package.json",
+        "sed -n '1,220p' package.json",
+        "pnpm --filter @sms/api test -- --run src/__tests__/routes/settings.test.ts",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/routes/settings.test.ts --configLoader runner",
+        "rg -n \"STORAGE_USAGE_CACHE_TTL_SECONDS|settings:storage|redis\\.get|redis\\.set|FROM post_media|WHERE user_id|deleted_at IS NULL\" packages/api/src/routes/settings.ts -S",
+        "rg -n \"cached storage|settings:storage:test-user-id|WHERE user_id|redis\\.set|db\\.execute\\).*not\" packages/api/src/__tests__/routes/settings.test.ts -S",
+        "git diff -- packages/api/src/routes/settings.ts packages/api/src/__tests__/routes/settings.test.ts"
+      ],
+      "createdAt": "2026-05-27T03:36:24.673Z"
+    },
+    {
+      "runId": "20260527T033707-48018d",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists, but the storage handler has moved to packages/api/src/routes/settings.ts:304-352 and now implements the requested fix. It uses a 5-minute TTL constant, reads Redis key settings:storage:${userId}, returns valid cached JSON without querying the database, scopes the aggregate with WHERE user_id = ${userId} AND deleted_at IS NULL, then writes the computed usage back to Redis with EX 300. The post_media schema still has user_id and a user_id index, so the scoping is meaningful. Current tests in packages/api/src/__tests__/routes/settings.test.ts assert Redis get/set behavior, cache-hit database bypass, the user-scoped SQL predicate, and fallback behavior for Redis read/malformed-cache cases. Focused Vitest execution could not run in this read-only sandbox because Vitest attempted to create a temp ssr directory and failed with EPERM, but pnpm --filter @sms/api typecheck completed successfully. Current code and test evidence indicate the finding is fixed.",
+      "commands": [
+        "pwd && git status --short",
+        "rg -n \"settings/storage|STORAGE_USAGE_CACHE_TTL_SECONDS|settings:storage|redis\\.(get|set)|FROM post_media|WHERE user_id|deleted_at IS NULL|post_media\" packages/api/src/routes/settings.ts packages/api/src/__tests__/routes/settings.test.ts packages/db/src/schema/post-media.ts -S",
+        "nl -ba packages/api/src/routes/settings.ts | sed -n '260,350p'",
+        "nl -ba packages/api/src/__tests__/routes/settings.test.ts | sed -n '1,240p'",
+        "nl -ba packages/api/src/__tests__/routes/settings.test.ts | sed -n '240,310p'",
+        "nl -ba packages/db/src/schema/post-media.ts | sed -n '1,80p'",
+        "sed -n '1,220p' packages/api/package.json",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/routes/settings.test.ts --configLoader runner",
+        "nl -ba packages/api/src/routes/settings.ts | sed -n '1,45p'",
+        "nl -ba packages/api/src/routes/settings.ts | sed -n '345,360p'",
+        "pnpm --filter @sms/api typecheck",
+        "git diff -- packages/api/src/routes/settings.ts packages/api/src/__tests__/routes/settings.test.ts"
+      ],
+      "createdAt": "2026-05-27T03:37:52.684Z"
+    }
+  ],
+  "signature": "sig_gh-9_9e26a2f7ba",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-9-9e26a2f7ba-6571cf46_911d61792c"
+  ],
+  "createdByRunId": "20260527T032330-c030b8",
+  "createdAt": "2026-05-27T03:23:30.044Z",
+  "updatedAt": "2026-05-27T03:37:52.684Z"
+}

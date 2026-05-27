@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-52_dc228ac421",
+  "title": "gh#52: Date picker icon barely visible on new-post page in dark mode",
+  "summary": "Imported from GitHub issue gh#52 in BACKLOG.md section \"Bugs\".",
+  "kind": "library",
+  "source": "github-issue-import",
+  "confidence": "low",
+  "entrypoints": [],
+  "ownedFiles": [],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#52"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#52",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/52",
+    "backlog-order:0036",
+    "backlog-section:bugs",
+    "label:bug"
+  ],
+  "trustBoundaries": [
+    "secrets",
+    "external-api"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-52-8fbcfdea91_d0628e4c4c"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T032330-c030b8",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#52",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T03:23:30.044Z"
+    }
+  ],
+  "createdAt": "2026-05-27T03:23:30.044Z",
+  "updatedAt": "2026-05-27T03:28:01.177Z"
+}

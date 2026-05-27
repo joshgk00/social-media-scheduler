@@ -24,6 +24,7 @@ import { invalidateOtherSessions, SESSION_PREFIX } from '../services/session.ser
 import { requireAuth } from '../middleware/auth-guard.js';
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const STORAGE_USAGE_CACHE_TTL_SECONDS = 5 * 60;
 const logger = createLogger('settings-routes');
 
 interface SettingsDependencies {
@@ -301,6 +302,25 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
   });
 
   router.get('/api/settings/storage', requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const cacheKey = `settings:storage:${userId}`;
+    let cachedUsage: string | null = null;
+
+    try {
+      cachedUsage = await redis.get(cacheKey);
+    } catch (err) {
+      logger.warn({ err, userId }, 'Failed to read storage usage cache');
+    }
+
+    if (cachedUsage) {
+      try {
+        res.json(JSON.parse(cachedUsage));
+        return;
+      } catch (err) {
+        logger.warn({ err, userId }, 'Failed to parse storage usage cache');
+      }
+    }
+
     const usageRows = await db.execute(sql`
       SELECT
         COALESCE(SUM(file_size), 0)::bigint AS total_size,
@@ -309,17 +329,26 @@ export function createSettingsRouter({ db, redis }: SettingsDependencies) {
         COALESCE(COUNT(*) FILTER (WHERE mime_type LIKE 'image/%'), 0)::int AS image_count,
         COALESCE(COUNT(*) FILTER (WHERE mime_type LIKE 'video/%'), 0)::int AS video_count
       FROM post_media
-      WHERE deleted_at IS NULL
+      WHERE user_id = ${userId}
+        AND deleted_at IS NULL
     `);
 
     const row = usageRows[0] as Record<string, unknown> | undefined;
-    res.json({
+    const usage = {
       totalSize: Number(row?.total_size ?? 0),
       imageSize: Number(row?.image_size ?? 0),
       videoSize: Number(row?.video_size ?? 0),
       imageCount: Number(row?.image_count ?? 0),
       videoCount: Number(row?.video_count ?? 0),
-    });
+    };
+
+    try {
+      await redis.set(cacheKey, JSON.stringify(usage), 'EX', STORAGE_USAGE_CACHE_TTL_SECONDS);
+    } catch (err) {
+      logger.warn({ err, userId }, 'Failed to write storage usage cache');
+    }
+
+    res.json(usage);
   });
 
   router.post('/api/settings/profile/image', requireAuth, (req, res, next) => {

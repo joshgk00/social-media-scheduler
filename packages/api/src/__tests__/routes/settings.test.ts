@@ -75,11 +75,19 @@ function createMockDb(executeResult?: unknown[]) {
 
 function createMockRedis() {
   return {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue('OK'),
     scanStream: vi.fn().mockReturnValue({ [Symbol.asyncIterator]: async function* () {} }),
   } as any;
 }
 
-function createTestApp(authenticated = true, dbOverride?: any) {
+function getSqlText(query: any) {
+  return query.queryChunks
+    .flatMap((chunk: any) => Array.isArray(chunk?.value) ? chunk.value : [])
+    .join('');
+}
+
+function createTestApp(authenticated = true, dbOverride?: any, redisOverride?: any) {
   const app = express();
   app.use(express.json());
 
@@ -93,14 +101,14 @@ function createTestApp(authenticated = true, dbOverride?: any) {
   });
 
   const db = dbOverride ?? createMockDb();
-  const redis = createMockRedis();
+  const redis = redisOverride ?? createMockRedis();
   app.use(createSettingsRouter({ db, redis }));
 
   app.use((_req: any, res: any) => {
     res.status(404).json({ error: 'Not found' });
   });
 
-  return { app, db };
+  return { app, db, redis };
 }
 
 describe('GET /api/settings/storage', () => {
@@ -124,7 +132,7 @@ describe('GET /api/settings/storage', () => {
     }];
 
     const db = createMockDb(mockExecuteResult);
-    const { app } = createTestApp(true, db);
+    const { app, redis } = createTestApp(true, db);
 
     const res = await request(app).get('/api/settings/storage');
 
@@ -139,6 +147,80 @@ describe('GET /api/settings/storage', () => {
     expect(res.body.videoSize).toBe(524288);
     expect(res.body.imageCount).toBe(5);
     expect(res.body.videoCount).toBe(2);
+    expect(redis.get).toHaveBeenCalledWith('settings:storage:test-user-id');
+    expect(redis.set).toHaveBeenCalledWith('settings:storage:test-user-id', JSON.stringify(res.body), 'EX', 300);
+
+    const storageSql = getSqlText(db.execute.mock.calls[0][0]);
+    expect(storageSql).toContain('WHERE user_id = ');
+    expect(storageSql).toContain('AND deleted_at IS NULL');
+    expect(db.execute.mock.calls[0][0].queryChunks).toContain('test-user-id');
+  });
+
+  it('returns cached storage usage without querying the database', async () => {
+    const cachedUsage = {
+      totalSize: 2048,
+      imageSize: 1024,
+      videoSize: 1024,
+      imageCount: 1,
+      videoCount: 1,
+    };
+    const db = createMockDb();
+    const redis = {
+      ...createMockRedis(),
+      get: vi.fn().mockResolvedValue(JSON.stringify(cachedUsage)),
+    };
+    const { app } = createTestApp(true, db, redis);
+
+    const res = await request(app).get('/api/settings/storage');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(cachedUsage);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the database when the storage cache read fails', async () => {
+    const db = createMockDb([{
+      total_size: '512',
+      image_size: '512',
+      video_size: '0',
+      image_count: 1,
+      video_count: 0,
+    }]);
+    const redis = {
+      ...createMockRedis(),
+      get: vi.fn().mockRejectedValue(new Error('redis unavailable')),
+    };
+    const { app } = createTestApp(true, db, redis);
+
+    const res = await request(app).get('/api/settings/storage');
+
+    expect(res.status).toBe(200);
+    expect(res.body.totalSize).toBe(512);
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect(redis.set).toHaveBeenCalledWith('settings:storage:test-user-id', JSON.stringify(res.body), 'EX', 300);
+  });
+
+  it('ignores malformed cached storage usage and refreshes from the database', async () => {
+    const db = createMockDb([{
+      total_size: '1024',
+      image_size: '0',
+      video_size: '1024',
+      image_count: 0,
+      video_count: 1,
+    }]);
+    const redis = {
+      ...createMockRedis(),
+      get: vi.fn().mockResolvedValue('{not-json'),
+    };
+    const { app } = createTestApp(true, db, redis);
+
+    const res = await request(app).get('/api/settings/storage');
+
+    expect(res.status).toBe(200);
+    expect(res.body.totalSize).toBe(1024);
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect(redis.set).toHaveBeenCalledWith('settings:storage:test-user-id', JSON.stringify(res.body), 'EX', 300);
   });
 
   it('returns zeros when no media exists', async () => {
