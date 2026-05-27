@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-11-977a4effb6_34719afc03",
+  "featureId": "feat_gh-11_82351ecd5c",
+  "title": "gh#11: Deps: Make S3 storage support optional in @sms/shared",
+  "category": "build-release",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/shared/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/shared/src/storage/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/11.\nBacklog section: Refactoring / type safety.\n\n## Problem\n\n`@aws-sdk/client-s3` is currently a production dependency of `@sms/shared`, and `packages/shared/src/storage/index.ts` statically imports `S3Storage`. That means every workspace consumer of `@sms/shared` can pull the AWS SDK graph even though S3 is optional and the default deployment uses local filesystem storage.\n\n## Decision\n\nUse the optional-peer + lazy-import approach.\n\nKeep the storage abstraction in `@sms/shared`, but make the AWS SDK dependency optional and load it only when S3 is actually configured.\n\n## Implementation direction\n\n- Move `@aws-sdk/client-s3` out of `@sms/shared.dependencies`.\n- Add it to `@sms/shared.peerDependencies` with `peerDependenciesMeta.optional: true`.\n- Keep it in `@sms/shared.devDependencies` so shared typecheck/tests still work.\n- Add `@aws-sdk/client-s3` to `@sms/api` and `@sms/worker` production dependencies so S3-capable runtime images still include it.\n- Refactor `S3Storage` to lazy-load the AWS SDK with `await import('@aws-sdk/client-s3')` from inside the S3 code path. Use type-only imports where useful.\n- Keep `createStorageBackend()` returning local storage by default when `MEDIA_STORAGE_BACKEND` is unset or `local`.\n- If `MEDIA_STORAGE_BACKEND=s3` but the optional dependency is unavailable, throw a clear configuration error naming `@aws-sdk/client-s3` and the S3 backend.\n\n## Acceptance criteria\n\n- `@sms/shared` no longer has `@aws-sdk/client-s3` in production `dependencies`.\n- Local-storage deployments do not import or initialize the AWS SDK.\n- S3 deployments still work when API/worker runtime deps include `@aws-sdk/client-s3`.\n- `pnpm --filter @sms/shared typecheck` passes.\n- `pnpm --filter @sms/shared test -- storage` passes, or the closest focused storage test command.\n- API and worker builds still pass after dependency changes.\n\n## Out of scope\n\n- Moving storage ownership out of `@sms/shared`.\n- Removing S3 support.\n- Changing the `StorageBackend` public contract except where #27 adds lifecycle cleanup.\n\n## References\n\n- Related lifecycle/storage contract cleanup: #27\n- Related storage tests: #28",
+  "reproduction": "`@aws-sdk/client-s3` is currently a production dependency of `@sms/shared`, and `packages/shared/src/storage/index.ts` statically imports `S3Storage`. That means every workspace consumer of `@sms/shared` can pull the AWS SDK graph even though S3 is optional and the default deployment uses local filesystem storage.",
+  "recommendation": "Implement the fix described by GitHub issue gh#11 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/shared/src/index.ts, packages/shared/src/storage/index.ts, packages/api/src/index.ts, packages/worker/src/index.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T050943-2ad232",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. The issue remains open: packages/shared/package.json still lists @aws-sdk/client-s3 under production dependencies at lines 42-43, with no shared peerDependencies or peerDependenciesMeta optional entry. packages/shared/src/storage/index.ts still statically imports S3Storage at line 3 and constructs it synchronously at lines 16-22. packages/shared/src/storage/s3-storage.ts still statically imports S3Client and command classes from @aws-sdk/client-s3 at lines 1-7. packages/api/package.json and packages/worker/package.json dependencies do not include @aws-sdk/client-s3, so the proposed runtime dependency move has not happened. Typecheck passes for shared, api, and worker, but that only shows the current static dependency graph compiles. The focused storage test command could not run in this read-only sandbox because Vitest/Vite attempted to write packages/shared/node_modules/.vite-temp and failed with EPERM; the current storage test source still imports S3Storage directly and mocks @aws-sdk/client-s3, so it does not demonstrate optional/lazy AWS SDK behavior.",
+      "commands": [
+        "pwd && git status --short",
+        "rg -n \"@aws-sdk/client-s3|S3Storage|createStorageBackend|MEDIA_STORAGE_BACKEND|peerDependencies|peerDependenciesMeta|dependencies|devDependencies\" package.json packages/shared/package.json packages/api/package.json packages/worker/package.json packages/shared/src packages/api/src/index.ts packages/worker/src/index.ts",
+        "rg --files packages/shared/src packages/api/src packages/worker/src packages/shared/test packages/shared/tests 2>/dev/null",
+        "sed -n '1,220p' packages/shared/package.json",
+        "sed -n '1,220p' packages/api/package.json",
+        "sed -n '1,220p' packages/worker/package.json",
+        "sed -n '1,220p' packages/shared/src/storage/index.ts",
+        "sed -n '1,260p' packages/shared/src/storage/s3-storage.ts",
+        "sed -n '1,240p' packages/shared/src/__tests__/storage.test.ts",
+        "sed -n '1,220p' packages/shared/src/index.ts",
+        "sed -n '1,130p' packages/api/src/index.ts",
+        "sed -n '1,140p' packages/worker/src/index.ts",
+        "rg -n '\"@aws-sdk/client-s3\"|peerDependencies|peerDependenciesMeta' pnpm-lock.yaml packages/*/package.json",
+        "nl -ba packages/shared/package.json | sed -n '38,56p'",
+        "nl -ba packages/api/package.json | sed -n '10,45p'",
+        "nl -ba packages/worker/package.json | sed -n '10,30p'",
+        "nl -ba packages/shared/src/storage/index.ts | sed -n '1,35p'",
+        "nl -ba packages/shared/src/storage/s3-storage.ts | sed -n '1,55p'",
+        "nl -ba packages/shared/src/__tests__/storage.test.ts | sed -n '1,30p;165,206p'",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/shared test -- storage",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/worker typecheck"
+      ],
+      "createdAt": "2026-05-27T05:11:11.535Z"
+    },
+    {
+      "runId": "20260527T051926-55fcc9",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "Original evidence paths still exist. Current source and manifests implement the requested optional-peer/lazy-import fix: @sms/shared no longer has @aws-sdk/client-s3 in production dependencies, has it as an optional peer plus devDependency, and @sms/api and @sms/worker now carry it as runtime dependencies. packages/shared/src/storage/index.ts defaults to LocalStorage and uses LazyS3Storage with dynamic import('./s3-storage.js'); packages/shared/src/storage/s3-storage.ts uses type-only SDK references and lazy import('@aws-sdk/client-s3') with a clear missing-dependency error. rg found no static value import of @aws-sdk/client-s3 under packages/shared/src. Shared, API, and worker typechecks pass. The focused Vitest storage test could not execute in this read-only sandbox because Vitest/Vite attempted to write temp files and failed with EPERM. Ignored dist artifacts are stale on disk, but dist/ is gitignored and Docker/package scripts rebuild from source, so the source-of-truth finding is fixed.",
+      "commands": [
+        "pwd",
+        "git status --short",
+        "rg -n '@aws-sdk/client-s3|S3Storage|createStorageBackend|MEDIA_STORAGE_BACKEND|peerDependencies|peerDependenciesMeta|dependencies|devDependencies' package.json packages/shared/package.json packages/api/package.json packages/worker/package.json packages/shared/src packages/api/src/index.ts packages/worker/src/index.ts",
+        "sed -n '1,140p' packages/shared/package.json",
+        "sed -n '1,90p' packages/api/package.json",
+        "sed -n '1,70p' packages/worker/package.json",
+        "sed -n '1,140p' packages/shared/src/storage/index.ts",
+        "sed -n '1,220p' packages/shared/src/storage/s3-storage.ts",
+        "sed -n '1,280p' packages/shared/src/__tests__/storage.test.ts",
+        "rg -n '^import .*@aws-sdk/client-s3|from '\\''@aws-sdk/client-s3'\\''|import\\('\\''@aws-sdk/client-s3'\\''\\)|@aws-sdk/client-s3' packages/shared/src packages/api/src packages/worker/src packages/shared/package.json packages/api/package.json packages/worker/package.json pnpm-lock.yaml",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/worker typecheck",
+        "pnpm --filter @sms/shared test -- storage",
+        "pnpm --filter @sms/shared exec vitest run src/__tests__/storage.test.ts --configLoader runner",
+        "git status --short --ignored packages/shared/dist/storage/index.js packages/shared/dist/storage/s3-storage.js packages/shared/dist/storage/s3-storage.d.ts",
+        "rg -n 'pnpm .*build|dist/index.js|@sms/shared/storage|createStorageBackend' . -g 'Dockerfile' -g 'docker-compose*.yml' -g 'package.json' -g '!node_modules' -g '!dist'"
+      ],
+      "createdAt": "2026-05-27T05:24:05.229Z"
+    }
+  ],
+  "signature": "sig_gh-11_977a4effb6",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T05:24:05.229Z"
+}

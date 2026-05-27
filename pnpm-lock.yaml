@@ -26,6 +26,9 @@ importers:
 
   packages/api:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ~3.1030.0
+        version: 3.1030.0
       '@bull-board/api':
         specifier: ~6.21.0
         version: 6.21.0(@bull-board/ui@6.21.0)
@@ -172,9 +175,6 @@ importers:
 
   packages/shared:
     dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ~3.1030.0
-        version: 3.1030.0
       drizzle-orm:
         specifier: ~0.45.2
         version: 0.45.2(postgres@3.4.9)
@@ -194,6 +194,9 @@ importers:
         specifier: ~3.25.76
         version: 3.25.76
     devDependencies:
+      '@aws-sdk/client-s3':
+        specifier: ~3.1030.0
+        version: 3.1030.0
       '@types/luxon':
         specifier: ^3.7.1
         version: 3.7.1
@@ -393,6 +396,9 @@ importers:
 
   packages/worker:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ~3.1030.0
+        version: 3.1030.0
       '@sms/db':
         specifier: workspace:*
         version: link:../db

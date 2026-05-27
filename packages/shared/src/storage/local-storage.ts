@@ -54,6 +54,8 @@ export class LocalStorage implements StorageBackend {
     }
   }
 
+  async destroy(): Promise<void> {}
+
   private resolveAndGuard(key: string): string {
     const resolved = path.resolve(this.rootDir, key);
     if (!resolved.startsWith(this.rootDir + path.sep) && resolved !== this.rootDir) {

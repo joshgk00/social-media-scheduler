@@ -8,11 +8,17 @@ import { createStorageBackend } from '../storage/index.js';
 
 // Mock @aws-sdk/client-s3 before any imports that use it
 const sendMock = vi.fn();
+const s3ClientConstructorMock = vi.fn();
+const s3ClientDestroyMock = vi.fn();
 
 vi.mock('@aws-sdk/client-s3', () => {
   class MockS3Client {
+    constructor(public config: Record<string, unknown>) {
+      s3ClientConstructorMock(config);
+    }
+
     send = sendMock;
-    destroy = vi.fn();
+    destroy = s3ClientDestroyMock;
   }
   return {
     S3Client: MockS3Client,
@@ -52,6 +58,12 @@ describe('LocalStorage', () => {
     expect(retrieved).toEqual(content);
   });
 
+  it('save() does not create content-type sidecar metadata', async () => {
+    await storage.save('uploads/image.jpg', Buffer.from('image'), 'image/jpeg');
+
+    await expect(fs.access(path.join(tmpDir, 'uploads/image.jpg.meta'))).rejects.toThrow();
+  });
+
   it('delete() removes the file', async () => {
     const content = Buffer.from('to delete');
     await storage.save('deleteme.txt', content, 'text/plain');
@@ -78,6 +90,10 @@ describe('LocalStorage', () => {
     expect(storage.getUrl('profiles/123/image.jpg')).toBe('/media/profiles/123/image.jpg');
   });
 
+  it('destroy() is a no-op lifecycle hook', async () => {
+    await expect(storage.destroy()).resolves.toBeUndefined();
+  });
+
   it('rejects path traversal attempts with ../', async () => {
     await expect(storage.save('../escape.txt', Buffer.from('bad'), 'text/plain')).rejects.toThrow();
     await expect(storage.get('../../etc/passwd')).rejects.toThrow();
@@ -95,6 +111,8 @@ describe('S3Storage', () => {
 
   beforeEach(() => {
     sendMock.mockReset();
+    s3ClientConstructorMock.mockReset();
+    s3ClientDestroyMock.mockReset();
 
     storage = new S3Storage({
       endpoint: 'http://minio:9000',
@@ -160,6 +178,64 @@ describe('S3Storage', () => {
     sendMock.mockRejectedValueOnce(notFoundError);
     expect(await storage.exists('uploads/missing.jpg')).toBe(false);
   });
+
+  it('throws a clear error when the optional AWS SDK dependency cannot load', async () => {
+    const storageWithoutSdk = new S3Storage(
+      {
+        endpoint: 'http://minio:9000',
+        bucket: 'test-bucket',
+        accessKey: 'testkey',
+        secretKey: 'testsecret',
+      },
+      async () => {
+        throw new Error('Cannot find package');
+      },
+    );
+
+    await expect(storageWithoutSdk.exists('uploads/file.jpg')).rejects.toThrow(
+      'S3 backend requires optional dependency "@aws-sdk/client-s3"',
+    );
+  });
+
+  it('retries SDK loading after a transient load failure', async () => {
+    const sdk = await import('@aws-sdk/client-s3');
+    const loadSdk = vi.fn()
+      .mockRejectedValueOnce(new Error('temporary import failure'))
+      .mockResolvedValueOnce(sdk);
+    const storageWithFlakySdk = new S3Storage(
+      {
+        endpoint: 'http://minio:9000',
+        bucket: 'test-bucket',
+        accessKey: 'testkey',
+        secretKey: 'testsecret',
+      },
+      loadSdk,
+    );
+
+    await expect(storageWithFlakySdk.exists('uploads/file.jpg')).rejects.toThrow(
+      'S3 backend requires optional dependency "@aws-sdk/client-s3"',
+    );
+
+    sendMock.mockResolvedValueOnce({});
+    await expect(storageWithFlakySdk.exists('uploads/file.jpg')).resolves.toBe(true);
+    expect(loadSdk).toHaveBeenCalledTimes(2);
+  });
+
+  it('destroy() is a no-op before the S3 client is initialized', async () => {
+    await expect(storage.destroy()).resolves.toBeUndefined();
+
+    expect(s3ClientConstructorMock).not.toHaveBeenCalled();
+    expect(s3ClientDestroyMock).not.toHaveBeenCalled();
+  });
+
+  it('destroy() destroys the initialized S3 client', async () => {
+    sendMock.mockResolvedValueOnce({});
+    await storage.exists('uploads/file.jpg');
+
+    await storage.destroy();
+
+    expect(s3ClientDestroyMock).toHaveBeenCalledOnce();
+  });
 });
 
 describe('createStorageBackend', () => {
@@ -167,6 +243,9 @@ describe('createStorageBackend', () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    sendMock.mockReset();
+    s3ClientConstructorMock.mockReset();
+    s3ClientDestroyMock.mockReset();
   });
 
   afterEach(() => {
@@ -177,22 +256,43 @@ describe('createStorageBackend', () => {
     delete process.env.MEDIA_STORAGE_BACKEND;
     const backend = createStorageBackend();
     expect(backend).toBeInstanceOf(LocalStorage);
+    expect(s3ClientConstructorMock).not.toHaveBeenCalled();
   });
 
   it('returns LocalStorage when MEDIA_STORAGE_BACKEND is "local"', () => {
     process.env.MEDIA_STORAGE_BACKEND = 'local';
     const backend = createStorageBackend();
     expect(backend).toBeInstanceOf(LocalStorage);
+    expect(s3ClientConstructorMock).not.toHaveBeenCalled();
   });
 
-  it('returns S3Storage when MEDIA_STORAGE_BACKEND is "s3" and env vars set', () => {
+  it('returns an S3 backend without initializing AWS SDK until it is used', async () => {
     process.env.MEDIA_STORAGE_BACKEND = 's3';
     process.env.S3_ENDPOINT = 'http://minio:9000';
     process.env.S3_BUCKET = 'media';
     process.env.S3_ACCESS_KEY = 'key';
     process.env.S3_SECRET_KEY = 'secret';
     const backend = createStorageBackend();
-    expect(backend).toBeInstanceOf(S3Storage);
+    expect(backend.getUrl('uploads/file.jpg')).toBe('http://minio:9000/media/uploads/file.jpg');
+    expect(s3ClientConstructorMock).not.toHaveBeenCalled();
+
+    sendMock.mockResolvedValueOnce({});
+    expect(await backend.exists('uploads/file.jpg')).toBe(true);
+    expect(s3ClientConstructorMock).toHaveBeenCalledOnce();
+  });
+
+  it('destroy() on an unused S3 backend does not initialize AWS SDK', async () => {
+    process.env.MEDIA_STORAGE_BACKEND = 's3';
+    process.env.S3_ENDPOINT = 'http://minio:9000';
+    process.env.S3_BUCKET = 'media';
+    process.env.S3_ACCESS_KEY = 'key';
+    process.env.S3_SECRET_KEY = 'secret';
+    const backend = createStorageBackend();
+
+    await backend.destroy?.();
+
+    expect(s3ClientConstructorMock).not.toHaveBeenCalled();
+    expect(s3ClientDestroyMock).not.toHaveBeenCalled();
   });
 
   it('throws when MEDIA_STORAGE_BACKEND is "s3" but S3_ENDPOINT is missing', () => {

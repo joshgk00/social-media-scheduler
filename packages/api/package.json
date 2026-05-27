@@ -11,6 +11,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "~3.1030.0",
     "@bull-board/api": "~6.21.0",
     "@bull-board/express": "~6.21.0",
     "@sms/db": "workspace:*",
