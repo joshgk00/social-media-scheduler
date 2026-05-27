@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-12-d3dda3272a_adac5ec26c",
+  "featureId": "feat_gh-12_ee1701603a",
+  "title": "gh#12: Tests: Add real auth middleware coverage for media/settings routes",
+  "category": "security",
+  "severity": "critical",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/api/src/__tests__/routes/media.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/__tests__/routes/settings.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/12.\nBacklog section: Tests.\n\n## Problem\n\nmedia.test.ts and settings.test.ts mock requireAuth entirely. No test verifies that the real middleware rejects unauthenticated requests on the 4 new media endpoints. Repo standard requires 100% branch coverage on security-critical middleware.\n\n## Identified by\n\nCode quality review Run 1 — test-quality-analyzer (finding 3)\n\n## Fix\n\nAdd integration-level tests per new endpoint that boot the real createApp (no auth mock) and hit each endpoint without a session, asserting 401.\n\n## Files\n\n- `packages/api/src/__tests__/routes/media.test.ts`\n- `packages/api/src/__tests__/routes/settings.test.ts`",
+  "reproduction": "media.test.ts and settings.test.ts mock requireAuth entirely. No test verifies that the real middleware rejects unauthenticated requests on the 4 new media endpoints. Repo standard requires 100% branch coverage on security-critical middleware.",
+  "recommendation": "Add integration-level tests per new endpoint that boot the real createApp (no auth mock) and hit each endpoint without a session, asserting 401.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/__tests__/routes/media.test.ts, packages/api/src/__tests__/routes/settings.test.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T055849-1b1264",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence files still exist. packages/api/src/__tests__/routes/media.test.ts still mocks ../../middleware/auth-guard.js and only checks unauthenticated POST /api/media/upload through that mock; it has no unauthenticated 401 coverage for GET /api/media/:id/status, POST /api/media/:id/retry, or DELETE /api/media/:id. A repo-wide search found no other /api/media route tests using real createApp. packages/api/src/__tests__/routes/settings.test.ts also still mocks requireAuth, though packages/api/src/__tests__/settings.test.ts now has real createApp 401 coverage for settings routes. Because the requested media endpoint real-auth coverage is still missing, the finding remains open. Attempted targeted Vitest execution could not start in this read-only sandbox because Vite tried to write packages/api/node_modules/.vite-temp/vitest.config.ts.timestamp-*.mjs and failed with EPERM.",
+      "commands": [
+        "pwd && rg --files packages/api/src/__tests__/routes packages/api/src | rg '(__tests__/routes/(media|settings)\\.test\\.ts|auth|media|settings)'",
+        "git status --short",
+        "nl -ba packages/api/src/__tests__/routes/media.test.ts",
+        "nl -ba packages/api/src/__tests__/routes/settings.test.ts",
+        "nl -ba packages/api/src/routes/media.ts",
+        "nl -ba packages/api/src/routes/settings.ts",
+        "rg -n \"createApp|requireAuth|Authentication required|/api/media/.*/(status|retry)|/api/media/upload|delete\\('/api/media|\\.delete\\('/api/media|settings.*without authenticated|without session|401\" packages/api/src/__tests__ packages/api/src/routes packages/api/src/middleware",
+        "rg -n \"function createApp|export function createApp|const createApp|createApp\\(\" packages/api/src",
+        "nl -ba packages/api/src/middleware/auth-guard.ts",
+        "rg -n \"vitest|test\" packages/api/package.json package.json pnpm-workspace.yaml",
+        "rg -n \"/api/media|createMediaRouter|media routes|media route\" packages/api/src packages/api/test packages/api/tests",
+        "nl -ba packages/api/src/__tests__/settings.test.ts",
+        "nl -ba packages/api/src/app.ts",
+        "find packages/api/src/__tests__ -maxdepth 3 -type f -name '*media*' -o -name '*settings*'",
+        "nl -ba packages/api/package.json",
+        "nl -ba package.json",
+        "rg -n \"media|storage|settings|auth middleware|real createApp|requireAuth\" BACKLOG.md packages/api/src/__tests__",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/routes/media.test.ts packages/api/src/__tests__/routes/settings.test.ts packages/api/src/__tests__/settings.test.ts"
+      ],
+      "createdAt": "2026-05-27T06:00:05.000Z"
+    },
+    {
+      "runId": "20260527T060653-6ec279",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence files still exist. Current packages/api/src/__tests__/routes/media.test.ts no longer mocks auth-guard/requireAuth and now defines createRealAuthApp with createApp, then asserts unauthenticated 401 plus { error: 'Authentication required' } for all four media endpoints: POST /api/media/upload, GET /api/media/:id/status, POST /api/media/:id/retry, and DELETE /api/media/:id. packages/api/src/routes/media.ts still protects those endpoints with requireAuth. Current packages/api/src/__tests__/routes/settings.test.ts also does not mock auth-guard, and packages/api/src/__tests__/settings.test.ts boots createApp with the real auth middleware and has unauthenticated 401 coverage across settings routes. Targeted Vitest execution could not run in this read-only sandbox because Vitest attempted to mkdir under the system temp directory and failed with EPERM, but the current code/test evidence shows the requested real-auth coverage was added.",
+      "commands": [
+        "pwd",
+        "rg --files packages/api/src packages/api/test packages/api/tests 2>/dev/null | rg '(__tests__/(routes/)?(media|settings)\\.test\\.ts|routes/(media|settings)\\.ts|middleware/auth-guard\\.ts|app\\.ts)$'",
+        "git status --short",
+        "nl -ba packages/api/src/__tests__/routes/media.test.ts",
+        "nl -ba packages/api/src/__tests__/routes/settings.test.ts",
+        "nl -ba packages/api/src/__tests__/settings.test.ts",
+        "nl -ba packages/api/src/routes/media.ts",
+        "nl -ba packages/api/src/routes/settings.ts",
+        "nl -ba packages/api/src/middleware/auth-guard.ts",
+        "nl -ba packages/api/src/app.ts",
+        "rg -n \"vi\\.mock\\(['\\\"]\\.\\./\\.\\./middleware/auth-guard|vi\\.mock\\(['\\\"]\\.\\./middleware/auth-guard|requireAuth|createRealAuthApp|Authentication required|/api/media/(upload|[^/]+/status|[^/]+/retry)|delete\\('/api/media|createApp\\(\" packages/api/src/__tests__ packages/api/src/routes packages/api/src/middleware",
+        "nl -ba packages/api/package.json",
+        "nl -ba package.json",
+        "rg -n \"configLoader|vite-temp|vitest\" packages/api package.json pnpm-lock.yaml",
+        "nl -ba packages/api/vitest.config.ts",
+        "pnpm --filter @sms/api exec vitest --help | rg -n \"configLoader|run|cache\"",
+        "pnpm --filter @sms/api exec vitest run --configLoader runner src/__tests__/routes/media.test.ts src/__tests__/routes/settings.test.ts src/__tests__/settings.test.ts",
+        "rg -n \"vi\\.mock\\([^\\n]*(auth-guard|requireAuth)|requireAuth:|mockRequireAuth|Authentication required|createRealAuthApp|returns 401 for unauthenticated\" packages/api/src/__tests__/routes/media.test.ts packages/api/src/__tests__/routes/settings.test.ts packages/api/src/__tests__/settings.test.ts"
+      ],
+      "createdAt": "2026-05-27T06:08:23.839Z"
+    }
+  ],
+  "signature": "sig_gh-12_d3dda3272a",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-12-d3dda3272a-adac5ec_99cd12d4e2"
+  ],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T06:08:23.839Z"
+}

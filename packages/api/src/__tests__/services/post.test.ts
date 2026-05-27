@@ -91,7 +91,7 @@ vi.mock('@sms/shared/logger', () => ({
 const mockSoftDeleteMediaForPost = vi.fn().mockResolvedValue(0);
 const mockAssociateMediaToPost = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('../../services/media.service.js', () => ({
+vi.mock('../../services/media-lifecycle.service.js', () => ({
   softDeleteMediaForPost: (...args: unknown[]) => mockSoftDeleteMediaForPost(...args),
   associateMediaToPost: (...args: unknown[]) => mockAssociateMediaToPost(...args),
 }));

@@ -19,8 +19,8 @@ interface BulkImportRouterDeps {
   bulkOperationFactory: BulkOperationFactory;
 }
 
-function requestCorrelationId(req: { id?: string }): string {
-  return req.id ?? randomUUID();
+function requestCorrelationId(req: Request): string {
+  return typeof req.id === 'string' ? req.id : randomUUID();
 }
 
 function csvValidationDetails(errors: CsvRowError[]) {
@@ -200,7 +200,7 @@ export function createBulkImportRouter({ db, bulkOperationFactory }: BulkImportR
           params: target === 'scheduled'
             ? { profileId, rows: parsedCsv.rows, errors: parsedCsv.errors }
             : { profileId, queueId, rows: parsedCsv.rows, errors: parsedCsv.errors },
-          correlationId: requestCorrelationId(req as { id?: string }),
+          correlationId: requestCorrelationId(req),
         });
 
         res.status(202).json(bulkOperation.replay

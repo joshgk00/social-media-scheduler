@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import type { Queue } from 'bullmq';
+import { createMockRedis } from '../helpers/mock-redis.js';
+import { createMockSql } from '../helpers/mock-sql.js';
 
 const mockProcessImageUpload = vi.fn();
 const mockProcessVideoUpload = vi.fn();
@@ -14,11 +16,20 @@ vi.mock('node:fs/promises', () => ({
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
-vi.mock('../../services/media.service.js', () => ({
+vi.mock('../../services/media-upload.service.js', () => ({
   processImageUpload: (...args: unknown[]) => mockProcessImageUpload(...args),
   processVideoUpload: (...args: unknown[]) => mockProcessVideoUpload(...args),
+}));
+
+vi.mock('../../services/media-query.service.js', () => ({
   getMediaStatus: (...args: unknown[]) => mockGetMediaStatus(...args),
+}));
+
+vi.mock('../../services/media-lifecycle.service.js', () => ({
   softDeleteMedia: (...args: unknown[]) => mockSoftDeleteMedia(...args),
+}));
+
+vi.mock('../../services/media-retry.service.js', () => ({
   retryTranscode: (...args: unknown[]) => mockRetryTranscode(...args),
 }));
 
@@ -40,31 +51,15 @@ vi.mock('../../middleware/media-upload.js', () => ({
   },
 }));
 
-vi.mock('../../middleware/auth-guard.js', () => ({
-  requireAuth: (req: any, res: any, next: any) => {
-    if (!req.session?.userId) {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
-    next();
-  },
+vi.mock('../../middleware/csrf.js', () => ({
+  doubleCsrfProtection: (_req: any, _res: any, next: any) => next(),
+  generateCsrfToken: () => 'test-csrf-token',
 }));
 
+import { createApp } from '../../app.js';
 import { createMediaRouter } from '../../routes/media.js';
 
-function createTestApp(authenticated = true) {
-  const app = express();
-  app.use(express.json());
-
-  app.use((req: any, _res, next) => {
-    if (authenticated) {
-      req.session = { userId: 'test-user-id' };
-    } else {
-      req.session = {};
-    }
-    next();
-  });
-
+function createMockMediaDependencies() {
   const mockStorage = {
     save: vi.fn().mockResolvedValue(undefined),
     get: vi.fn().mockResolvedValue(Buffer.from('data')),
@@ -92,6 +87,24 @@ function createTestApp(authenticated = true) {
     transaction: vi.fn(),
   };
 
+  return { mockDb, mockStorage, mockQueue };
+}
+
+function createTestApp(authenticated = true) {
+  const app = express();
+  app.use(express.json());
+
+  app.use((req: any, _res, next) => {
+    if (authenticated) {
+      req.session = { userId: 'test-user-id' };
+    } else {
+      req.session = {};
+    }
+    next();
+  });
+
+  const { mockDb, mockStorage, mockQueue } = createMockMediaDependencies();
+
   const router = createMediaRouter({
     db: mockDb,
     storage: mockStorage,
@@ -102,6 +115,20 @@ function createTestApp(authenticated = true) {
 
   app.use((err: any, _req: any, res: any, _next: any) => {
     res.status(err.statusCode || 500).json({ error: err.message || 'Internal error' });
+  });
+
+  return { app, mockDb, mockStorage, mockQueue };
+}
+
+function createRealAuthApp() {
+  const { mockDb, mockStorage, mockQueue } = createMockMediaDependencies();
+  const app = createApp({
+    redis: createMockRedis(),
+    sql: createMockSql(),
+    db: mockDb,
+    sessionSecret: 'test-secret-that-is-long-enough-for-session',
+    storage: mockStorage,
+    transcodeQueue: mockQueue,
   });
 
   return { app, mockDb, mockStorage, mockQueue };
@@ -127,6 +154,47 @@ function withUpload(
 describe('media routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('real auth middleware integration', () => {
+    it('returns 401 for unauthenticated upload requests', async () => {
+      const { app } = createRealAuthApp();
+
+      const response = await request(app).post('/api/media/upload');
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Authentication required' });
+    });
+
+    it('returns 401 for unauthenticated status requests', async () => {
+      const { app } = createRealAuthApp();
+
+      const response = await request(app)
+        .get('/api/media/550e8400-e29b-41d4-a716-446655440001/status');
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Authentication required' });
+    });
+
+    it('returns 401 for unauthenticated retry requests', async () => {
+      const { app } = createRealAuthApp();
+
+      const response = await request(app)
+        .post('/api/media/550e8400-e29b-41d4-a716-446655440001/retry');
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Authentication required' });
+    });
+
+    it('returns 401 for unauthenticated delete requests', async () => {
+      const { app } = createRealAuthApp();
+
+      const response = await request(app)
+        .delete('/api/media/550e8400-e29b-41d4-a716-446655440001');
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: 'Authentication required' });
+    });
   });
 
   describe('POST /api/media/upload', () => {

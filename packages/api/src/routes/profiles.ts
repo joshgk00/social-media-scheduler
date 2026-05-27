@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Router, type NextFunction } from 'express';
+import { Router, type NextFunction, type Request } from 'express';
 import { and, eq } from 'drizzle-orm';
 import {
   createProfileSchema,
@@ -28,8 +28,9 @@ import { validateUuidParam } from '../middleware/validation.js';
 const logger = createLogger('profiles-router');
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function requestCorrelationId(req: { id?: string }): string {
-  return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
+function requestCorrelationId(req: Request): string {
+  const requestId = req.id;
+  return typeof requestId === 'string' && UUID_PATTERN.test(requestId) ? requestId : randomUUID();
 }
 
 interface ProfilesDependencies {
@@ -89,8 +90,8 @@ export function createProfilesRouter({ db, getTokenVault }: ProfilesDependencies
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
-      const correlationId = requestCorrelationId(req as { id?: string });
-      (req as { id?: string }).id = correlationId;
+      const correlationId = requestCorrelationId(req);
+      req.id = correlationId;
       logger.error(
         { err, profileId, userId, correlationId },
         'Profile delete failed',
@@ -139,8 +140,8 @@ export function createProfilesRouter({ db, getTokenVault }: ProfilesDependencies
       // log entry with the original error so future repros are diagnosable
       // from logs alone (gh#54), then forward a typed 500 with a stable code
       // so the client can surface a request-id to the user.
-      const correlationId = requestCorrelationId(req as { id?: string });
-      (req as { id?: string }).id = correlationId;
+      const correlationId = requestCorrelationId(req);
+      req.id = correlationId;
       logger.error(
         { err, profileId, userId, correlationId },
         'Profile update failed',

@@ -27,15 +27,14 @@ vi.mock('node:fs', () => ({
 }));
 
 import sharp from 'sharp';
+import { processImageUpload, processVideoUpload } from '../../services/media-upload.service.js';
+import { getMediaStatus } from '../../services/media-query.service.js';
 import {
-  processImageUpload,
-  processVideoUpload,
-  getMediaStatus,
+  associateMediaToPost,
   softDeleteMedia,
   softDeleteMediaForPost,
-  retryTranscode,
-  associateMediaToPost,
-} from '../../services/media.service.js';
+} from '../../services/media-lifecycle.service.js';
+import { retryTranscode } from '../../services/media-retry.service.js';
 
 function createMockStorage() {
   return {
