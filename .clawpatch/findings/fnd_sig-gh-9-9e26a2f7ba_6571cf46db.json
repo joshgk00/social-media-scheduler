@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-9-9e26a2f7ba_6571cf46db",
+  "featureId": "feat_gh-9_9d2eb77dd2",
+  "title": "gh#9: Perf: Cache /api/settings/storage aggregate query",
+  "category": "performance",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/api/src/routes/settings.ts",
+      "startLine": 285,
+      "endLine": 307,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/9.\nBacklog section: Performance.\n\n## Problem\n\n`GET /api/settings/storage` runs an unbounded SUM/COUNT aggregate across the entire post_media table on every request. No cache, no user scoping.\n\n## Identified by\n\nCode quality review Run 1 — performance-optimizer (perf-004)\n\n## Fix\n\nAdd a 5-minute Redis cache keyed by userId. Also scope the query to the authenticated user's media.\n\n## Files\n\n- `packages/api/src/routes/settings.ts:285-307`",
+  "reproduction": "`GET /api/settings/storage` runs an unbounded SUM/COUNT aggregate across the entire post_media table on every request. No cache, no user scoping.",
+  "recommendation": "Add a 5-minute Redis cache keyed by userId. Also scope the query to the authenticated user's media.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/routes/settings.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-9_9e26a2f7ba",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T032330-c030b8",
+  "createdAt": "2026-05-27T03:23:30.044Z",
+  "updatedAt": "2026-05-27T03:23:30.044Z"
+}
