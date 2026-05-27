@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-78_8f0a2e2545",
+  "title": "gh#78: Express Request module augmentation for req.id to remove ad-hoc type casts",
+  "summary": "Imported from GitHub issue gh#78 in BACKLOG.md section \"Refactoring / type safety\".",
+  "kind": "route",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/api/src/middleware/error-handler.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/api/src/routes/profiles.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/api/src/types/express.d.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/middleware/error-handler.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/api/src/routes/profiles.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/api/src/types/express.d.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#78"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#78",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/78",
+    "backlog-order:0046",
+    "backlog-section:refactoring-type-safety",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "auth",
+    "network",
+    "filesystem"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-78-d07a848d62_a09c311972"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#78",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:58:25.838Z"
+}

@@ -1,4 +1,4 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { DateTime } from 'luxon';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -43,8 +43,9 @@ const queuePostsQuerySchema = postQuerySchema
   .pick({ search: true, searchScope: true })
   .extend({ limit: z.coerce.number().int().min(1).max(100).optional() });
 
-function requestCorrelationId(req: { id?: string }): string {
-  return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
+function requestCorrelationId(req: Request): string {
+  const requestId = req.id;
+  return typeof requestId === 'string' && UUID_PATTERN.test(requestId) ? requestId : randomUUID();
 }
 
 interface QueuesDependencies {
@@ -241,7 +242,7 @@ export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependenc
       operationType: JOB_NAMES.bulkQueueRandomize,
       params: parsed.data,
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 
@@ -267,7 +268,7 @@ export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependenc
       operationType: JOB_NAMES.bulkQueuePurge,
       params: parsed.data,
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 
@@ -289,7 +290,7 @@ export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependenc
       operationType: JOB_NAMES.bulkQueueCopy,
       params: parsed.data,
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 
@@ -311,7 +312,7 @@ export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependenc
       operationType: JOB_NAMES.bulkQueueTextModify,
       params: parsed.data,
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 
@@ -333,7 +334,7 @@ export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependenc
       operationType: JOB_NAMES.bulkQueueDedupe,
       params: parsed.data,
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 

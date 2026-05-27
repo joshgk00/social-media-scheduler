@@ -60,7 +60,7 @@ function createTestApp(input: {
   app.use(express.json());
   app.use((req, _res, next) => {
     req.session = { id: 'session-1', userId: USER_ID };
-    (req as typeof req & { id?: string }).id = input.requestId;
+    req.id = input.requestId;
     next();
   });
   app.use(createPostsRouter({

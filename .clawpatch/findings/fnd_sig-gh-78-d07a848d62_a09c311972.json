@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-78-d07a848d62_a09c311972",
+  "featureId": "feat_gh-78_8f0a2e2545",
+  "title": "gh#78: Express Request module augmentation for req.id to remove ad-hoc type casts",
+  "category": "api-contract",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "contract-mismatch",
+  "evidence": [
+    {
+      "path": "packages/api/src/middleware/error-handler.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/routes/profiles.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/types/express.d.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/78.\nBacklog section: Refactoring / type safety.\n\n## Context\n\nAcross the API code, the `req.id` correlationId field is accessed and set via `req as any` or `req as { id?: string }` casts because Express's built-in `Request` type doesn't know about it. Examples that surfaced during the PR #77 review:\n\n- `packages/api/src/middleware/error-handler.ts` — `const correlationId = (req as any).id || 'unknown';`\n- `packages/api/src/routes/profiles.ts` (PATCH handler, in #77's diff):\n  ```ts\n  const correlationId = requestCorrelationId(req as { id?: string });\n  (req as { id?: string }).id = correlationId;\n  ```\n- `packages/api/src/routes/profiles.ts` (DELETE handler from `cbde4a0`) does the same pattern.\n\nEvery consumer of `req.id` (and every helper that assigns one) gets the cast. The casts are noise, defeat type-checking on the field name, and propagate when new handlers copy the pattern.\n\n## Proposed change\n\nAdd a single Express module augmentation:\n\n```ts\n// packages/api/src/types/express.d.ts (or wherever the API package keeps ambient types)\nimport 'express-serve-static-core';\n\ndeclare module 'express-serve-static-core' {\n  interface Request {\n    id?: string;\n  }\n}\n```\n\nThen strip the casts:\n\n- `error-handler.ts`: `(req as any).id` → `req.id`\n- `profiles.ts` (both PATCH and DELETE): `(req as { id?: string }).id = correlationId` → `req.id = correlationId`\n- `requestCorrelationId` helper parameter: drop the inline shape type, accept `Request` (or just `{ id?: string }` if the helper is intentionally minimal)\n\n## Out of scope\n\n- Changes to the `correlationId` middleware itself — only the type story is changing, not the runtime behavior.\n- Adding other fields to the Request augmentation (`req.session`, `req.user`) — those have their own types and aren't part of this issue.\n\n## Acceptance\n\n- `pnpm --filter @sms/api typecheck` passes with no `req as any` or `req as { id?: string }` casts remaining for `req.id` access (search with `rg \"req as.*id\"` to verify).\n- Existing tests pass without modification (this is a pure type change).\n- No new dependencies.\n\n## References\n\n- Surfaced by the code review on [PR #77](https://github.com/joshgk00/social-media-scheduler/pull/77) (suggestion 1).",
+  "reproduction": "Across the API code, the `req.id` correlationId field is accessed and set via `req as any` or `req as { id?: string }` casts because Express's built-in `Request` type doesn't know about it. Examples that surfaced during the PR #77 review:\n\n- `packages/api/src/middleware/error-handler.ts` — `const correlationId = (req as any).id || 'unknown';`\n- `packages/api/src/routes/profiles.ts` (PATCH handler, in #77's diff):\n  ```ts\n  const correlationId = requestCorrelationId(req as { id?: string });\n  (req as { id?: string }).id = correlationId;\n  ```\n- `packages/api/src/routes/profiles.ts` (DELETE handler from `cbde4a0`) does the same pattern.\n\nEvery consumer of `req.id` (and every helper that assigns one) gets the cast. The casts are noise, defeat type-checking on the field name, and propagate when new handlers copy the pattern.",
+  "recommendation": "Add a single Express module augmentation:\n\n```ts\n// packages/api/src/types/express.d.ts (or wherever the API package keeps ambient types)\nimport 'express-serve-static-core';\n\ndeclare module 'express-serve-static-core' {\n  interface Request {\n    id?: string;\n  }\n}\n```\n\nThen strip the casts:\n\n- `error-handler.ts`: `(req as any).id` → `req.id`\n- `profiles.ts` (both PATCH and DELETE): `(req as { id?: string }).id = correlationId` → `req.id = correlationId`\n- `requestCorrelationId` helper parameter: drop the inline shape type, accept `Request` (or just `{ id?: string }` if the helper is intentionally minimal)",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/api typecheck` passes with no `req as any` or `req as { id?: string }` casts remaining for `req.id` access (search with `rg \"req as.*id\"` to verify).\n- Existing tests pass without modification (this is a pure type change).\n- No new dependencies.",
+  "minimumFixScope": "packages/api/src/middleware/error-handler.ts, packages/api/src/routes/profiles.ts, packages/api/src/types/express.d.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T044524-21f059",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence is still present: packages/api/src/middleware/error-handler.ts:21 still reads (req as any).id, and packages/api/src/routes/profiles.ts:31,92-93,142-143 still use the { id?: string } helper/casts for req.id. packages/api/src/types/express.d.ts is still absent. A broader search also found the same req.id cast pattern in posts, queues, bulk-import, logger, and tests, so the acceptance criterion of no req.id casts is not met. pnpm --filter @sms/api typecheck passes, but that does not close the finding because the casts remain. Targeted Vitest execution was attempted but blocked by the read-only sandbox with EPERM while creating temp/cache directories, not by a code failure.",
+      "commands": [
+        "rg -n \"req as.*id|requestCorrelationId|\\.id\\b|declare module 'express-serve-static-core'|interface Request\" packages/api/src/middleware/error-handler.ts packages/api/src/routes/profiles.ts packages/api/src/types/express.d.ts packages/api/src || true",
+        "nl -ba packages/api/src/middleware/error-handler.ts | sed -n '1,80p'",
+        "nl -ba packages/api/src/routes/profiles.ts | sed -n '1,170p'",
+        "rg --files packages/api/src packages/api | rg '(^|/)types(/|$)|\\.d\\.ts$|express' || true",
+        "rg -n \"declare module ['\\\"]express-serve-static-core['\\\"]|namespace Express|interface Request|id\\?: string|req as (unknown as )?\\{ id\\?: string \\}|req as any\\).*\\.id|\\(req as any\\)\\.id\" packages/api || true",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/api test -- --run src/routes/__tests__/profiles.test.ts",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/routes/profiles.test.ts --configLoader runner"
+      ],
+      "createdAt": "2026-05-27T04:48:07.930Z"
+    },
+    {
+      "runId": "20260527T045703-54b201",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist and now show the requested type-safe shape: packages/api/src/types/express.d.ts augments express-serve-static-core Request with id?: string, packages/api/src/middleware/error-handler.ts reads req.id directly at line 21, and packages/api/src/routes/profiles.ts has requestCorrelationId(req: Request) plus direct req.id assignments at lines 94 and 144. Targeted searches found no remaining req as.*id or req.id ad-hoc casts under packages/api/src or packages/api. pnpm --filter @sms/api typecheck passes. Targeted Vitest execution was attempted but blocked by the read-only sandbox with EPERM while creating Vite/Vitest temp directories, not by a code/test failure.",
+      "commands": [
+        "rg -n \"req as.*id|requestCorrelationId|declare module ['\\\"]express-serve-static-core['\\\"]|namespace Express|interface Request|id\\?: string\" packages/api/src",
+        "nl -ba packages/api/src/middleware/error-handler.ts",
+        "nl -ba packages/api/src/routes/profiles.ts",
+        "rg --files packages/api/src",
+        "nl -ba packages/api/src/types/express.d.ts",
+        "rg -n \"req as.*id\" packages/api/src",
+        "rg -n \"\\(req as (any|\\{ id\\?: string \\})\\)\\.id|req as \\{ id\\?: string \\}\" packages/api/src",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/api test -- --run src/__tests__/error-handler.test.ts src/__tests__/routes/profiles.test.ts",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/error-handler.test.ts src/__tests__/routes/profiles.test.ts --configLoader runner",
+        "rg -n \"as any\\)\\.id|as \\{ id\\?: string \\}\\)\\.id|as \\{ id\\?: string \\}\" packages/api",
+        "rg -n \"\\.id = correlationId|typeof req\\.id|requestCorrelationId\\(req: Request\\)\" packages/api/src"
+      ],
+      "createdAt": "2026-05-27T04:58:25.787Z"
+    }
+  ],
+  "signature": "sig_gh-78_d07a848d62",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-78-d07a848d62-a09c311_27cdc8c057"
+  ],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:58:25.787Z"
+}

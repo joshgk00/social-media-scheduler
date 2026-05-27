@@ -18,7 +18,7 @@ function getRouteLabel(req: Request): string {
 }
 
 export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
-  const correlationId = (req as any).id || 'unknown';
+  const correlationId = typeof req.id === 'string' && req.id ? req.id : 'unknown';
   // gh#54 acceptance: structured log MUST carry correlationId, route, and the
   // underlying error class. `err` is serialized by pino's default error
   // serializer (name, message, stack); `method` + `route` are explicit so

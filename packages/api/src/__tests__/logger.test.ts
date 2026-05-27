@@ -64,7 +64,7 @@ describe('Logger', () => {
 
     const httpMiddleware = pinoHttp({
       logger,
-      genReqId: (req) => (req as any).id || 'test-id',
+      genReqId: (req) => req.id || 'test-id',
       serializers: {
         req: pino.stdSerializers.req,
         res: pino.stdSerializers.res,
@@ -73,7 +73,7 @@ describe('Logger', () => {
 
     const app = express();
     app.use((req, _res, next) => {
-      (req as any).id = 'test-correlation-id';
+      req.id = 'test-correlation-id';
       next();
     });
     app.use(httpMiddleware);
@@ -106,7 +106,7 @@ describe('Logger', () => {
 
     const httpMiddleware = pinoHttp({
       logger,
-      genReqId: (req) => (req as any).id || 'test-id',
+      genReqId: (req) => req.id || 'test-id',
       serializers: {
         req: pino.stdSerializers.req,
         res: pino.stdSerializers.res,
@@ -115,7 +115,7 @@ describe('Logger', () => {
 
     const app = express();
     app.use((req, _res, next) => {
-      (req as any).id = 'test-correlation-id';
+      req.id = 'test-correlation-id';
       next();
     });
     app.use(httpMiddleware);

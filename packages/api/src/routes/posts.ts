@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { DateTime } from 'luxon';
 import { and, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -172,8 +172,9 @@ async function enqueueWarnNotification(
   }
 }
 
-function requestCorrelationId(req: { id?: string }): string {
-  return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
+function requestCorrelationId(req: Request): string {
+  const requestId = req.id;
+  return typeof requestId === 'string' && UUID_PATTERN.test(requestId) ? requestId : randomUUID();
 }
 
 async function enqueueRateLimitReachedNotification(
@@ -364,7 +365,7 @@ export function createPostsRouter({
 
       if (budget.blockThresholdHit) {
         if (notificationQueue) {
-          const correlationId = requestCorrelationId(req as unknown as { id?: string });
+          const correlationId = requestCorrelationId(req);
           const currentUsage =
             parsed.data.platform === 'twitter'
               ? budget.currentUsage
@@ -436,7 +437,7 @@ export function createPostsRouter({
         publishQueueService
       ) {
         const correlationId =
-          (req as unknown as { id?: string }).id ?? randomUUID();
+          typeof req.id === 'string' ? req.id : randomUUID();
         await publishQueueService.enqueuePublish(
           post.id,
           post.postVersion,
@@ -546,7 +547,7 @@ export function createPostsRouter({
       targetKind: 'profile',
       targetId: parsed.data.profileId,
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 
@@ -563,7 +564,7 @@ export function createPostsRouter({
       targetKind: 'profile',
       targetId: parsed.data.profileId,
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 
@@ -585,7 +586,7 @@ export function createPostsRouter({
       operationType: JOB_NAMES.bulkProfileBulkDelete,
       params: { postIds, typedConfirmation: parsed.data.typedConfirmation, postCount },
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 
@@ -600,7 +601,7 @@ export function createPostsRouter({
       operationType: JOB_NAMES.bulkProfileModifyTags,
       params: parsed.data,
       idempotencyKey: req.get('Idempotency-Key'),
-      correlationId: requestCorrelationId(req as { id?: string }),
+      correlationId: requestCorrelationId(req),
     }, res);
   });
 
@@ -711,7 +712,7 @@ export function createPostsRouter({
 
           if (budget.blockThresholdHit) {
             if (notificationQueue) {
-              const correlationId = requestCorrelationId(req as unknown as { id?: string });
+              const correlationId = requestCorrelationId(req);
               const platform = ownedProfile.platform as 'twitter' | 'linkedin' | 'facebook';
               const currentUsage =
                 platform === 'twitter'
@@ -797,7 +798,7 @@ export function createPostsRouter({
         publishQueueService
       ) {
         const correlationId =
-          (req as unknown as { id?: string }).id ?? randomUUID();
+          typeof req.id === 'string' ? req.id : randomUUID();
         await publishQueueService.enqueuePublish(
           updatedPost.id,
           updatedPost.postVersion,
@@ -887,7 +888,7 @@ export function createPostsRouter({
 
       if (publishQueueService) {
         const correlationId =
-          (req as unknown as { id?: string }).id ?? randomUUID();
+          typeof req.id === 'string' ? req.id : randomUUID();
         await publishQueueService.enqueuePublish(
           updated.id,
           updated.postVersion,
