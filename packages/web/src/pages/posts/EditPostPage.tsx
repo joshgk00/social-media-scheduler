@@ -133,24 +133,14 @@ export default function EditPostPage() {
       }
       setIsFormInitialized(true);
 
-      const postWithMedia = post as unknown as {
-        media?: Array<{
-          id: string;
-          fileName: string;
-          mimeType: string;
-          thumbnailUrl: string | null;
-          transcodeStatus: string;
-          transcodeError: string | null;
-        }>;
-      };
-      if (postWithMedia.media && Array.isArray(postWithMedia.media)) {
+      if (post.media && Array.isArray(post.media)) {
         setMediaItems(
-          postWithMedia.media.map((m) => ({
+          post.media.map((m) => ({
             id: m.id,
             fileName: m.fileName,
             mimeType: m.mimeType,
             thumbnailUrl: m.thumbnailUrl,
-            transcodeStatus: m.transcodeStatus as MediaItem['transcodeStatus'],
+            transcodeStatus: m.transcodeStatus,
             transcodeError: m.transcodeError,
           })),
         );

@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-23_202c2d6672",
+  "title": "gh#23: Type safety: Add media field to Post interface instead of as unknown cast",
+  "summary": "Imported from GitHub issue gh#23 in BACKLOG.md section \"Refactoring / type safety\".",
+  "kind": "ui-flow",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/hooks/use-posts.ts/",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/hooks/use-posts.ts/",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#23"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#23",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/23",
+    "backlog-order:0051",
+    "backlog-section:refactoring-type-safety"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-23-1a543eb81a_4eac5ef983"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#23",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T05:47:06.674Z"
+}
