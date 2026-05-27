@@ -37,7 +37,10 @@ export class S3Storage implements StorageBackend {
   }
 
   private getClient(): Promise<LoadedS3Client> {
-    this.clientPromise ??= this.createClient();
+    this.clientPromise ??= this.createClient().catch((error) => {
+      this.clientPromise = undefined;
+      throw error;
+    });
     return this.clientPromise;
   }
 

@@ -197,6 +197,30 @@ describe('S3Storage', () => {
     );
   });
 
+  it('retries SDK loading after a transient load failure', async () => {
+    const sdk = await import('@aws-sdk/client-s3');
+    const loadSdk = vi.fn()
+      .mockRejectedValueOnce(new Error('temporary import failure'))
+      .mockResolvedValueOnce(sdk);
+    const storageWithFlakySdk = new S3Storage(
+      {
+        endpoint: 'http://minio:9000',
+        bucket: 'test-bucket',
+        accessKey: 'testkey',
+        secretKey: 'testsecret',
+      },
+      loadSdk,
+    );
+
+    await expect(storageWithFlakySdk.exists('uploads/file.jpg')).rejects.toThrow(
+      'S3 backend requires optional dependency "@aws-sdk/client-s3"',
+    );
+
+    sendMock.mockResolvedValueOnce({});
+    await expect(storageWithFlakySdk.exists('uploads/file.jpg')).resolves.toBe(true);
+    expect(loadSdk).toHaveBeenCalledTimes(2);
+  });
+
   it('destroy() is a no-op before the S3 client is initialized', async () => {
     await expect(storage.destroy()).resolves.toBeUndefined();
 
@@ -257,7 +281,7 @@ describe('createStorageBackend', () => {
     expect(s3ClientConstructorMock).toHaveBeenCalledOnce();
   });
 
-  it('destroy() on a lazy S3 backend does not initialize AWS SDK before use', async () => {
+  it('destroy() on an unused S3 backend does not initialize AWS SDK', async () => {
     process.env.MEDIA_STORAGE_BACKEND = 's3';
     process.env.S3_ENDPOINT = 'http://minio:9000';
     process.env.S3_BUCKET = 'media';
