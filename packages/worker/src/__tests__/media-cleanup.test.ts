@@ -74,25 +74,42 @@ vi.mock('drizzle-orm', () => ({
   isNotNull: vi.fn((col: unknown) => ({ type: 'isNotNull', col })),
   isNull: vi.fn((col: unknown) => ({ type: 'isNull', col })),
   lt: vi.fn((col: unknown, val: unknown) => ({ type: 'lt', col, val })),
+  gt: vi.fn((col: unknown, val: unknown) => ({ type: 'gt', col, val })),
   eq: vi.fn((col: unknown, val: unknown) => ({ type: 'eq', col, val })),
+  inArray: vi.fn((col: unknown, vals: unknown[]) => ({ type: 'inArray', col, vals })),
+  asc: vi.fn((col: unknown) => ({ type: 'asc', col })),
 }));
 
 import type { StorageBackend } from '@sms/shared/storage';
+
+type MockRows = Record<string, unknown>[];
+
+function createSelectQuery(rows: MockRows) {
+  const limit = vi.fn().mockResolvedValue(rows);
+  const orderBy = vi.fn().mockReturnValue({ limit });
+  const where = vi.fn().mockReturnValue({ orderBy });
+  const from = vi.fn().mockReturnValue({ where });
+
+  return {
+    query: { from },
+    from,
+    where,
+    orderBy,
+    limit,
+  };
+}
 
 function createMockDb() {
   const whereResult = {
     rows: [] as Record<string, unknown>[],
   };
 
+  const deleteWhere = vi.fn().mockResolvedValue(undefined);
   const deleteFn = vi.fn().mockReturnValue({
-    where: vi.fn().mockResolvedValue(undefined),
+    where: deleteWhere,
   });
 
-  const selectFn = vi.fn().mockReturnValue({
-    from: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue(whereResult.rows),
-    }),
-  });
+  const selectFn = vi.fn(() => createSelectQuery(whereResult.rows).query);
 
   return {
     db: {
@@ -101,8 +118,25 @@ function createMockDb() {
     },
     selectFn,
     deleteFn,
+    deleteWhere,
     whereResult,
   };
+}
+
+function mockSelectBatches(
+  db: ReturnType<typeof createMockDb>['db'],
+  batches: MockRows[],
+) {
+  const pendingBatches = [...batches];
+  const queries: ReturnType<typeof createSelectQuery>[] = [];
+
+  db.select.mockImplementation(() => {
+    const query = createSelectQuery(pendingBatches.shift() ?? []);
+    queries.push(query);
+    return query.query;
+  });
+
+  return queries;
 }
 
 function createMockStorage(): StorageBackend & { delete: ReturnType<typeof vi.fn> } {
@@ -143,21 +177,7 @@ describe('createMediaCleanupWorker', () => {
       { id: 'media-1', filePath: 'media/p1/2026/01/abc.jpg', thumbnailPath: 'media/p1/2026/01/abc_thumb.jpg' },
     ];
 
-    // Mock the first select().from().where() call (expired soft-deleted)
-    const expiredWhereHandler = vi.fn().mockResolvedValue(expiredRows);
-    // Mock the second select().from().where() call (orphans)
-    const orphanWhereHandler = vi.fn().mockResolvedValue([]);
-
-    let selectCallCount = 0;
-    db.select.mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: () => {
-          selectCallCount++;
-          if (selectCallCount === 1) return expiredWhereHandler();
-          return orphanWhereHandler();
-        },
-      })),
-    }));
+    mockSelectBatches(db, [expiredRows, [], []]);
 
     createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
     expect(capturedProcessor).not.toBeNull();
@@ -177,16 +197,7 @@ describe('createMediaCleanupWorker', () => {
       { id: 'media-1', filePath: 'media/p1/2026/01/abc.jpg', thumbnailPath: 'media/p1/2026/01/abc_thumb.jpg' },
     ];
 
-    let selectCallCount = 0;
-    db.select.mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: () => {
-          selectCallCount++;
-          if (selectCallCount === 1) return Promise.resolve(expiredRows);
-          return Promise.resolve([]);
-        },
-      })),
-    }));
+    mockSelectBatches(db, [expiredRows, [], []]);
 
     db.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
 
@@ -207,16 +218,7 @@ describe('createMediaCleanupWorker', () => {
       { id: 'orphan-1', filePath: 'media/p2/2026/01/orphan.mp4', thumbnailPath: null },
     ];
 
-    let selectCallCount = 0;
-    db.select.mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: () => {
-          selectCallCount++;
-          if (selectCallCount === 1) return Promise.resolve([]);
-          return Promise.resolve(orphanRows);
-        },
-      })),
-    }));
+    mockSelectBatches(db, [[], orphanRows, []]);
 
     db.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
 
@@ -233,12 +235,8 @@ describe('createMediaCleanupWorker', () => {
     const { db, deleteFn } = createMockDb();
     const mockStorage = createMockStorage();
 
-    // Both queries return empty (no rows match)
-    db.select.mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: vi.fn().mockResolvedValue([]),
-      })),
-    }));
+    // Both cleanup loops return empty (no rows match)
+    mockSelectBatches(db, [[], []]);
 
     createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
     await capturedProcessor!({ data: {} });
@@ -258,16 +256,7 @@ describe('createMediaCleanupWorker', () => {
       { id: 'media-2', filePath: 'ok/path.jpg', thumbnailPath: null },
     ];
 
-    let selectCallCount = 0;
-    db.select.mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: () => {
-          selectCallCount++;
-          if (selectCallCount === 1) return Promise.resolve(expiredRows);
-          return Promise.resolve([]);
-        },
-      })),
-    }));
+    mockSelectBatches(db, [expiredRows, [], []]);
 
     db.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
 
@@ -286,7 +275,7 @@ describe('createMediaCleanupWorker', () => {
     expect(mockStorage.delete).toHaveBeenCalledWith('ok/path.jpg');
   });
 
-  it('deletes expired media rows from the database before deleting storage files', async () => {
+  it('deletes expired media rows in one batch before deleting storage files', async () => {
     const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
     const mockRedis = {} as never;
     const { db } = createMockDb();
@@ -294,18 +283,10 @@ describe('createMediaCleanupWorker', () => {
 
     const expiredRows = [
       { id: 'media-1', filePath: 'media/p1/2026/01/abc.jpg', thumbnailPath: null },
+      { id: 'media-2', filePath: 'media/p1/2026/01/def.jpg', thumbnailPath: null },
     ];
 
-    let selectCallCount = 0;
-    db.select.mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: () => {
-          selectCallCount++;
-          if (selectCallCount === 1) return Promise.resolve(expiredRows);
-          return Promise.resolve([]);
-        },
-      })),
-    }));
+    mockSelectBatches(db, [expiredRows, [], []]);
 
     const deleteWhere = vi.fn().mockResolvedValue(undefined);
     db.delete.mockReturnValue({ where: deleteWhere });
@@ -314,33 +295,64 @@ describe('createMediaCleanupWorker', () => {
     await capturedProcessor!({ data: {} });
 
     expect(deleteWhere).toHaveBeenCalledTimes(1);
-    expect(mockStorage.delete).toHaveBeenCalledWith('media/p1/2026/01/abc.jpg');
+    expect(deleteWhere).toHaveBeenCalledWith({
+      type: 'inArray',
+      col: 'mock_id_col',
+      vals: ['media-1', 'media-2'],
+    });
     expect(deleteWhere.mock.invocationCallOrder[0]).toBeLessThan(
       mockStorage.delete.mock.invocationCallOrder[0],
     );
+    expect(mockStorage.delete).toHaveBeenCalledWith('media/p1/2026/01/abc.jpg');
+    expect(mockStorage.delete).toHaveBeenCalledWith('media/p1/2026/01/def.jpg');
   });
 
-  it('continues expired media cleanup when deleting one database row fails', async () => {
+  it('uses 200-row id-cursor batches for cleanup selects', async () => {
+    const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
+    const mockRedis = {} as never;
+    const { db } = createMockDb();
+    const mockStorage = createMockStorage();
+
+    const queries = mockSelectBatches(db, [
+      [
+        { id: 'media-1', filePath: 'media/p1/2026/01/abc.jpg', thumbnailPath: null },
+        { id: 'media-2', filePath: 'media/p1/2026/01/def.jpg', thumbnailPath: null },
+      ],
+      [],
+      [],
+    ]);
+
+    db.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+
+    createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
+    await capturedProcessor!({ data: {} });
+
+    expect(queries).toHaveLength(3);
+    for (const query of queries) {
+      expect(query.limit).toHaveBeenCalledWith(200);
+    }
+    expect(queries[1].where).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.arrayContaining([
+        { type: 'gt', col: 'mock_id_col', val: 'media-2' },
+      ]),
+    }));
+  });
+
+  it('continues expired media cleanup when a batch database delete fails', async () => {
     const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
     const mockRedis = {} as never;
     const { db } = createMockDb();
     const mockStorage = createMockStorage();
 
     const expiredRows = [
-      { id: 'media-1', filePath: 'fail/path.jpg', thumbnailPath: null },
-      { id: 'media-2', filePath: 'ok/path.jpg', thumbnailPath: null },
+      { id: 'media-1', filePath: 'batch-1/path-a.jpg', thumbnailPath: null },
+      { id: 'media-2', filePath: 'batch-1/path-b.jpg', thumbnailPath: null },
+    ];
+    const nextExpiredRows = [
+      { id: 'media-3', filePath: 'batch-2/path-c.jpg', thumbnailPath: null },
     ];
 
-    let selectCallCount = 0;
-    db.select.mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: () => {
-          selectCallCount++;
-          if (selectCallCount === 1) return Promise.resolve(expiredRows);
-          return Promise.resolve([]);
-        },
-      })),
-    }));
+    mockSelectBatches(db, [expiredRows, nextExpiredRows, [], []]);
 
     const deleteWhere = vi.fn()
       .mockRejectedValueOnce(new Error('database unavailable'))
@@ -352,11 +364,22 @@ describe('createMediaCleanupWorker', () => {
     await expect(capturedProcessor!({ data: {} })).resolves.toBeUndefined();
 
     expect(deleteWhere).toHaveBeenCalledTimes(2);
-    expect(mockStorage.delete).not.toHaveBeenCalledWith('fail/path.jpg');
-    expect(mockStorage.delete).toHaveBeenCalledWith('ok/path.jpg');
+    expect(deleteWhere).toHaveBeenNthCalledWith(1, {
+      type: 'inArray',
+      col: 'mock_id_col',
+      vals: ['media-1', 'media-2'],
+    });
+    expect(deleteWhere).toHaveBeenNthCalledWith(2, {
+      type: 'inArray',
+      col: 'mock_id_col',
+      vals: ['media-3'],
+    });
+    expect(mockStorage.delete).not.toHaveBeenCalledWith('batch-1/path-a.jpg');
+    expect(mockStorage.delete).not.toHaveBeenCalledWith('batch-1/path-b.jpg');
+    expect(mockStorage.delete).toHaveBeenCalledWith('batch-2/path-c.jpg');
   });
 
-  it('deletes orphan rows before storage and continues when deleting one orphan row fails', async () => {
+  it('deletes orphan rows in one batch before storage even when storage deletion fails', async () => {
     const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
     const mockRedis = {} as never;
     const { db } = createMockDb();
@@ -367,30 +390,27 @@ describe('createMediaCleanupWorker', () => {
       { id: 'orphan-2', filePath: 'ok/orphan.jpg', thumbnailPath: null },
     ];
 
-    let selectCallCount = 0;
-    db.select.mockImplementation(() => ({
-      from: vi.fn().mockImplementation(() => ({
-        where: () => {
-          selectCallCount++;
-          if (selectCallCount === 1) return Promise.resolve([]);
-          return Promise.resolve(orphanRows);
-        },
-      })),
-    }));
+    mockSelectBatches(db, [[], orphanRows, []]);
 
-    const deleteWhere = vi.fn()
-      .mockRejectedValueOnce(new Error('database unavailable'))
-      .mockResolvedValue(undefined);
+    const deleteWhere = vi.fn().mockResolvedValue(undefined);
     db.delete.mockReturnValue({ where: deleteWhere });
+    mockStorage.delete
+      .mockRejectedValueOnce(new Error('Storage unreachable'))
+      .mockResolvedValue(undefined);
 
     createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
 
     await expect(capturedProcessor!({ data: {} })).resolves.toBeUndefined();
 
-    expect(deleteWhere).toHaveBeenCalledTimes(2);
-    expect(mockStorage.delete).not.toHaveBeenCalledWith('fail/orphan.jpg');
+    expect(deleteWhere).toHaveBeenCalledTimes(1);
+    expect(deleteWhere).toHaveBeenCalledWith({
+      type: 'inArray',
+      col: 'mock_id_col',
+      vals: ['orphan-1', 'orphan-2'],
+    });
+    expect(mockStorage.delete).toHaveBeenCalledWith('fail/orphan.jpg');
     expect(mockStorage.delete).toHaveBeenCalledWith('ok/orphan.jpg');
-    expect(deleteWhere.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(deleteWhere.mock.invocationCallOrder[0]).toBeLessThan(
       mockStorage.delete.mock.invocationCallOrder[0],
     );
   });

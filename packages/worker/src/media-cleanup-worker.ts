@@ -10,7 +10,7 @@
 
 import { Worker, Queue, type Job } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { and, isNotNull, isNull, lt, eq } from 'drizzle-orm';
+import { and, asc, gt, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import { postMedia } from '@sms/db';
 import { QUEUE_NAMES, JOB_NAMES } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
@@ -21,6 +21,68 @@ const logger = createLogger('media-cleanup-worker');
 
 const SOFT_DELETE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const ORPHAN_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MEDIA_CLEANUP_BATCH_SIZE = 200;
+
+type MediaCleanupRow = Pick<
+  typeof postMedia.$inferSelect,
+  'id' | 'filePath' | 'thumbnailPath'
+>;
+
+interface StorageCleanupMessages {
+  fileFailure: string;
+  thumbnailFailure: string;
+}
+
+async function deleteStorageFiles(
+  storage: StorageBackend,
+  row: MediaCleanupRow,
+  logError: (metadata: Record<string, unknown>, message: string) => void,
+  messages: StorageCleanupMessages,
+): Promise<void> {
+  try {
+    await storage.delete(row.filePath);
+  } catch (storageErr) {
+    logError(
+      { err: storageErr, mediaId: row.id, filePath: row.filePath },
+      messages.fileFailure,
+    );
+  }
+
+  if (row.thumbnailPath) {
+    try {
+      await storage.delete(row.thumbnailPath);
+    } catch (storageErr) {
+      logError(
+        { err: storageErr, mediaId: row.id, thumbnailPath: row.thumbnailPath },
+        messages.thumbnailFailure,
+      );
+    }
+  }
+}
+
+async function deleteMediaRows(
+  db: WorkerDb,
+  rows: MediaCleanupRow[],
+  logError: (metadata: Record<string, unknown>, message: string) => void,
+  failureMessage: string,
+): Promise<boolean> {
+  if (rows.length === 0) {
+    return false;
+  }
+
+  const mediaIds = rows.map((row) => row.id);
+
+  try {
+    await db.delete(postMedia).where(inArray(postMedia.id, mediaIds));
+    return true;
+  } catch (dbErr) {
+    logError(
+      { err: dbErr, mediaIds },
+      failureMessage,
+    );
+    return false;
+  }
+}
 
 export interface MediaCleanupWorkerDeps {
   redis: Redis;
@@ -38,99 +100,125 @@ export function createMediaCleanupWorker(
 
       // 1. Permanently delete soft-deleted files older than 30 days
       const thirtyDaysAgo = new Date(Date.now() - SOFT_DELETE_RETENTION_MS);
-      const expiredMedia = await deps.db.select()
-        .from(postMedia)
-        .where(and(
-          isNotNull(postMedia.deletedAt),
-          lt(postMedia.deletedAt, thirtyDaysAgo),
-        ));
+      let expiredCursor: string | undefined;
+      let deletedExpiredCount = 0;
 
-      for (const row of expiredMedia) {
-        try {
-          await deps.db.delete(postMedia).where(eq(postMedia.id, row.id));
-        } catch (dbErr) {
-          jobLogger.error(
-            { err: dbErr, mediaId: row.id },
-            'Failed to delete media row from database, continuing',
-          );
+      while (true) {
+        const expiredMedia = await deps.db.select()
+          .from(postMedia)
+          .where(expiredCursor === undefined
+            ? and(
+              isNotNull(postMedia.deletedAt),
+              lt(postMedia.deletedAt, thirtyDaysAgo),
+            )
+            : and(
+              isNotNull(postMedia.deletedAt),
+              lt(postMedia.deletedAt, thirtyDaysAgo),
+              gt(postMedia.id, expiredCursor),
+            ))
+          .orderBy(asc(postMedia.id))
+          .limit(MEDIA_CLEANUP_BATCH_SIZE);
+
+        if (expiredMedia.length === 0) {
+          break;
+        }
+
+        const lastExpired = expiredMedia[expiredMedia.length - 1];
+        expiredCursor = lastExpired.id;
+
+        const rowsDeleted = await deleteMediaRows(
+          deps.db,
+          expiredMedia,
+          (metadata, message) => jobLogger.error(metadata, message),
+          'Failed to delete media rows from database, continuing',
+        );
+
+        if (!rowsDeleted) {
           continue;
         }
 
-        try {
-          await deps.storage.delete(row.filePath);
-        } catch (storageErr) {
-          jobLogger.error(
-            { err: storageErr, mediaId: row.id, filePath: row.filePath },
-            'Failed to delete file from storage, continuing',
+        deletedExpiredCount += expiredMedia.length;
+
+        for (const row of expiredMedia) {
+          await deleteStorageFiles(
+            deps.storage,
+            row,
+            (metadata, message) => jobLogger.error(metadata, message),
+            {
+              fileFailure: 'Failed to delete file from storage, continuing',
+              thumbnailFailure: 'Failed to delete thumbnail from storage, continuing',
+            },
+          );
+          jobLogger.info(
+            { mediaId: row.id, filePath: row.filePath },
+            'Permanently deleted soft-deleted media',
           );
         }
-
-        if (row.thumbnailPath) {
-          try {
-            await deps.storage.delete(row.thumbnailPath);
-          } catch (storageErr) {
-            jobLogger.error(
-              { err: storageErr, mediaId: row.id, thumbnailPath: row.thumbnailPath },
-              'Failed to delete thumbnail from storage, continuing',
-            );
-          }
-        }
-
-        jobLogger.info(
-          { mediaId: row.id, filePath: row.filePath },
-          'Permanently deleted soft-deleted media',
-        );
       }
 
       // 2. Clean up orphaned uploads older than 24 hours
       const twentyFourHoursAgo = new Date(Date.now() - ORPHAN_THRESHOLD_MS);
-      const orphans = await deps.db.select()
-        .from(postMedia)
-        .where(and(
-          isNull(postMedia.postId),
-          isNull(postMedia.deletedAt),
-          lt(postMedia.createdAt, twentyFourHoursAgo),
-        ));
+      let orphanCursor: string | undefined;
+      let deletedOrphanCount = 0;
 
-      for (const orphan of orphans) {
-        try {
-          await deps.db.delete(postMedia).where(eq(postMedia.id, orphan.id));
-        } catch (dbErr) {
-          jobLogger.error(
-            { err: dbErr, mediaId: orphan.id },
-            'Failed to delete orphan media row from database, continuing',
-          );
+      while (true) {
+        const orphans = await deps.db.select()
+          .from(postMedia)
+          .where(orphanCursor === undefined
+            ? and(
+              isNull(postMedia.postId),
+              isNull(postMedia.deletedAt),
+              lt(postMedia.createdAt, twentyFourHoursAgo),
+            )
+            : and(
+              isNull(postMedia.postId),
+              isNull(postMedia.deletedAt),
+              lt(postMedia.createdAt, twentyFourHoursAgo),
+              gt(postMedia.id, orphanCursor),
+            ))
+          .orderBy(asc(postMedia.id))
+          .limit(MEDIA_CLEANUP_BATCH_SIZE);
+
+        if (orphans.length === 0) {
+          break;
+        }
+
+        const lastOrphan = orphans[orphans.length - 1];
+        orphanCursor = lastOrphan.id;
+
+        const rowsDeleted = await deleteMediaRows(
+          deps.db,
+          orphans,
+          (metadata, message) => jobLogger.error(metadata, message),
+          'Failed to delete orphan media rows from database, continuing',
+        );
+
+        if (!rowsDeleted) {
           continue;
         }
 
-        try {
-          await deps.storage.delete(orphan.filePath);
-        } catch (storageErr) {
-          jobLogger.error(
-            { err: storageErr, mediaId: orphan.id, filePath: orphan.filePath },
-            'Failed to delete orphan file from storage, continuing',
-          );
-        }
+        deletedOrphanCount += orphans.length;
 
-        if (orphan.thumbnailPath) {
-          try {
-            await deps.storage.delete(orphan.thumbnailPath);
-          } catch (storageErr) {
-            jobLogger.error(
-              { err: storageErr, mediaId: orphan.id, thumbnailPath: orphan.thumbnailPath },
-              'Failed to delete orphan thumbnail from storage, continuing',
-            );
-          }
+        for (const orphan of orphans) {
+          await deleteStorageFiles(
+            deps.storage,
+            orphan,
+            (metadata, message) => jobLogger.error(metadata, message),
+            {
+              fileFailure: 'Failed to delete orphan file from storage, continuing',
+              thumbnailFailure: 'Failed to delete orphan thumbnail from storage, continuing',
+            },
+          );
         }
       }
 
       jobLogger.info(
-        { orphanCount: orphans.length },
+        { orphanCount: deletedOrphanCount },
         'Cleaned up orphaned uploads',
       );
 
       jobLogger.info(
-        { deletedExpired: expiredMedia.length, deletedOrphans: orphans.length },
+        { deletedExpired: deletedExpiredCount, deletedOrphans: deletedOrphanCount },
         'Media cleanup job completed',
       );
     },
