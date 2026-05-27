@@ -28,32 +28,26 @@ export function usePostMedia(profileId: string, platform: Platform) {
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
       if (!profileId || !platform) return;
-      const uploadResults = await Promise.allSettled(
-        files.map((file) => upload(file, profileId, platform)),
+      await Promise.all(
+        files.map(async (file) => {
+          try {
+            const response = await upload(file, profileId, platform);
+            const uploadedMediaItem: MediaItem = {
+              id: response.id,
+              fileName: response.fileName,
+              mimeType: response.mimeType,
+              thumbnailUrl: response.thumbnailUrl,
+              transcodeStatus: response.transcodeStatus,
+              transcodeError: null,
+            };
+            setMediaItems((prev) => [...prev, uploadedMediaItem]);
+            toast.success('File uploaded.');
+          } catch (uploadError) {
+            const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed';
+            toast.error(`Upload failed: ${errorMessage}`);
+          }
+        }),
       );
-      const uploadedMediaItems: MediaItem[] = [];
-
-      for (const result of uploadResults) {
-        if (result.status === 'fulfilled') {
-          const response = result.value;
-          uploadedMediaItems.push({
-            id: response.id,
-            fileName: response.fileName,
-            mimeType: response.mimeType,
-            thumbnailUrl: response.thumbnailUrl,
-            transcodeStatus: response.transcodeStatus,
-            transcodeError: null,
-          });
-          toast.success('File uploaded.');
-        } else {
-          const errorMessage = result.reason instanceof Error ? result.reason.message : 'Upload failed';
-          toast.error(`Upload failed: ${errorMessage}`);
-        }
-      }
-
-      if (uploadedMediaItems.length > 0) {
-        setMediaItems((prev) => [...prev, ...uploadedMediaItems]);
-      }
     },
     [platform, profileId, upload],
   );

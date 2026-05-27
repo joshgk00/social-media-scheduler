@@ -359,7 +359,7 @@ export default function NewPostPage() {
   const submitDisabledReason = getPostSubmitDisabledReason({
     hasTranscodingMedia,
     hasFailedMedia,
-    platform: formState.platform,
+    platform,
     linkUrl: formState.linkUrl,
   });
 

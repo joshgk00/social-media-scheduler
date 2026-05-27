@@ -210,7 +210,7 @@ function renderPage() {
 
 describe('NewPostPage scheduling validation', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     uploadMedia.mockResolvedValue({
       id: 'media-1',
       fileName: 'video.mp4',

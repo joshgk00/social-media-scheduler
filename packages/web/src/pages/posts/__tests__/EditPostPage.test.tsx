@@ -182,7 +182,7 @@ function renderPage() {
 
 describe('EditPostPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('uses the queued update label for queued post edits', () => {
