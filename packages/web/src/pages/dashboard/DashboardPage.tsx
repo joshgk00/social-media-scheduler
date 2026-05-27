@@ -329,7 +329,7 @@ function ActiveQueuesCard({
             <Link
               key={queue.id}
               to={`/queues/${queue.id}`}
-              className="block py-3 transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
+              className="block px-4 py-3 transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2">
@@ -343,7 +343,7 @@ function ActiveQueuesCard({
                 </span>
                 <StatusPill status={queue.isPaused ? "paused" : "active"} />
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 truncate pl-6 text-xs text-muted-foreground">
                 {queue.postCount} posts · {cadenceSummary(queue).primary}
                 {queue.nextRunAt
                   ? ` · next ${formatDistanceToNowStrict(new Date(queue.nextRunAt), { addSuffix: true })}`
@@ -398,7 +398,7 @@ function RateLimitsPanel({
         </div>
       ) : (
         <>
-          <div className="space-y-4">
+          <div className="space-y-4 px-4 py-3">
             {usedRows.slice(0, 3).map(({ row, limit, percent }) => {
               const profile = profileFor(profiles, row.profileId);
               const name =
@@ -436,7 +436,7 @@ function RateLimitsPanel({
               );
             })}
           </div>
-          <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+          <p className="flex min-h-10 items-center border-t border-border px-4 pb-4 pt-3 text-xs text-muted-foreground">
             {reset
               ? `All reset ${reset.absolute} (${reset.relative})`
               : "Reset times unavailable"}
@@ -543,6 +543,7 @@ export default function DashboardPage() {
       <section className="mt-6 grid gap-6 xl:grid-cols-[2fr_1fr]">
         <Card
           title="Upcoming schedule"
+          padded
           action={
             <Segmented
               label="Schedule window"
