@@ -6,6 +6,10 @@ import { useDeleteMedia, useRetryTranscode } from './use-media';
 import { useMediaUpload } from './use-media-upload';
 import type { Platform } from './use-profiles';
 
+type UploadResult =
+  | { status: 'success'; mediaItem: MediaItem }
+  | { status: 'error'; errorMessage: string };
+
 export function usePostMedia(profileId: string, platform: Platform) {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const { upload, uploadingFiles, isUploading } = useMediaUpload();
@@ -28,7 +32,7 @@ export function usePostMedia(profileId: string, platform: Platform) {
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
       if (!profileId || !platform) return;
-      await Promise.all(
+      const uploadResults: UploadResult[] = await Promise.all(
         files.map(async (file) => {
           try {
             const response = await upload(file, profileId, platform);
@@ -40,14 +44,28 @@ export function usePostMedia(profileId: string, platform: Platform) {
               transcodeStatus: response.transcodeStatus,
               transcodeError: null,
             };
-            setMediaItems((prev) => [...prev, uploadedMediaItem]);
-            toast.success('File uploaded.');
+            return { status: 'success', mediaItem: uploadedMediaItem };
           } catch (uploadError) {
             const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed';
-            toast.error(`Upload failed: ${errorMessage}`);
+            return { status: 'error', errorMessage };
           }
         }),
       );
+
+      const uploadedMediaItems = uploadResults.flatMap((result) =>
+        result.status === 'success' ? [result.mediaItem] : [],
+      );
+      if (uploadedMediaItems.length > 0) {
+        setMediaItems((prev) => [...prev, ...uploadedMediaItems]);
+      }
+
+      uploadResults.forEach((result) => {
+        if (result.status === 'success') {
+          toast.success('File uploaded.');
+        } else {
+          toast.error(`Upload failed: ${result.errorMessage}`);
+        }
+      });
     },
     [platform, profileId, upload],
   );

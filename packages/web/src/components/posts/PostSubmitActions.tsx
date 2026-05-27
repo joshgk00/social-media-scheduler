@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import type { Platform } from '../../hooks/use-profiles';
 import { Button } from '../ui/button';
 import {
@@ -83,13 +83,15 @@ function SubmitDisabledTooltip({
   disabledReason: string | null;
   children: ReactNode;
 }) {
+  const disabledReasonId = useId();
+
   if (!disabledReason) return <>{children}</>;
 
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span aria-describedby="submit-disabled-reason">
+          <span aria-describedby={disabledReasonId}>
             {children}
           </span>
         </TooltipTrigger>
@@ -97,7 +99,7 @@ function SubmitDisabledTooltip({
           <p>{disabledReason}</p>
         </TooltipContent>
       </Tooltip>
-      <span id="submit-disabled-reason" className="sr-only">
+      <span id={disabledReasonId} className="sr-only">
         {disabledReason}
       </span>
     </TooltipProvider>

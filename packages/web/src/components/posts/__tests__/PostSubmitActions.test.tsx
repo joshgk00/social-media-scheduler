@@ -54,6 +54,38 @@ describe('PostSubmitActions', () => {
     expect(screen.getByText('Video is still transcoding.')).toBeInTheDocument();
   });
 
+  it('uses a unique disabled reason id for each rendered action group', () => {
+    render(
+      <>
+        <PostSubmitActions
+          mode="queue"
+          onSubmit={vi.fn()}
+          isSaving={false}
+          disabled={false}
+          disabledReason="Video is still transcoding."
+        />
+        <PostSubmitActions
+          mode="queue"
+          onSubmit={vi.fn()}
+          isSaving={false}
+          disabled={false}
+          disabledReason="Video is still transcoding."
+        />
+      </>,
+    );
+
+    const describedByIds = screen
+      .getAllByRole('button', { name: 'Save to Queue' })
+      .map((button) => button.closest('[aria-describedby]')?.getAttribute('aria-describedby'));
+
+    expect(describedByIds).toHaveLength(2);
+    expect(new Set(describedByIds).size).toBe(2);
+    describedByIds.forEach((id) => {
+      expect(id).toBeTruthy();
+      expect(document.getElementById(id as string)).toHaveTextContent('Video is still transcoding.');
+    });
+  });
+
   it('renders split actions enabled when there is no disabled reason', async () => {
     const user = userEvent.setup();
     const onDraft = vi.fn();

@@ -76,14 +76,13 @@ describe('usePostMedia', () => {
     expect(result.current.isMediaBlocking).toBe(false);
   });
 
-  it('uploads selected files concurrently and appends successful media', async () => {
-    const resolvers: Array<() => void> = [];
+  it('uploads selected files concurrently and appends successful media in selection order', async () => {
+    const resolvers = new Map<string, () => void>();
     mocks.upload.mockImplementation((file: File) =>
       new Promise((resolve) => {
-        const mediaNumber = resolvers.length + 1;
-        resolvers.push(() =>
+        resolvers.set(file.name, () =>
           resolve({
-            id: `media-${mediaNumber}`,
+            id: `media-${file.name}`,
             fileName: file.name,
             mimeType: file.type,
             fileSize: file.size,
@@ -95,8 +94,9 @@ describe('usePostMedia', () => {
     );
     const { result } = renderHook(() => usePostMedia('profile-1', 'twitter'));
 
-    await act(async () => {
-      const uploadPromise = result.current.handleFilesSelected([
+    let uploadPromise!: Promise<void>;
+    act(() => {
+      uploadPromise = result.current.handleFilesSelected([
         new File(['first'], 'first.png', { type: 'image/png' }),
         new File(['second'], 'second.png', { type: 'image/png' }),
       ]);
@@ -106,8 +106,17 @@ describe('usePostMedia', () => {
         'first.png',
         'second.png',
       ]);
+    });
 
-      resolvers.forEach((resolve) => resolve());
+    await act(async () => {
+      resolvers.get('second.png')?.();
+      await Promise.resolve();
+    });
+    expect(result.current.mediaItems).toEqual([]);
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolvers.get('first.png')?.();
       await uploadPromise;
     });
 
