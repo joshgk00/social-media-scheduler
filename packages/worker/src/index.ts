@@ -191,6 +191,7 @@ async function main() {
     await closeWithTimeout('cleanupQueue', () => cleanupQueue.close());
     await closeWithTimeout('tokenRefreshQueue', () => tokenRefreshQueue.close());
     await closeWithTimeout('notificationQueue', () => notificationQueue.close());
+    await closeWithTimeout('storage', () => storage.destroy?.() ?? Promise.resolve());
     if (transporter) {
       await closeWithTimeout('smtpTransporter', () => Promise.resolve(transporter.close()));
     }

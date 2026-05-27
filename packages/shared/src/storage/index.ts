@@ -45,6 +45,15 @@ class LazyS3Storage implements StorageBackend {
     const storage = await this.getStorage();
     return storage.exists(key);
   }
+
+  async destroy(): Promise<void> {
+    if (!this.storagePromise) {
+      return;
+    }
+
+    const storage = await this.storagePromise;
+    await storage.destroy?.();
+  }
 }
 
 export function createStorageBackend(): StorageBackend {

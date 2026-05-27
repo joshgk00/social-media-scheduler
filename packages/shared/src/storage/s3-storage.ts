@@ -137,4 +137,14 @@ export class S3Storage implements StorageBackend {
       throw error;
     }
   }
+
+  async destroy(): Promise<void> {
+    if (!this.clientPromise) {
+      return;
+    }
+
+    const { client } = await this.clientPromise;
+    client.destroy();
+    this.clientPromise = undefined;
+  }
 }

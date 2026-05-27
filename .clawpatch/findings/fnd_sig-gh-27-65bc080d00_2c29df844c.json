@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-27-65bc080d00_2c29df844c",
+  "featureId": "feat_gh-27_0618787b87",
+  "title": "gh#27: Shared: Document local contentType handling and add storage destroy lifecycle",
+  "category": "api-contract",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "contract-mismatch",
+  "evidence": [
+    {
+      "path": "packages/shared/src/index.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/27.\nBacklog section: Refactoring / type safety.\n\n## Problem\n\n`StorageBackend.save()` accepts a `contentType`, but local storage currently ignores it. That is not a runtime bug for the current local backend because local media is served by Express static middleware and MIME is inferred from the file extension, but the contract should say that plainly.\n\n`StorageBackend` also has no lifecycle hook. `S3Storage` creates an `S3Client`, which owns HTTP resources, but there is no way for API/worker shutdown to call `client.destroy()`.\n\n## Decision\n\nDo not add `.meta` sidecar files for local storage. Document that `contentType` is consumed by S3 and ignored by local storage because local serving infers content type from file extension.\n\nDo add an optional storage lifecycle hook.\n\n## Implementation direction\n\n- Update `StorageBackend` with `destroy?(): Promise<void>`.\n- Add a short doc comment to `StorageBackend.save()` explaining backend-specific `contentType` behavior.\n- Implement `LocalStorage.destroy()` as a no-op, or omit it if the interface stays optional. Prefer a no-op for symmetry in tests.\n- Implement `S3Storage.destroy()` by calling the underlying S3 client's `destroy()` method.\n- Update API shutdown to call `await storage.destroy?.()`.\n- Update worker shutdown to call `await storage.destroy?.()`.\n- Add tests for the lifecycle behavior.\n\n## Acceptance criteria\n\n- The storage interface documents that local storage does not persist content-type metadata.\n- No `.meta` sidecar files are introduced.\n- `S3Storage.destroy()` calls `S3Client.destroy()`.\n- API and worker graceful shutdown paths invoke `storage.destroy?.()`.\n- Existing local storage behavior and URLs remain unchanged.\n- `pnpm --filter @sms/shared test -- storage` passes, or the closest focused storage test command.\n- API and worker typechecks pass.\n\n## Out of scope\n\n- Reworking media serving to read content type from metadata.\n- Changing storage URL format.\n- Moving S3 support out of `@sms/shared`; that is tracked separately in #11.\n\n## References\n\n- Optional AWS dependency cleanup: #11\n- Storage test coverage: #28",
+  "reproduction": "`StorageBackend.save()` accepts a `contentType`, but local storage currently ignores it. That is not a runtime bug for the current local backend because local media is served by Express static middleware and MIME is inferred from the file extension, but the contract should say that plainly.\n\n`StorageBackend` also has no lifecycle hook. `S3Storage` creates an `S3Client`, which owns HTTP resources, but there is no way for API/worker shutdown to call `client.destroy()`.",
+  "recommendation": "Implement the fix described by GitHub issue gh#27 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/shared/src/index.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T054809-90c023",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path packages/shared/src/index.ts still exists, but the storage contract has moved to packages/shared/src/storage/*. Current code still does not satisfy the finding: StorageBackend in packages/shared/src/storage/storage-backend.ts has no destroy? lifecycle hook and no save() doc comment; LocalStorage.save() still ignores contentType without documented contract; S3Storage uses ContentType on save but has no destroy() method to call S3Client.destroy(); LazyS3Storage has no destroy forwarding; API shutdown in packages/api/src/index.ts and worker shutdown in packages/worker/src/index.ts do not call storage.destroy?.(). Storage tests contain no lifecycle assertions, though the mock S3 client has a destroy function. No .meta sidecar files were found. Focused shared storage tests could not execute because the read-only sandbox prevented Vitest from writing its .vite-temp config file, but @sms/shared, @sms/api, and @sms/worker typechecks all passed. Based on current code evidence, the issue remains open.",
+      "commands": [
+        "rg --files -g 'package.json' -g 'packages/shared/src/**' -g 'packages/api/src/**' -g 'packages/worker/src/**' -g '*storage*' -g '*Storage*'",
+        "rg -n \"interface StorageBackend|type StorageBackend|class LocalStorage|class S3Storage|destroy\\?|destroy\\(|contentType|storage\\.destroy|createStorage|shutdown|SIGTERM|SIGINT\" packages",
+        "git status --short",
+        "nl -ba packages/shared/src/storage/storage-backend.ts",
+        "nl -ba packages/shared/src/storage/local-storage.ts",
+        "nl -ba packages/shared/src/storage/s3-storage.ts",
+        "nl -ba packages/shared/src/storage/index.ts",
+        "nl -ba packages/api/src/index.ts",
+        "nl -ba packages/worker/src/index.ts",
+        "nl -ba packages/shared/src/__tests__/storage.test.ts",
+        "rg -n \"destroy|contentType|ContentType|\\.meta|metadata|local storage|LocalStorage|S3Storage|StorageBackend\" packages/shared/src packages/api/src packages/worker/src",
+        "cat package.json",
+        "cat packages/shared/package.json",
+        "cat packages/api/package.json",
+        "cat packages/worker/package.json",
+        "pnpm --filter @sms/shared test -- storage",
+        "cat packages/shared/tsconfig.json",
+        "cat packages/api/tsconfig.json",
+        "cat packages/worker/tsconfig.json",
+        "rg -n \"noEmit|incremental|tsBuildInfo|outDir|composite|references\" tsconfig*.json packages/**/tsconfig.json",
+        "cat tsconfig.base.json",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/worker typecheck",
+        "pnpm --filter @sms/shared typecheck",
+        "nl -ba packages/shared/src/index.ts"
+      ],
+      "createdAt": "2026-05-27T05:50:14.601Z"
+    },
+    {
+      "runId": "20260527T055647-89dfcb",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path packages/shared/src/index.ts still exists, and the storage contract has moved under packages/shared/src/storage. Current code satisfies the finding: StorageBackend now documents contentType behavior for S3 vs local storage and declares optional destroy?() in packages/shared/src/storage/storage-backend.ts:1-11; LocalStorage has a no-op destroy() and still does not create sidecar metadata; S3Storage.destroy() awaits the initialized client and calls client.destroy(); LazyS3Storage forwards destroy without initializing S3 first; API and worker shutdown paths call storage.destroy?.(). Focused lifecycle tests were added in packages/shared/src/__tests__/storage.test.ts, including no .meta sidecar, LocalStorage destroy, S3 destroy, and lazy S3 destroy behavior. No .meta files were found. @sms/shared, @sms/api, and @sms/worker typechecks passed. The focused Vitest command could not execute in this read-only sandbox because Vite tried to write packages/shared/node_modules/.vite-temp, but the current code and passing typechecks support marking the issue fixed.",
+      "commands": [
+        "rg --files -g 'package.json' -g 'packages/shared/src/**' -g 'packages/api/src/**' -g 'packages/worker/src/**' -g '*storage*' -g '*Storage*'",
+        "rg -n \"interface StorageBackend|type StorageBackend|class LocalStorage|class S3Storage|class LazyS3Storage|destroy\\?|destroy\\(|contentType|ContentType|storage\\.destroy|shutdown|SIGTERM|SIGINT|createStorage|\\.meta|metadata\" packages",
+        "git status --short",
+        "nl -ba packages/shared/src/index.ts",
+        "nl -ba packages/shared/src/storage/storage-backend.ts",
+        "nl -ba packages/shared/src/storage/local-storage.ts",
+        "nl -ba packages/shared/src/storage/s3-storage.ts",
+        "nl -ba packages/shared/src/storage/index.ts",
+        "nl -ba packages/api/src/index.ts",
+        "nl -ba packages/worker/src/index.ts",
+        "nl -ba packages/shared/src/__tests__/storage.test.ts",
+        "rg -n \"\\.meta|content-type sidecar|destroy\\(\\)|destroy\\?\\(|S3Client|ContentType|local storage ignores|Express static\" packages/shared/src/__tests__/storage.test.ts packages/shared/src/storage packages/api/src/index.ts packages/worker/src/index.ts",
+        "cat package.json",
+        "cat packages/shared/package.json",
+        "cat packages/api/package.json",
+        "cat packages/worker/package.json",
+        "pnpm --filter @sms/shared test -- --run storage",
+        "pnpm --filter @sms/shared typecheck",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/worker typecheck",
+        "rg --files | rg '\\.meta$'",
+        "rg -n \"save\\([^\\n]*contentType|ContentType|destroy\\?\\(|storage\\.destroy|client\\.destroy|content-type sidecar|local storage ignores|Express static serving\" packages/shared/src packages/api/src/index.ts packages/worker/src/index.ts",
+        "git diff -- packages/shared/src/storage/storage-backend.ts packages/shared/src/storage/local-storage.ts packages/shared/src/storage/s3-storage.ts packages/shared/src/storage/index.ts packages/api/src/index.ts packages/worker/src/index.ts packages/shared/src/__tests__/storage.test.ts"
+      ],
+      "createdAt": "2026-05-27T05:58:24.117Z"
+    }
+  ],
+  "signature": "sig_gh-27_65bc080d00",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-27-65bc080d00-2c29df8_a175cc6ccf"
+  ],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T05:58:24.116Z"
+}

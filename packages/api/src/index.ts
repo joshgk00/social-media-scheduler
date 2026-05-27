@@ -79,6 +79,7 @@ async function main() {
     try { await bulkOpsQueueService.bulkOpsQueue.close(); } catch (err) { logger.error({ err }, 'Bulk operations queue shutdown error'); }
     try { await notificationQueue.close(); } catch (err) { logger.error({ err }, 'Notification queue shutdown error'); }
     try { await transcodeQueue.close(); } catch (err) { logger.error({ err }, 'Transcode queue shutdown error'); }
+    try { await storage.destroy?.(); } catch (err) { logger.error({ err }, 'Storage shutdown error'); }
     try { await redis.quit(); } catch (err) { logger.error({ err }, 'Redis shutdown error'); }
     try { await sql.end(); } catch (err) { logger.error({ err }, 'Database shutdown error'); }
     process.exit(0);

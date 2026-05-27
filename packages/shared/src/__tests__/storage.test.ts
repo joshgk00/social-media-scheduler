@@ -9,6 +9,7 @@ import { createStorageBackend } from '../storage/index.js';
 // Mock @aws-sdk/client-s3 before any imports that use it
 const sendMock = vi.fn();
 const s3ClientConstructorMock = vi.fn();
+const s3ClientDestroyMock = vi.fn();
 
 vi.mock('@aws-sdk/client-s3', () => {
   class MockS3Client {
@@ -17,7 +18,7 @@ vi.mock('@aws-sdk/client-s3', () => {
     }
 
     send = sendMock;
-    destroy = vi.fn();
+    destroy = s3ClientDestroyMock;
   }
   return {
     S3Client: MockS3Client,
@@ -57,6 +58,12 @@ describe('LocalStorage', () => {
     expect(retrieved).toEqual(content);
   });
 
+  it('save() does not create content-type sidecar metadata', async () => {
+    await storage.save('uploads/image.jpg', Buffer.from('image'), 'image/jpeg');
+
+    await expect(fs.access(path.join(tmpDir, 'uploads/image.jpg.meta'))).rejects.toThrow();
+  });
+
   it('delete() removes the file', async () => {
     const content = Buffer.from('to delete');
     await storage.save('deleteme.txt', content, 'text/plain');
@@ -83,6 +90,10 @@ describe('LocalStorage', () => {
     expect(storage.getUrl('profiles/123/image.jpg')).toBe('/media/profiles/123/image.jpg');
   });
 
+  it('destroy() is a no-op lifecycle hook', async () => {
+    await expect(storage.destroy()).resolves.toBeUndefined();
+  });
+
   it('rejects path traversal attempts with ../', async () => {
     await expect(storage.save('../escape.txt', Buffer.from('bad'), 'text/plain')).rejects.toThrow();
     await expect(storage.get('../../etc/passwd')).rejects.toThrow();
@@ -101,6 +112,7 @@ describe('S3Storage', () => {
   beforeEach(() => {
     sendMock.mockReset();
     s3ClientConstructorMock.mockReset();
+    s3ClientDestroyMock.mockReset();
 
     storage = new S3Storage({
       endpoint: 'http://minio:9000',
@@ -184,6 +196,22 @@ describe('S3Storage', () => {
       'S3 backend requires optional dependency "@aws-sdk/client-s3"',
     );
   });
+
+  it('destroy() is a no-op before the S3 client is initialized', async () => {
+    await expect(storage.destroy()).resolves.toBeUndefined();
+
+    expect(s3ClientConstructorMock).not.toHaveBeenCalled();
+    expect(s3ClientDestroyMock).not.toHaveBeenCalled();
+  });
+
+  it('destroy() destroys the initialized S3 client', async () => {
+    sendMock.mockResolvedValueOnce({});
+    await storage.exists('uploads/file.jpg');
+
+    await storage.destroy();
+
+    expect(s3ClientDestroyMock).toHaveBeenCalledOnce();
+  });
 });
 
 describe('createStorageBackend', () => {
@@ -193,6 +221,7 @@ describe('createStorageBackend', () => {
     process.env = { ...originalEnv };
     sendMock.mockReset();
     s3ClientConstructorMock.mockReset();
+    s3ClientDestroyMock.mockReset();
   });
 
   afterEach(() => {
@@ -226,6 +255,20 @@ describe('createStorageBackend', () => {
     sendMock.mockResolvedValueOnce({});
     expect(await backend.exists('uploads/file.jpg')).toBe(true);
     expect(s3ClientConstructorMock).toHaveBeenCalledOnce();
+  });
+
+  it('destroy() on a lazy S3 backend does not initialize AWS SDK before use', async () => {
+    process.env.MEDIA_STORAGE_BACKEND = 's3';
+    process.env.S3_ENDPOINT = 'http://minio:9000';
+    process.env.S3_BUCKET = 'media';
+    process.env.S3_ACCESS_KEY = 'key';
+    process.env.S3_SECRET_KEY = 'secret';
+    const backend = createStorageBackend();
+
+    await backend.destroy?.();
+
+    expect(s3ClientConstructorMock).not.toHaveBeenCalled();
+    expect(s3ClientDestroyMock).not.toHaveBeenCalled();
   });
 
   it('throws when MEDIA_STORAGE_BACKEND is "s3" but S3_ENDPOINT is missing', () => {
