@@ -1,11 +1,7 @@
-export function getAdminQueuesUrl(locationLike: Pick<Location, 'hostname' | 'origin' | 'port'> = window.location): string {
-  const isViteDevServer =
-    (locationLike.hostname === '127.0.0.1' || locationLike.hostname === 'localhost') &&
-    locationLike.port === '5173';
+type LocationLike = Pick<Location, 'hostname' | 'port' | 'protocol'>;
 
-  if (isViteDevServer) {
-    return `${locationLike.origin.replace(/:5173$/, ':8080')}/admin/queues`;
-  }
-
+export function getAdminQueuesUrl(
+  _loc: LocationLike | undefined = typeof location === 'undefined' ? undefined : location,
+): string {
   return '/admin/queues';
 }

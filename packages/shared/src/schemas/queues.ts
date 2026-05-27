@@ -13,14 +13,16 @@ const startDateSchema = z.string().refine(
   'Start date must be a valid date',
 );
 
-export const createQueueSchema = z.object({
+const queueBaseSchema = z.object({
   name: z.string().min(1, 'Queue name is required').max(255),
   profileId: z.string().uuid('Invalid profile ID'),
+  scheduleMode: z.enum(['specific', 'fixed', 'variable']),
   intervalType: z.enum(['fixed', 'variable']),
   intervalValue: z.number().int().min(1).max(999),
   intervalUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months', 'years']),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'At least one day required'),
-  hourSlots: z.array(z.number().int().min(6).max(23)).min(1, 'At least one hour slot required'),
+  hourSlots: z.array(z.number().int().min(0).max(23)).min(1, 'At least one hour slot required'),
+  specificTimes: z.never().optional(),
   startDate: startDateSchema.optional(),
   seasonalStart: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional(),
   seasonalEnd: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional(),
@@ -29,7 +31,44 @@ export const createQueueSchema = z.object({
   notes: z.string().max(10000).optional(),
 });
 
-export const updateQueueSchema = createQueueSchema.partial();
+function validateScheduleConsistency(
+  value: { scheduleMode?: 'specific' | 'fixed' | 'variable'; intervalType?: 'fixed' | 'variable' },
+  ctx: z.RefinementCtx,
+) {
+  if (value.scheduleMode === undefined || value.intervalType === undefined) {
+    return;
+  }
+
+  if (value.scheduleMode === 'specific' && value.intervalType === 'variable') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['intervalType'],
+      message: 'Specific-time queues must use a fixed interval type',
+    });
+  }
+
+  if (value.scheduleMode === 'variable' && value.intervalType === 'fixed') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['intervalType'],
+      message: 'Variable queues must use a variable interval type',
+    });
+  }
+
+  if (value.scheduleMode === 'fixed' && value.intervalType === 'variable') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['intervalType'],
+      message: 'Fixed interval queues must use a fixed interval type',
+    });
+  }
+}
+
+export const createQueueSchema = queueBaseSchema.superRefine(validateScheduleConsistency);
+
+export const updateQueueSchema = queueBaseSchema.partial().extend({
+  isPaused: z.boolean().optional(),
+}).superRefine(validateScheduleConsistency);
 
 export const queueQuerySchema = z.object({
   network: z.enum(['twitter', 'all']).default('all'),

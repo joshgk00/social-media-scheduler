@@ -5,21 +5,19 @@ import { Plus, Search, ListOrdered } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useQueues, useDeleteQueue, type QueueListItem, type QueueFilters } from '../../hooks/use-queues';
+import { useQueues, useDeleteQueue, useToggleQueuePaused, type QueueListItem, type QueueFilters } from '../../hooks/use-queues';
 import { apiClient } from '../../lib/api-client';
-import { QueueStatusBadge } from '../../components/queues/QueueStatusBadge';
 import { QueueActionsMenu } from '../../components/queues/QueueActionsMenu';
 
 import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { EmptyState } from '../../components/ui/empty-state';
 import { Input } from '../../components/ui/input';
+import { PageHeader } from '../../components/ui/page-header';
+import { PlatformGlyph, type Platform } from '../../components/ui/platform-glyph';
+import { Segmented } from '../../components/ui/segmented';
+import { StatusPill } from '../../components/ui/pill';
 import { Skeleton } from '../../components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../components/ui/select';
 import {
   Table,
   TableBody,
@@ -28,15 +26,19 @@ import {
   TableHeader,
   TableRow,
 } from '../../components/ui/table';
+import { cadenceSummary, formatNextRun } from '../../lib/queue-schedule';
 
-function getPlatformIcon(platform?: string): string {
-  if (platform === 'twitter') return '𝕏';
-  return '';
+type StatusFilter = 'all' | 'active' | 'paused';
+
+function normalizePlatform(platform?: string): Platform {
+  if (platform === 'linkedin' || platform === 'facebook') return platform;
+  return 'twitter';
 }
 
 export default function QueuesPage() {
   const navigate = useNavigate();
   const deleteQueueMutation = useDeleteQueue();
+  const toggleQueuePausedMutation = useToggleQueuePaused();
 
   const [filters, setFilters] = useState<QueueFilters>({});
   const [searchInput, setSearchInput] = useState('');
@@ -44,7 +46,7 @@ export default function QueuesPage() {
 
   const { data: queues, isLoading, isError, refetch } = useQueues(filters);
 
-  const hasActiveFilters = !!(filters.network || filters.status || searchInput);
+  const hasActiveFilters = !!(filters.status || searchInput);
 
   const filteredQueues = useMemo(() => {
     if (!queues || !searchInput) return queues ?? [];
@@ -58,6 +60,20 @@ export default function QueuesPage() {
         toast.error(error instanceof Error ? error.message : 'Failed to delete queue');
       },
     });
+  }
+
+  function handleTogglePause(queue: QueueListItem) {
+    toggleQueuePausedMutation.mutate(
+      { id: queue.id, isPaused: !queue.isPaused },
+      {
+        onSuccess: () => {
+          toast.success(queue.isPaused ? 'Queue resumed.' : 'Queue paused.');
+        },
+        onError: () => {
+          toast.error("Couldn't update queue status.");
+        },
+      },
+    );
   }
 
   async function handleCopyConfig(queueId: string) {
@@ -75,16 +91,12 @@ export default function QueuesPage() {
 
   if (isError) {
     return (
-      <main className="space-y-4 p-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Queues</h1>
-          <Button asChild>
-            <Link to="/queues/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Queue
-            </Link>
-          </Button>
-        </div>
+      <main className="px-4 py-6 sm:px-6 lg:px-8">
+        <PageHeader
+          title="Queues"
+          subtitle="Recurring publishing schedules that auto-fill from a backlog of queued posts."
+          actions={<CreateQueueButton />}
+        />
         <div className="text-center py-12">
           <h2 className="text-lg font-semibold mb-2">Failed to load queues</h2>
           <p className="text-muted-foreground mb-4">Check your connection and try again.</p>
@@ -95,52 +107,15 @@ export default function QueuesPage() {
   }
 
   return (
-    <main className="space-y-4 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Queues</h1>
-        <Button asChild>
-          <Link to="/queues/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Queue
-          </Link>
-        </Button>
-      </div>
+    <main className="px-4 py-6 sm:px-6 lg:px-8">
+      <PageHeader
+        title="Queues"
+        subtitle="Recurring publishing schedules that auto-fill from a backlog of queued posts."
+        actions={<CreateQueueButton />}
+      />
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Select
-          value={filters.network ?? 'all'}
-          onValueChange={(value) =>
-            setFilters(prev => ({ ...prev, network: value === 'all' ? undefined : value }))
-          }
-        >
-          <SelectTrigger className="w-[150px]" aria-label="Filter by network">
-            <SelectValue placeholder="Network" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Networks</SelectItem>
-            <SelectItem value="twitter">Twitter</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={filters.status ?? 'all'}
-          onValueChange={(value) =>
-            setFilters(prev => ({ ...prev, status: value === 'all' ? undefined : value }))
-          }
-        >
-          <SelectTrigger className="w-[150px]" aria-label="Filter by status">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="paused">Paused</SelectItem>
-            <SelectItem value="empty">Empty</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] flex-1 sm:max-w-[360px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search queues..."
@@ -150,19 +125,28 @@ export default function QueuesPage() {
             aria-label="Search queues"
           />
         </div>
+        <Segmented
+          label="Queue status"
+          value={(filters.status ?? 'all') as StatusFilter}
+          onChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? undefined : value }))}
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'active', label: 'Active' },
+            { value: 'paused', label: 'Paused' },
+          ]}
+        />
       </div>
 
-      {/* Data table */}
       {isLoading ? (
-        <div className="rounded-md border">
+        <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
+                <TableHead>Queue</TableHead>
                 <TableHead style={{ width: 160 }}>Profile</TableHead>
+                <TableHead style={{ width: 190 }}>Cadence</TableHead>
                 <TableHead style={{ width: 80 }}>Posts</TableHead>
                 <TableHead style={{ width: 120 }}>Status</TableHead>
-                <TableHead style={{ width: 140 }}>Last Published</TableHead>
                 <TableHead style={{ width: 140 }}>Next Run</TableHead>
                 <TableHead style={{ width: 48 }} />
               </TableRow>
@@ -172,49 +156,43 @@ export default function QueuesPage() {
                 <TableRow key={index}>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-6" /></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </div>
+        </Card>
       ) : filteredQueues.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
+        <Card padded>
           {hasActiveFilters ? (
-            <>
-              <h2 className="text-lg font-semibold mb-2">No matching queues</h2>
-              <p className="text-sm text-muted-foreground">Try adjusting your filters.</p>
-            </>
+            <EmptyState
+              icon={Search}
+              title="No matching queues"
+              body="Try adjusting your search or status filter."
+            />
           ) : (
-            <>
-              <ListOrdered className="h-12 w-12 text-muted-foreground mb-4" />
-              <h2 className="text-lg font-semibold mb-2">No queues yet</h2>
-              <p className="text-sm text-muted-foreground mb-4">
-                Create a queue to schedule recurring posts on autopilot.
-              </p>
-              <Button asChild>
-                <Link to="/queues/new">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Queue
-                </Link>
-              </Button>
-            </>
+            <EmptyState
+              icon={ListOrdered}
+              title="No queues yet"
+              body="Create a recurring schedule and append posts whenever your backlog is ready."
+              action={<CreateQueueButton />}
+            />
           )}
-        </div>
+        </Card>
       ) : (
-        <div className="rounded-md border">
+        <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
+                <TableHead>Queue</TableHead>
                 <TableHead style={{ width: 160 }}>Profile</TableHead>
+                <TableHead style={{ width: 190 }}>Cadence</TableHead>
                 <TableHead style={{ width: 80 }}>Posts</TableHead>
                 <TableHead style={{ width: 120 }}>Status</TableHead>
-                <TableHead style={{ width: 140 }}>Last Published</TableHead>
                 <TableHead style={{ width: 140 }}>Next Run</TableHead>
                 <TableHead style={{ width: 48 }} />
               </TableRow>
@@ -224,40 +202,40 @@ export default function QueuesPage() {
                 <TableRow key={queue.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell>
                     <NavLink
-                      to={`/queues/${queue.id}/posts`}
+                      to={`/queues/${queue.id}`}
                       className="text-sm font-medium hover:underline"
                     >
                       {queue.name}
                     </NavLink>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Last run{' '}
+                      {queue.lastPublishedAt
+                        ? formatDistanceToNow(new Date(queue.lastPublishedAt), { addSuffix: true })
+                        : 'never'}
+                    </p>
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm">
-                      {getPlatformIcon(queue.profile?.platform)}{' '}
-                      {queue.profile?.displayName ?? '-'}
-                    </span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <PlatformGlyph platform={normalizePlatform(queue.profile?.platform)} size={12} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{queue.profile?.displayName ?? '-'}</p>
+                        <p className="truncate mono text-xs text-muted-foreground">
+                          @{queue.profile?.handle ?? queue.profile?.displayName ?? 'profile'}
+                        </p>
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm">{queue.postCount}</span>
+                    <p className="mono text-xs font-semibold text-foreground">
+                      {cadenceSummary(queue).primary}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{cadenceSummary(queue).secondary}</p>
                   </TableCell>
                   <TableCell>
-                    <QueueStatusBadge
-                      isPaused={queue.isPaused}
-                      postCount={queue.postCount}
-                      seasonalStart={queue.seasonalStart}
-                      seasonalEnd={queue.seasonalEnd}
-                    />
+                    <span className="mono text-sm tabular-nums">{queue.postCount}</span>
                   </TableCell>
                   <TableCell>
-                    {queue.lastPublishedAt ? (
-                      <span
-                        className="text-sm text-muted-foreground"
-                        title={format(new Date(queue.lastPublishedAt), 'PPpp')}
-                      >
-                        {formatDistanceToNow(new Date(queue.lastPublishedAt), { addSuffix: true })}
-                      </span>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
+                    <StatusPill status={queue.isPaused ? 'paused' : 'active'} />
                   </TableCell>
                   <TableCell>
                     <NextRunCell queue={queue} />
@@ -267,15 +245,27 @@ export default function QueuesPage() {
                       queue={queue}
                       onDelete={() => handleDelete(queue.id)}
                       onCopyConfig={() => handleCopyConfig(queue.id)}
+                      onTogglePause={() => handleTogglePause(queue)}
                     />
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </div>
+        </Card>
       )}
     </main>
+  );
+}
+
+function CreateQueueButton() {
+  return (
+    <Button asChild>
+      <Link to="/queues/new">
+        <Plus className="mr-2 h-4 w-4" />
+        New queue
+      </Link>
+    </Button>
   );
 }
 
@@ -292,7 +282,7 @@ function NextRunCell({ queue }: { queue: QueueListItem }) {
         className="text-sm text-muted-foreground"
         title={format(new Date(queue.nextRunAt), 'PPpp')}
       >
-        {formatDistanceToNow(new Date(queue.nextRunAt), { addSuffix: true })}
+        {formatNextRun(queue.nextRunAt)}
       </span>
     );
   }

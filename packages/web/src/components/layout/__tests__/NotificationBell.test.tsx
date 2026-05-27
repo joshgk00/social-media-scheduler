@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -7,6 +7,17 @@ import { NotificationBell } from '../NotificationBell';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  class ResizeObserverMock {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+  }
+  vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('NotificationBell', () => {
@@ -57,5 +68,46 @@ describe('NotificationBell', () => {
 
     expect(screen.getByRole('button', { name: 'Notifications, 2 unread' })).toBeInTheDocument();
     expect(screen.getByText('First notification')).toBeInTheDocument();
+  });
+
+  it('opens bulk failure reports with a public media URL', async () => {
+    const onMarkRead = vi.fn();
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const user = userEvent.setup();
+    const bulkOperationId = '55555555-5555-4555-8555-555555555555';
+
+    render(
+      <MemoryRouter>
+        <NotificationBell
+          unreadCount={1}
+          recentNotifications={[
+            {
+              id: 'bulk-notification',
+              eventType: 'bulk_completed',
+              title: 'Bulk complete',
+              payload: {
+                operation: 'bulk.csv-import-scheduled',
+                successCount: 3,
+                failureCount: 2,
+                errorReportPath: `/Users/app/data/media/bulk-errors/${bulkOperationId}/errors.csv`,
+              },
+            },
+          ]}
+          onMarkRead={onMarkRead}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
+    expect(screen.getByText('Import complete with 2 errors.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Open report' }));
+
+    expect(onMarkRead).toHaveBeenCalledWith('bulk-notification');
+    expect(openSpy).toHaveBeenCalledWith(
+      `/media/bulk-errors/${bulkOperationId}/errors.csv`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   });
 });

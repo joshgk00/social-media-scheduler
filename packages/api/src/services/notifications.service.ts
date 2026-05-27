@@ -6,6 +6,7 @@ export interface ListNotificationsInput {
   page: number;
   pageSize: number;
   eventTypes?: ReadonlyArray<string>;
+  severity?: 'all' | 'info' | 'warning' | 'error';
   readStatus?: 'all' | 'read' | 'unread';
 }
 
@@ -30,6 +31,9 @@ function buildNotificationConditions(input: ListNotificationsInput) {
   const conditions = [eq(notifications.userId, input.userId)];
   if (input.eventTypes && input.eventTypes.length > 0) {
     conditions.push(inArray(notifications.eventType, [...input.eventTypes]));
+  }
+  if (input.severity && input.severity !== 'all') {
+    conditions.push(eq(notifications.severity, input.severity));
   }
   if (input.readStatus === 'read') {
     conditions.push(isNotNull(notifications.readAt));
@@ -112,4 +116,12 @@ export async function markAllRead(db: Db, userId: string): Promise<number> {
     .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)))
     .returning({ id: notifications.id });
   return updatedRows.length;
+}
+
+export async function clearRead(db: Db, userId: string): Promise<number> {
+  const deletedRows = await db
+    .delete(notifications)
+    .where(and(eq(notifications.userId, userId), isNotNull(notifications.readAt)))
+    .returning({ id: notifications.id });
+  return deletedRows.length;
 }

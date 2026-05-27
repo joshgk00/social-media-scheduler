@@ -55,6 +55,7 @@ export interface NotificationsFilters {
   pageSize?: number;
   eventType?: ReadonlyArray<NotificationEventType>;
   eventTypes?: ReadonlyArray<NotificationEventType>;
+  type?: 'all' | 'error' | 'warning' | 'info';
   readStatus?: 'all' | 'read' | 'unread';
 }
 
@@ -199,6 +200,18 @@ export function useMarkAllRead() {
       }
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unreadCount'] });
+    },
+  });
+}
+
+export function useClearRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => apiClient.post<{ ok: boolean; deleted: number }>('/api/notifications/clear-read'),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['notifications', 'unreadCount'] });
     },

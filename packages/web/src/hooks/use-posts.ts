@@ -43,6 +43,20 @@ interface PostsResponse {
   limit: number;
 }
 
+interface PostStatusCountsResponse {
+  total: number;
+  byStatus: Record<string, number>;
+}
+
+interface DashboardPostStatsResponse {
+  scheduled24Count: number;
+  scheduled24: Post[];
+  scheduledInRange: Post[];
+  failed24: Post[];
+  failed7dCount: number;
+  scheduledProfileCount: number;
+}
+
 interface ConflictingPost {
   id: string;
   textPreview: string;
@@ -81,6 +95,35 @@ export function usePosts(filters: PostFilters = {}) {
     staleTime: 15_000,
     refetchInterval: 10_000,
     refetchIntervalInBackground: false, // pause polling when tab hidden (D-15)
+  });
+}
+
+export function usePostStatusCounts(filters: Omit<PostFilters, 'status' | 'page' | 'limit'> = {}) {
+  const params = new URLSearchParams();
+  if (filters.profileId) params.set('profileId', filters.profileId);
+  if (filters.tagId) params.set('tagId', filters.tagId);
+  if (filters.search) params.set('search', filters.search);
+  if (filters.searchScope) params.set('searchScope', filters.searchScope);
+
+  const queryString = params.toString();
+  return useQuery({
+    queryKey: ['posts', 'status-counts', filters],
+    queryFn: () => apiClient.get<PostStatusCountsResponse>(`/api/posts/status-counts${queryString ? `?${queryString}` : ''}`),
+    staleTime: 15_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useDashboardPostStats(range: '24h' | '7d' | '30d') {
+  const params = new URLSearchParams({ range });
+
+  return useQuery({
+    queryKey: ['posts', 'dashboard-stats', range],
+    queryFn: () => apiClient.get<DashboardPostStatsResponse>(`/api/posts/dashboard-stats?${params}`),
+    staleTime: 15_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -140,4 +183,4 @@ export function useCheckConflicts(profileId: string, scheduledAt: string, exclud
   });
 }
 
-export type { Post, PostsResponse, PostTag, PostProfile };
+export type { Post, PostsResponse, PostTag, PostProfile, PostStatusCountsResponse, DashboardPostStatsResponse };

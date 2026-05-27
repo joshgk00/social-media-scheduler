@@ -1,15 +1,27 @@
+import { DateTime } from 'luxon';
 import { eq, and, sql, inArray, gte, lte, ne, count as drizzleCount, isNull, type SQL } from 'drizzle-orm';
-import { AppError, DELETABLE_STATES, PostInvariantError, planDelete, planUpdate } from '@sms/shared';
+import { AppError, calculateNextRunAt, DELETABLE_STATES, PostInvariantError, planDelete, planUpdate } from '@sms/shared';
 import { createLogger } from '@sms/shared/logger';
 import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
-import { posts, postTags, tags, socialProfiles, postMedia } from '@sms/db';
+import { posts, postTags, tags, socialProfiles, postMedia, queues, users } from '@sms/db';
 
 import { softDeleteMediaForPost, associateMediaToPost } from './media.service.js';
 
 const logger = createLogger('post-service');
 
 type Platform = 'twitter' | 'linkedin' | 'facebook';
+const POST_STATUSES: PostStatus[] = [
+  'draft',
+  'scheduled',
+  'queued',
+  'paused',
+  'publishing',
+  'published',
+  'failed',
+  'auto_destructing',
+  'destroyed',
+];
 
 interface CreatePostInput {
   profileId: string;
@@ -60,6 +72,11 @@ interface PostQuery {
   limit?: number;
 }
 
+type DashboardWindowRange = '24h' | '7d' | '30d';
+type SerializedPostForList = ReturnType<typeof serializePostForList>;
+const DASHBOARD_UPCOMING_PREVIEW_LIMIT = 4;
+const DASHBOARD_MAX_QUEUED_SLOTS_PER_QUEUE = 24 * 60;
+
 type PostServiceErrorKind = 'profile_not_found' | 'tag_not_found';
 
 const POST_SERVICE_ERROR_DETAILS: Record<
@@ -78,6 +95,137 @@ export class PostServiceError extends AppError {
     super(details.message, details.statusCode);
     this.name = 'PostServiceError';
   }
+}
+
+function dashboardRangeEnd(now: Date, range: DashboardWindowRange): Date {
+  const end = new Date(now);
+  const hours = range === '24h' ? 24 : range === '7d' ? 24 * 7 : 24 * 30;
+  end.setHours(end.getHours() + hours);
+  return end;
+}
+
+function buildPostFilterConditions(
+  db: Db,
+  userId: string,
+  query: PostQuery,
+  options: { includeStatus: boolean; applySearchScopeDefault: boolean },
+): SQL[] {
+  const conditions = [eq(posts.userId, userId)];
+
+  if (options.includeStatus && query.status) {
+    conditions.push(eq(posts.status, query.status));
+  }
+  if (query.profileId) {
+    conditions.push(eq(posts.profileId, query.profileId));
+  }
+  if (query.search) {
+    const tsQuery = sql`plainto_tsquery('english', ${query.search})`;
+    if (options.applySearchScopeDefault && !query.status && query.searchScope === 'posts') {
+      conditions.push(sql`${posts.status} IN ('draft', 'scheduled', 'failed')`);
+    } else if (options.applySearchScopeDefault && !query.status && query.searchScope === 'queue') {
+      conditions.push(eq(posts.status, 'queued'));
+    }
+    conditions.push(sql`(${posts.searchVector} || ${posts.tagSearchVector}) @@ ${tsQuery}`);
+  }
+  if (query.tagId) {
+    const postIdsWithTag = db
+      .select({ postId: postTags.postId })
+      .from(postTags)
+      .where(eq(postTags.tagId, query.tagId));
+
+    conditions.push(inArray(posts.id, postIdsWithTag));
+  }
+
+  return conditions;
+}
+
+function serializePostForList(post: typeof posts.$inferSelect) {
+  return {
+    ...post,
+    tags: [],
+  };
+}
+
+function sortDashboardPosts(postsForDashboard: SerializedPostForList[]): SerializedPostForList[] {
+  return [...postsForDashboard].sort((a, b) => {
+    const aTime = a.scheduledAt?.getTime() ?? Number.POSITIVE_INFINITY;
+    const bTime = b.scheduledAt?.getTime() ?? Number.POSITIVE_INFINITY;
+    return aTime - bTime;
+  });
+}
+
+type QueuedDashboardQueue = {
+  queue: {
+    id: string;
+    cursorPosition: number;
+    intervalType: string;
+    intervalValue: number;
+    intervalUnit: string;
+    daysOfWeek: unknown;
+    hourSlots: unknown;
+    startDate: Date | null;
+    lastPublishedAt: Date | null;
+    nextRunAt: Date | null;
+  };
+  user: {
+    timezone: string | null;
+  };
+};
+
+function numberArray(value: unknown): number[] {
+  return Array.isArray(value) ? value.filter((item): item is number => typeof item === 'number') : [];
+}
+
+function dashboardQueueSlots(
+  queue: QueuedDashboardQueue['queue'],
+  timezone: string,
+  next24End: Date,
+  rangeEnd: Date,
+): Date[] {
+  const slots: Date[] = [];
+  let nextRunAt = queue.nextRunAt;
+  const next24EndTime = next24End.getTime();
+  const rangeEndTime = rangeEnd.getTime();
+
+  while (
+    nextRunAt &&
+    nextRunAt.getTime() <= rangeEndTime &&
+    slots.length < DASHBOARD_MAX_QUEUED_SLOTS_PER_QUEUE &&
+    (nextRunAt.getTime() <= next24EndTime || slots.length < DASHBOARD_UPCOMING_PREVIEW_LIMIT)
+  ) {
+    slots.push(nextRunAt);
+
+    const nextSlot = calculateNextRunAt(
+      {
+        intervalType: queue.intervalType,
+        intervalValue: queue.intervalValue,
+        intervalUnit: queue.intervalUnit,
+        hourSlots: numberArray(queue.hourSlots),
+        daysOfWeek: numberArray(queue.daysOfWeek),
+        lastPublishedAt: nextRunAt,
+        startDate: queue.startDate,
+      },
+      timezone,
+      DateTime.fromJSDate(nextRunAt).setZone(timezone),
+    );
+    const nextSlotDate = nextSlot?.toJSDate() ?? null;
+    if (nextSlotDate && nextSlotDate.getTime() <= nextRunAt.getTime()) {
+      break;
+    }
+    nextRunAt = nextSlotDate;
+  }
+
+  return slots;
+}
+
+function projectQueuedDashboardPosts(
+  queuedPosts: Array<typeof posts.$inferSelect>,
+  slots: Date[],
+): SerializedPostForList[] {
+  return queuedPosts.slice(0, slots.length).map((post, index) => serializePostForList({
+    ...post,
+    scheduledAt: slots[index],
+  }));
 }
 
 function toPostAppError(err: PostInvariantError): AppError {
@@ -447,37 +595,19 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
   const limit = query.limit ?? 25;
   const offset = (page - 1) * limit;
 
-  const conditions = [eq(posts.userId, userId)];
+  const conditions = buildPostFilterConditions(db, userId, query, {
+    includeStatus: true,
+    applySearchScopeDefault: true,
+  });
   let orderClause: SQL = sql`${posts.scheduledAt} DESC NULLS LAST, ${posts.createdAt} DESC`;
   let headlineColumn: SQL.Aliased<string> | undefined;
   let rankColumn: SQL.Aliased<number> | undefined;
 
-  if (query.status) {
-    conditions.push(eq(posts.status, query.status));
-  }
-  if (query.profileId) {
-    conditions.push(eq(posts.profileId, query.profileId));
-  }
   if (query.search) {
     const tsQuery = sql`plainto_tsquery('english', ${query.search})`;
-    if (!query.status && query.searchScope === 'posts') {
-      conditions.push(sql`${posts.status} IN ('draft', 'scheduled', 'failed')`);
-    } else if (!query.status && query.searchScope === 'queue') {
-      conditions.push(eq(posts.status, 'queued'));
-    }
-    conditions.push(sql`(${posts.searchVector} || ${posts.tagSearchVector}) @@ ${tsQuery}`);
     headlineColumn = sql<string>`ts_headline('english', ${posts.text}, ${tsQuery}, 'StartSel=<b>, StopSel=</b>, MaxWords=20, MinWords=10, ShortWord=2')`.as('headline');
     rankColumn = sql<number>`ts_rank(${posts.searchVector} || ${posts.tagSearchVector}, ${tsQuery})`.as('rank');
     orderClause = sql`rank DESC, ${posts.scheduledAt} DESC NULLS LAST, ${posts.createdAt} DESC`;
-  }
-
-  if (query.tagId) {
-    const postIdsWithTag = db
-      .select({ postId: postTags.postId })
-      .from(postTags)
-      .where(eq(postTags.tagId, query.tagId));
-
-    conditions.push(inArray(posts.id, postIdsWithTag));
   }
 
   const baseSelect = {
@@ -547,6 +677,167 @@ export async function getPosts(db: Db, userId: string, query: PostQuery) {
   }));
 
   return { posts: postsWithTags, total, page, limit };
+}
+
+export async function getPostStatusCounts(db: Db, userId: string, query: PostQuery) {
+  const conditions = buildPostFilterConditions(db, userId, query, {
+    includeStatus: false,
+    applySearchScopeDefault: false,
+  });
+
+  const rows = await db
+    .select({
+      status: posts.status,
+      count: drizzleCount(),
+    })
+    .from(posts)
+    .where(and(...conditions))
+    .groupBy(posts.status);
+
+  const byStatus = Object.fromEntries(POST_STATUSES.map((status) => [status, 0])) as Record<PostStatus, number>;
+  let total = 0;
+  for (const row of rows) {
+    const status = row.status as PostStatus;
+    const count = Number(row.count ?? 0);
+    byStatus[status] = count;
+    total += count;
+  }
+
+  return { total, byStatus };
+}
+
+export async function getDashboardPostStats(
+  db: Db,
+  userId: string,
+  range: DashboardWindowRange,
+  now = new Date(),
+) {
+  const next24End = dashboardRangeEnd(now, '24h');
+  const rangeEnd = dashboardRangeEnd(now, range);
+  const failedTodayStart = new Date(now);
+  failedTodayStart.setHours(0, 0, 0, 0);
+  const failed7dStart = new Date(now);
+  failed7dStart.setDate(failed7dStart.getDate() - 7);
+  const nowIso = now.toISOString();
+  const next24EndIso = next24End.toISOString();
+  const rangeEndIso = rangeEnd.toISOString();
+  const failedTodayStartIso = failedTodayStart.toISOString();
+  const failed7dStartIso = failed7dStart.toISOString();
+
+  const scheduled24Rows = await db
+    .select()
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'scheduled'),
+      sql`${posts.scheduledAt} >= ${nowIso}::timestamptz`,
+      sql`${posts.scheduledAt} <= ${next24EndIso}::timestamptz`,
+    ))
+    .orderBy(sql`${posts.scheduledAt} ASC`);
+
+  const scheduledInRangeRows = await db
+    .select()
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'scheduled'),
+      sql`${posts.scheduledAt} >= ${nowIso}::timestamptz`,
+      sql`${posts.scheduledAt} <= ${rangeEndIso}::timestamptz`,
+    ))
+    .orderBy(sql`${posts.scheduledAt} ASC`)
+    .limit(DASHBOARD_UPCOMING_PREVIEW_LIMIT);
+
+  const queuedDashboardQueues = await db
+    .select({
+      queue: {
+        id: queues.id,
+        cursorPosition: queues.cursorPosition,
+        intervalType: queues.intervalType,
+        intervalValue: queues.intervalValue,
+        intervalUnit: queues.intervalUnit,
+        daysOfWeek: queues.daysOfWeek,
+        hourSlots: queues.hourSlots,
+        startDate: queues.startDate,
+        lastPublishedAt: queues.lastPublishedAt,
+        nextRunAt: queues.nextRunAt,
+      },
+      user: {
+        timezone: users.timezone,
+      },
+    })
+    .from(queues)
+    .innerJoin(users, eq(queues.userId, users.id))
+    .where(and(
+      eq(queues.userId, userId),
+      eq(queues.isPaused, false),
+      sql`${queues.nextRunAt} >= ${nowIso}::timestamptz`,
+      sql`${queues.nextRunAt} <= ${rangeEndIso}::timestamptz`,
+    ))
+    .orderBy(sql`${queues.nextRunAt} ASC, ${queues.id} ASC`);
+
+  const queuedUpcoming: SerializedPostForList[] = [];
+  for (const queueRow of queuedDashboardQueues as QueuedDashboardQueue[]) {
+    const timezone = queueRow.user.timezone ?? 'UTC';
+    const slots = dashboardQueueSlots(queueRow.queue, timezone, next24End, rangeEnd);
+    if (slots.length === 0) continue;
+
+    const queuedPosts = await db
+      .select()
+      .from(posts)
+      .where(and(
+        eq(posts.userId, userId),
+        eq(posts.status, 'queued'),
+        eq(posts.queueId, queueRow.queue.id),
+        sql`${posts.queuePosition} > ${queueRow.queue.cursorPosition}`,
+      ))
+      .orderBy(sql`${posts.queuePosition} ASC`)
+      .limit(slots.length);
+
+    queuedUpcoming.push(...projectQueuedDashboardPosts(queuedPosts, slots));
+  }
+  const queued24 = queuedUpcoming.filter((post) => {
+    const scheduledAt = post.scheduledAt?.getTime();
+    return scheduledAt !== undefined && scheduledAt >= now.getTime() && scheduledAt <= next24End.getTime();
+  });
+
+  const scheduled24 = sortDashboardPosts([
+    ...scheduled24Rows.map(serializePostForList),
+    ...queued24,
+  ]);
+  const scheduledInRange = sortDashboardPosts([
+    ...scheduledInRangeRows.map(serializePostForList),
+    ...queuedUpcoming,
+  ]).slice(0, DASHBOARD_UPCOMING_PREVIEW_LIMIT);
+
+  const failed24Rows = await db
+    .select()
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'failed'),
+      sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) >= ${failedTodayStartIso}::timestamptz`,
+      sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) <= ${nowIso}::timestamptz`,
+    ))
+    .orderBy(sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) ASC`);
+
+  const [{ failed7dCount = 0 } = { failed7dCount: 0 }] = await db
+    .select({ failed7dCount: drizzleCount() })
+    .from(posts)
+    .where(and(
+      eq(posts.userId, userId),
+      eq(posts.status, 'failed'),
+      sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) >= ${failed7dStartIso}::timestamptz`,
+      sql`coalesce(${posts.failedAt}, ${posts.updatedAt}) <= ${nowIso}::timestamptz`,
+    ));
+
+  return {
+    scheduled24Count: scheduled24.length,
+    scheduled24,
+    scheduledInRange,
+    failed24: failed24Rows.map(serializePostForList),
+    failed7dCount: Number(failed7dCount),
+    scheduledProfileCount: new Set(scheduled24.map((post) => post.profileId).filter(Boolean)).size,
+  };
 }
 
 export async function checkConflicts(

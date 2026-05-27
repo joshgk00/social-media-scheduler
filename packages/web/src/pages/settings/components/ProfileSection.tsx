@@ -2,11 +2,11 @@ import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { profileUpdateSchema, type ProfileUpdateInput } from '@sms/shared';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import type { User } from '../../../hooks/use-auth';
 import { useUpdateProfile, useUploadProfileImage } from '../../../hooks/use-settings';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Card } from '../../../components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '../../../components/ui/avatar';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -77,15 +77,15 @@ export function ProfileSection({ user }: ProfileSectionProps) {
     }
   }
 
-  const avatarSrc = previewUrl ?? (user.profileImagePath ? `/avatars/${user.profileImagePath}` : undefined);
+  const avatarPath = user.profileImagePath?.startsWith('/')
+    ? user.profileImagePath
+    : user.profileImagePath ? `/avatars/${user.profileImagePath}` : undefined;
+  const avatarSrc = previewUrl ?? avatarPath;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Profile</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-6 flex items-center gap-4">
+    <Card title="Profile" padded>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <button
             type="button"
             onClick={handleAvatarClick}
@@ -105,6 +105,20 @@ export function ProfileSection({ user }: ProfileSectionProps) {
               </div>
             )}
           </button>
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAvatarClick}
+              loading={uploadImage.isPending}
+              leadingIcon={<Upload className="h-4 w-4" aria-hidden="true" />}
+            >
+              Upload avatar
+            </Button>
+            <p className="max-w-sm text-xs text-muted-foreground">
+              JPG, PNG, GIF, or WebP. Images are resized to 200 by 200 pixels.
+            </p>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -117,13 +131,13 @@ export function ProfileSection({ user }: ProfileSectionProps) {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="firstName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>First Name</FormLabel>
+                    <FormLabel>First name</FormLabel>
                     <FormControl>
                       <Input placeholder="First name" {...field} />
                     </FormControl>
@@ -136,7 +150,7 @@ export function ProfileSection({ user }: ProfileSectionProps) {
                 name="lastName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Last Name</FormLabel>
+                    <FormLabel>Last name</FormLabel>
                     <FormControl>
                       <Input placeholder="Last name" {...field} />
                     </FormControl>
@@ -146,47 +160,49 @@ export function ProfileSection({ user }: ProfileSectionProps) {
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="username"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Username</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Username (3-100 characters)" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="username"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Username</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Username" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input type="email" placeholder="Email address" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="Email address" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <div className="flex justify-end">
               <Button
                 type="submit"
-                variant="secondary"
+                variant="primary"
                 disabled={!hasChanges || updateProfile.isPending}
               >
                 {updateProfile.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Save Profile
+                Save profile
               </Button>
             </div>
           </form>
         </Form>
-      </CardContent>
+      </div>
     </Card>
   );
 }

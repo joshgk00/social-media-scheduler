@@ -163,3 +163,59 @@ describe('GET /api/settings/storage', () => {
     expect(res.body.videoCount).toBe(0);
   });
 });
+
+describe('PUT /api/settings/preferences', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('accepts legacy preference updates without defaultLandingPage', async () => {
+    const { app } = createTestApp();
+
+    const res = await request(app)
+      .put('/api/settings/preferences')
+      .send({
+        timezone: 'UTC',
+        dateFormat: 'MMM d, yyyy',
+        entriesPerPage: 25,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      timezone: 'UTC',
+      dateFormat: 'MMM d, yyyy',
+      entriesPerPage: 25,
+      defaultLandingPage: '/dashboard',
+    });
+  });
+
+  it('writes provided defaultLandingPage without reading the fallback value', async () => {
+    const updateChain: Record<string, any> = {};
+    for (const method of ['where', 'returning']) {
+      updateChain[method] = vi.fn().mockReturnValue(updateChain);
+    }
+    updateChain.set = vi.fn().mockReturnValue(updateChain);
+    updateChain.then = (resolve: (value: unknown[]) => void) => resolve([]);
+    const db = {
+      ...createMockDb(),
+      update: vi.fn().mockReturnValue(updateChain),
+    };
+    const { app } = createTestApp(true, db);
+
+    const res = await request(app)
+      .put('/api/settings/preferences')
+      .send({
+        timezone: 'UTC',
+        dateFormat: 'MMM d, yyyy',
+        entriesPerPage: 25,
+        defaultLandingPage: '/posts',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.defaultLandingPage).toBe('/posts');
+    expect(db.select).not.toHaveBeenCalled();
+    expect(updateChain.set).toHaveBeenCalledWith(expect.objectContaining({
+      defaultLandingPage: '/posts',
+    }));
+  });
+});

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useRemoveFromQueue } from '../../hooks/use-queue-posts';
+import { useQueuePosts, useRemoveFromQueue } from '../../hooks/use-queue-posts';
 import { toast } from 'sonner';
 
 vi.mock('sonner', () => ({
@@ -11,6 +11,7 @@ vi.mock('sonner', () => ({
 
 vi.mock('../../lib/api-client', () => ({
   apiClient: {
+    get: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -66,5 +67,38 @@ describe('useRemoveFromQueue', () => {
     });
 
     expect(toast.error).not.toHaveBeenCalled();
+  });
+});
+
+describe('useQueuePosts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('requests a bounded preview when a limit is provided', async () => {
+    const { apiClient } = await import('../../lib/api-client');
+    vi.mocked(apiClient.get).mockResolvedValue([]);
+
+    renderHook(
+      () => useQueuePosts('queue-123', { limit: 4 }, { refetchInterval: false }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/queues/queue-123/posts?limit=4');
+    });
+  });
+
+  it('does not apply a default limit to full queue post requests', async () => {
+    const { apiClient } = await import('../../lib/api-client');
+    vi.mocked(apiClient.get).mockResolvedValue([]);
+
+    renderHook(() => useQueuePosts('queue-123', {}, { refetchInterval: false }), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/queues/queue-123/posts');
+    });
   });
 });

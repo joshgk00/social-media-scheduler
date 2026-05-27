@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Router, type Response } from 'express';
 import { DateTime } from 'luxon';
 import { and, eq, ilike, inArray, isNull, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import type { Queue } from 'bullmq';
 import {
   bulkDeleteInputSchema,
@@ -26,7 +27,9 @@ import {
   createPost,
   updatePost,
   deletePost,
+  getDashboardPostStats,
   getPostById,
+  getPostStatusCounts,
   getPosts,
   checkConflicts,
 } from '../services/post.service.js';
@@ -45,6 +48,9 @@ import { validateUuidParam } from '../middleware/validation.js';
 
 const logger = createLogger('posts-router');
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const dashboardStatsQuerySchema = z.object({
+  range: z.enum(['24h', '7d', '30d']).default('24h'),
+});
 
 function escapeLikePattern(input: string): string {
   return input.replace(/[%_\\]/g, '\\$&');
@@ -458,6 +464,28 @@ export function createPostsRouter({
 
     const postResults = await getPosts(db, req.session.userId!, parsed.data);
     res.json(postResults);
+  });
+
+  router.get('/api/posts/status-counts', requireAuth, async (req, res) => {
+    const parsed = postQuerySchema.omit({ status: true, page: true, limit: true }).safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+
+    const counts = await getPostStatusCounts(db, req.session.userId!, parsed.data);
+    res.json(counts);
+  });
+
+  router.get('/api/posts/dashboard-stats', requireAuth, async (req, res) => {
+    const parsed = dashboardStatsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+
+    const stats = await getDashboardPostStats(db, req.session.userId!, parsed.data.range);
+    res.json(stats);
   });
 
   router.get('/api/posts.csv', requireAuth, bulkOperationsLimiter, async (req, res) => {

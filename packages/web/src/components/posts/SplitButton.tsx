@@ -8,36 +8,38 @@ import {
 } from '../ui/dropdown-menu';
 
 interface SplitButtonProps {
-  onSchedule: () => void;
+  onPrimary: () => void;
   onDraft: () => void;
   onPublishNow?: () => void;
+  primaryLabel?: string;
   isLoading: boolean;
   disabled: boolean;
 }
 
 export function SplitButton({
-  onSchedule,
+  onPrimary,
   onDraft,
   onPublishNow,
+  primaryLabel = 'Schedule Post',
   isLoading,
   disabled,
 }: SplitButtonProps) {
   return (
     <div className="flex">
       <Button
-        onClick={onSchedule}
+        onClick={onPrimary}
         disabled={disabled || isLoading}
         className="rounded-r-none"
       >
         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-        Schedule Post
+        {primaryLabel}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             disabled={disabled || isLoading}
             className="rounded-l-none border-l border-primary-foreground/20 px-2"
-            aria-label="More scheduling options"
+            aria-label="More options"
           >
             <ChevronDown className="h-4 w-4" />
           </Button>

@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import request from 'supertest';
-import type { RequestHandler } from 'express';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import request from "supertest";
+import type { RequestHandler } from "express";
 
-import { createApp } from '../../app.js';
-import { createMockRedis } from '../helpers/mock-redis.js';
+import { createApp } from "../../app.js";
+import { createMockRedis } from "../helpers/mock-redis.js";
 
 // T-04-04-06: the Bull-Board dashboard at /admin/queues MUST be session-gated.
 // We mock the Bull-Board adapter modules so the suite doesn't need a real
@@ -12,34 +12,34 @@ import { createMockRedis } from '../helpers/mock-redis.js';
 
 const adapterRouter: RequestHandler[] = [];
 
-vi.mock('@bull-board/api', () => ({
+vi.mock("@bull-board/api", () => ({
   createBullBoard: vi.fn(),
 }));
 
-vi.mock('@bull-board/api/bullMQAdapter', () => {
+vi.mock("@bull-board/api/bullMQAdapter", () => {
   class FakeBullMQAdapter {
     constructor(_queue: unknown) {}
   }
   return { BullMQAdapter: FakeBullMQAdapter };
 });
 
-vi.mock('@bull-board/express', () => {
+vi.mock("@bull-board/express", () => {
   class FakeExpressAdapter {
     setBasePath(_path: string) {
       return this;
     }
     getRouter() {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { Router } = require('express');
+      const { Router } = require("express");
       const router = Router();
       // Use router.use so any sub-path under /admin/queues is handled.
       // Express 5's path-to-regexp@8 rejects bare '*' wildcards.
       router.use((req: any, res: any) => {
-        if (req.method === 'POST') {
+        if (req.method === "POST") {
           res.status(200).json({ ok: true });
           return;
         }
-        res.status(200).send('<html><body>bull-board</body></html>');
+        res.status(200).send("<html><body>bull-board</body></html>");
       });
       return router;
     }
@@ -52,7 +52,7 @@ const mockVerifyPassword = vi.fn();
 const mockUserExists = vi.fn();
 const mockUpdateLastLogin = vi.fn();
 
-vi.mock('../../services/auth.service.js', () => ({
+vi.mock("../../services/auth.service.js", () => ({
   findUserByEmail: (...args: unknown[]) => mockFindUserByEmail(...args),
   verifyPassword: (...args: unknown[]) => mockVerifyPassword(...args),
   getUserById: vi.fn(),
@@ -65,32 +65,32 @@ vi.mock('../../services/auth.service.js', () => ({
   replaceSecurityQuestions: vi.fn(),
 }));
 
-vi.mock('../../services/totp.service.js', () => ({
+vi.mock("../../services/totp.service.js", () => ({
   verifyTotpCode: vi.fn(),
   generateTotpSecret: vi.fn(),
 }));
 
-vi.mock('../../services/session.service.js', () => ({
+vi.mock("../../services/session.service.js", () => ({
   invalidateOtherSessions: vi.fn(),
   invalidateAllSessions: vi.fn(),
-  SESSION_PREFIX: 'sms:sess:',
+  SESSION_PREFIX: "sms:sess:",
 }));
 
-vi.mock('../../middleware/csrf.js', () => ({
-  doubleCsrfProtection: ((_req: any, _res: any, next: any) => next()) as RequestHandler,
-  generateCsrfToken: (_req: any, _res: any) => 'test-csrf-token',
+vi.mock("../../middleware/csrf.js", () => ({
+  doubleCsrfProtection: ((_req: any, _res: any, next: any) =>
+    next()) as RequestHandler,
+  generateCsrfToken: (_req: any, _res: any) => "test-csrf-token",
 }));
 
 function createMockSql() {
-  return Object.assign(
-    () => Promise.resolve([{ '?column?': 1 }]),
-    { end: vi.fn() },
-  ) as any;
+  return Object.assign(() => Promise.resolve([{ "?column?": 1 }]), {
+    end: vi.fn(),
+  }) as any;
 }
 
 function createMockDb() {
   const chain: Record<string, any> = {};
-  for (const m of ['from', 'where', 'values', 'returning', 'set', 'limit']) {
+  for (const m of ["from", "where", "values", "returning", "set", "limit"]) {
     chain[m] = vi.fn().mockReturnValue(chain);
   }
   chain.then = (resolve: (val: unknown) => void) => resolve([]);
@@ -108,13 +108,24 @@ function createTestApp() {
     redis: createMockRedis(),
     sql: createMockSql(),
     db: createMockDb(),
-    sessionSecret: 'test-secret-that-is-long-enough-for-session',
+    sessionSecret: "test-secret-that-is-long-enough-for-session",
     publishQueueService: {
-      publishQueue: { close: vi.fn() } as any,
+      publishQueue: {
+        close: vi.fn(),
+        getJobCounts: vi
+          .fn()
+          .mockResolvedValue({ active: 1, completed: 2, failed: 0 }),
+      } as any,
       enqueuePublish: vi.fn(),
       cancelScheduled: vi.fn(),
     } as any,
-    notificationQueue: { add: vi.fn(), close: vi.fn() } as any,
+    notificationQueue: {
+      add: vi.fn(),
+      close: vi.fn(),
+      getJobCounts: vi
+        .fn()
+        .mockResolvedValue({ active: 0, completed: 3, failed: 4 }),
+    } as any,
   });
 }
 
@@ -124,59 +135,91 @@ async function authenticatedAgent() {
 
   mockUserExists.mockResolvedValueOnce(true);
   mockFindUserByEmail.mockResolvedValueOnce({
-    id: 'user-1',
-    email: 'test@example.com',
-    passwordHash: '$argon2id$hashed',
+    id: "user-1",
+    email: "test@example.com",
+    passwordHash: "$argon2id$hashed",
     totpEnabled: false,
   });
   mockVerifyPassword.mockResolvedValueOnce(true);
   mockUpdateLastLogin.mockResolvedValueOnce(undefined);
 
   await agent
-    .post('/api/auth/login')
-    .send({ email: 'test@example.com', password: 'Test-Password-123' });
+    .post("/api/auth/login")
+    .send({ email: "test@example.com", password: "Test-Password-123" });
 
   return agent;
 }
 
-describe('GET /admin/queues', () => {
+describe("GET /admin/queues", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adapterRouter.length = 0;
-    process.env.CSRF_SECRET = 'a'.repeat(64);
-    process.env.ENCRYPTION_KEY = 'a'.repeat(64);
+    process.env.CSRF_SECRET = "a".repeat(64);
+    process.env.ENCRYPTION_KEY = "a".repeat(64);
   });
 
-  it('returns 401 when no session is present (T-04-04-06)', async () => {
+  it("returns 401 when no session is present (T-04-04-06)", async () => {
     const app = createTestApp();
 
-    const res = await request(app).get('/admin/queues');
+    const res = await request(app).get("/admin/queues");
 
     expect(res.status).toBe(401);
   });
 
-  it('returns 200 when a valid session is present', async () => {
+  it("returns 200 when a valid session is present", async () => {
     const agent = await authenticatedAgent();
 
-    const res = await agent.get('/admin/queues');
+    const res = await agent.get("/admin/queues");
 
     expect(res.status).toBe(200);
-    expect(res.text).toContain('bull-board');
+    expect(res.text).toContain("bull-board");
   });
 
-  it('serves sub-paths under the /admin/queues base path', async () => {
+  it("allows same-origin embedding for the settings wrapper", async () => {
     const agent = await authenticatedAgent();
 
-    const res = await agent.get('/admin/queues/api/queues');
+    const res = await agent.get("/admin/queues");
+
+    expect(res.headers["x-frame-options"]).toBe("SAMEORIGIN");
+    expect(res.headers["content-security-policy"]).toContain(
+      "frame-ancestors 'self'",
+    );
+  });
+
+  it("serves sub-paths under the /admin/queues base path", async () => {
+    const agent = await authenticatedAgent();
+
+    const res = await agent.get("/admin/queues/api/queues");
 
     expect(res.status).toBe(200);
   });
 
-  it('rejects unauthenticated POSTs to /admin/queues subpaths (session gate first)', async () => {
+  it("rejects unauthenticated POSTs to /admin/queues subpaths (session gate first)", async () => {
     const app = createTestApp();
 
-    const res = await request(app).post('/admin/queues/api/queues/publish');
+    const res = await request(app).post("/admin/queues/api/queues/publish");
 
     expect(res.status).toBe(401);
+  });
+
+  it("returns 401 for queue health when no session is present", async () => {
+    const app = createTestApp();
+
+    const res = await request(app).get("/admin/queue-health");
+
+    expect(res.status).toBe(401);
+  });
+
+  it("returns queue health counts for the settings wrapper", async () => {
+    const agent = await authenticatedAgent();
+
+    const res = await agent.get("/admin/queue-health");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      publish: { active: 1, completed: 2, failed: 0 },
+      notification: { active: 0, completed: 3, failed: 4 },
+      bulk_ops: { active: 0, completed: 0, failed: 0 },
+    });
   });
 });

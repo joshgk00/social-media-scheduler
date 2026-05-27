@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { DateTime } from 'luxon';
 import { and, eq, inArray } from 'drizzle-orm';
+import { z } from 'zod';
 import {
   createQueueSchema,
   updateQueueSchema,
@@ -38,6 +39,9 @@ import { beginCsvDownload, writeCsvRows } from '../services/bulk-export.service.
 import { InvalidIdempotencyKeyError, type BulkOperationFactory } from '../services/bulk-operation.factory.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const queuePostsQuerySchema = postQuerySchema
+  .pick({ search: true, searchScope: true })
+  .extend({ limit: z.coerce.number().int().min(1).max(100).optional() });
 
 function requestCorrelationId(req: { id?: string }): string {
   return req.id && UUID_PATTERN.test(req.id) ? req.id : randomUUID();
@@ -175,7 +179,7 @@ export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependenc
 
   router.get('/:id/posts', requireAuth, async (req, res) => {
     const queueId = validateUuidParam(req.params.id as string);
-    const parsedQuery = postQuerySchema.pick({ search: true, searchScope: true }).safeParse(req.query);
+    const parsedQuery = queuePostsQuerySchema.safeParse(req.query);
     if (!parsedQuery.success) {
       res.status(400).json({ error: 'Validation failed', details: parsedQuery.error.issues });
       return;
@@ -187,6 +191,7 @@ export function createQueuesRouter({ db, bulkOperationFactory }: QueuesDependenc
 
     const queuePosts = await getQueuePosts(db, req.session.userId!, queueId, {
       search: parsedQuery.data.search,
+      ...(parsedQuery.data.limit ? { limit: parsedQuery.data.limit } : {}),
     });
     res.json(queuePosts);
   });

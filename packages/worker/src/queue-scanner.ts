@@ -271,10 +271,11 @@ export async function evaluateQueues(
           continue;
         }
         await notificationQueue.add(JOB_NAMES.queueEmptyNotification, {
-          kind: 'queue_empty',
           queueId: queue.id,
           queueName: queue.name,
-          at: new Date().toISOString(),
+          profileId: queue.profileId,
+          correlationId: randomUUID(),
+          occurredAt: currentNow.toJSDate().toISOString(),
         }).catch((err: unknown) => {
           notificationThrottle.set(queue.id, Date.now());
           logger.error({ err, queueId: queue.id }, 'Failed to enqueue queue-empty notification');

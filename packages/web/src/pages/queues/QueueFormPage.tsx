@@ -9,19 +9,16 @@ import { toast } from 'sonner';
 import { useQueue, useCreateQueue, useUpdateQueue, type QueueConfig } from '../../hooks/use-queues';
 import { useProfiles } from '../../hooks/use-profiles';
 import { ScheduleBuilder, type QueueFormValues } from '../../components/queues/ScheduleBuilder';
+import { hourToTime, inferScheduleMode, timeToHour } from '../../lib/queue-schedule';
 
 import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
+import { NativeSelect } from '../../components/ui/native-select';
+import { PageHeader } from '../../components/ui/page-header';
 import { Textarea } from '../../components/ui/textarea';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../components/ui/select';
 import {
   Form,
   FormField,
@@ -31,27 +28,57 @@ import {
   FormMessage,
 } from '../../components/ui/form';
 
+const WHOLE_HOUR_TIME_PATTERN = /^\d{2}:00$/;
+const WHOLE_HOUR_TIME_MESSAGE = 'Use whole-hour publish times.';
+
+const wholeHourTimesSchema = z
+  .array(z.string())
+  .refine(
+    (times) => times.every((time) => WHOLE_HOUR_TIME_PATTERN.test(time)),
+    WHOLE_HOUR_TIME_MESSAGE,
+  );
+
 const queueFormSchema = z.object({
   name: z.string().min(1, 'Queue name is required.').max(255),
   profileId: z.string().min(1, 'Select a social profile.'),
+  scheduleMode: z.enum(['specific', 'fixed', 'variable']),
+  specificTimes: wholeHourTimesSchema,
   intervalType: z.enum(['fixed', 'variable']),
   intervalValue: z.coerce.number().int().min(1, 'Interval must be at least 1.').max(999),
   intervalUnit: z.enum(['minutes', 'hours', 'days', 'weeks', 'months', 'years']),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, 'Select at least one day of the week.'),
-  hourSlots: z.array(z.number().int().min(6).max(23)).min(1, 'Select at least one hour window.'),
+  hourSlots: z.array(z.number().int().min(0).max(23)),
   startDate: z.string().optional(),
   seasonalStart: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional().or(z.literal('')),
   seasonalEnd: z.string().regex(/^\d{2}-\d{2}$/, 'Must be MM-DD format').optional().or(z.literal('')),
   seasonalRepeat: z.boolean(),
   isRecycling: z.boolean(),
   notes: z.string().max(10000).optional(),
+}).superRefine((value, ctx) => {
+  if (value.scheduleMode === 'specific' && value.specificTimes.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['specificTimes'],
+      message: 'Add at least one publish time.',
+    });
+  }
+
+  if (value.scheduleMode !== 'specific' && value.hourSlots.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['hourSlots'],
+      message: 'Select at least one hour window.',
+    });
+  }
 });
 
 const DEFAULT_VALUES: QueueFormValues = {
   name: '',
   profileId: '',
+  scheduleMode: 'specific',
+  specificTimes: ['08:00', '12:00', '15:00'],
   intervalType: 'fixed',
-  intervalValue: 4,
+  intervalValue: 1,
   intervalUnit: 'hours',
   daysOfWeek: [1, 2, 3, 4, 5],
   hourSlots: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
@@ -78,6 +105,8 @@ type ApiError = Error & {
 const FIELD_LABELS: Record<string, string> = {
   name: 'Queue name',
   profileId: 'Social profile',
+  scheduleMode: 'Schedule mode',
+  specificTimes: 'Publish times',
   intervalType: 'Interval type',
   intervalValue: 'Interval',
   intervalUnit: 'Interval unit',
@@ -90,6 +119,10 @@ const FIELD_LABELS: Record<string, string> = {
   isRecycling: 'Recycle posts',
   notes: 'Internal notes',
 };
+
+function readQueueProfileId(queue: { profileId?: string } | null | undefined): string {
+  return queue?.profileId ?? '';
+}
 
 function isApiValidationIssue(value: unknown): value is ApiValidationIssue {
   return value !== null && typeof value === 'object';
@@ -118,7 +151,7 @@ export function formatQueueSaveError(error: unknown): string {
   return "Couldn't save queue. Try again.";
 }
 
-export default function QueueDetailPage() {
+export default function QueueFormPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
@@ -141,7 +174,9 @@ export default function QueueDetailPage() {
     if (isEditing && existingQueue) {
       form.reset({
         name: existingQueue.name,
-        profileId: existingQueue.profileId,
+        profileId: readQueueProfileId(existingQueue),
+        scheduleMode: inferScheduleMode(existingQueue),
+        specificTimes: existingQueue.hourSlots.map(hourToTime),
         intervalType: existingQueue.intervalType as 'fixed' | 'variable',
         intervalValue: existingQueue.intervalValue,
         intervalUnit: existingQueue.intervalUnit as QueueFormValues['intervalUnit'],
@@ -158,9 +193,20 @@ export default function QueueDetailPage() {
   }, [isEditing, existingQueue]); // eslint-disable-line react-hooks/exhaustive-deps -- form.reset is stable
 
   useEffect(() => {
+    const profileId = readQueueProfileId(existingQueue);
+    if (isEditing && profileId && profiles?.some((profile) => profile.id === profileId)) {
+      form.setValue('profileId', profileId, { shouldValidate: true });
+    }
+  }, [existingQueue, form, isEditing, profiles]);
+
+  useEffect(() => {
     if (!isEditing && copiedConfig) {
       form.reset({
         ...DEFAULT_VALUES,
+        name: copiedConfig.name,
+        profileId: copiedConfig.profileId,
+        scheduleMode: inferScheduleMode(copiedConfig),
+        specificTimes: copiedConfig.hourSlots.map(hourToTime),
         intervalType: copiedConfig.intervalType as 'fixed' | 'variable',
         intervalValue: copiedConfig.intervalValue,
         intervalUnit: copiedConfig.intervalUnit as QueueFormValues['intervalUnit'],
@@ -171,6 +217,7 @@ export default function QueueDetailPage() {
         seasonalEnd: copiedConfig.seasonalEnd ?? undefined,
         seasonalRepeat: copiedConfig.seasonalRepeat,
         isRecycling: copiedConfig.isRecycling,
+        notes: copiedConfig.notes ?? undefined,
       });
     }
   }, [copiedConfig, isEditing]); // eslint-disable-line react-hooks/exhaustive-deps -- form.reset is stable
@@ -179,10 +226,34 @@ export default function QueueDetailPage() {
 
   function onSubmit(values: QueueFormValues) {
     setSaveError(null);
+    if (
+      values.scheduleMode === 'specific' &&
+      values.specificTimes.some((time) => !WHOLE_HOUR_TIME_PATTERN.test(time))
+    ) {
+      form.setError('specificTimes', {
+        type: 'manual',
+        message: WHOLE_HOUR_TIME_MESSAGE,
+      });
+      return;
+    }
+
+    const hourSlots = values.scheduleMode === 'specific'
+      ? [...new Set(values.specificTimes.map(timeToHour))].sort((a, b) => a - b)
+      : values.hourSlots;
     const payload = {
-      ...values,
+      name: values.name,
+      profileId: values.profileId || readQueueProfileId(existingQueue),
+      scheduleMode: values.scheduleMode,
+      intervalType: values.scheduleMode === 'variable' ? 'variable' as const : 'fixed' as const,
+      intervalValue: values.scheduleMode === 'specific' ? 1 : values.intervalValue,
+      intervalUnit: values.scheduleMode === 'specific' ? 'hours' as const : values.intervalUnit,
+      daysOfWeek: values.daysOfWeek,
+      hourSlots,
+      startDate: values.startDate || undefined,
       seasonalStart: values.seasonalStart || undefined,
       seasonalEnd: values.seasonalEnd || undefined,
+      seasonalRepeat: values.seasonalRepeat,
+      isRecycling: values.isRecycling,
       notes: values.notes || undefined,
     };
 
@@ -193,7 +264,7 @@ export default function QueueDetailPage() {
           onSuccess: () => {
             setSaveError(null);
             toast.success('Queue updated.');
-            navigate(`/queues/${id}/posts`);
+            navigate(`/queues/${id}`);
           },
           onError: (error) => {
             setSaveError(formatQueueSaveError(error));
@@ -205,7 +276,7 @@ export default function QueueDetailPage() {
         onSuccess: (createdQueue) => {
           setSaveError(null);
           toast.success('Queue created.');
-          navigate(`/queues/${createdQueue.id}/posts`);
+          navigate(`/queues/${createdQueue.id}`);
         },
         onError: (error) => {
           setSaveError(formatQueueSaveError(error));
@@ -227,79 +298,93 @@ export default function QueueDetailPage() {
   }
 
   return (
-    <main className="p-6 lg:p-8">
-      <h1 className="text-2xl font-semibold mb-6">
-        {isEditing ? 'Edit Queue' : 'Create Queue'}
-      </h1>
+    <main className="px-4 py-6 sm:px-6 lg:px-8">
+      <PageHeader
+        breadcrumb={isEditing ? `Queues / ${existingQueue?.name ?? 'Edit'}` : 'Queues / New'}
+        title={isEditing ? `Edit ${existingQueue?.name ?? 'queue'}` : 'New queue'}
+        subtitle="Set a recurring schedule. Posts in this queue auto-publish on the cadence you choose."
+        actions={
+          <>
+            <Button type="button" variant="ghost" onClick={() => navigate(-1)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="queue-form" disabled={isSaving}>
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEditing ? 'Save Queue' : 'Create Queue'}
+            </Button>
+          </>
+        }
+      />
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
-          {/* Queue name */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Queue name</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="e.g., Daily tips, Weekly promos"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <form id="queue-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
+          <Card title="Basics" padded>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Queue name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., Daily tips, Weekly promos"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {/* Social profile */}
-          <FormField
-            control={form.control}
-            name="profileId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Social profile</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a profile" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {profiles?.map((profile) => (
-                      <SelectItem key={profile.id} value={profile.id}>
-                        {profile.displayName} (@{profile.handle})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="profileId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Social profile</FormLabel>
+                    <FormControl>
+                      <NativeSelect
+                        aria-label="Select a profile"
+                        value={field.value || readQueueProfileId(existingQueue)}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      >
+                        <option value="">Select a profile</option>
+                        {profiles?.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.displayName} (@{profile.handle})
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </Card>
 
-          {/* Schedule builder */}
           <ScheduleBuilder control={form.control} watch={form.watch} />
 
-          {/* Notes */}
-          <FormField
-            control={form.control}
-            name="notes"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Internal notes</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="Optional notes about this queue (not published)"
-                    rows={3}
-                    {...field}
-                    value={field.value ?? ''}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <Card title="Internal notes" padded>
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Optional notes about this queue (not published)"
+                      rows={3}
+                      {...field}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </Card>
 
           {saveError && (
             <Alert variant="destructive">
@@ -309,20 +394,6 @@ export default function QueueDetailPage() {
             </Alert>
           )}
 
-          {/* Buttons */}
-          <div className="flex gap-3">
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isEditing ? 'Save Queue' : 'Create Queue'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate(-1)}
-            >
-              Cancel
-            </Button>
-          </div>
         </form>
       </Form>
     </main>

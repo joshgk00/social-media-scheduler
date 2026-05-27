@@ -9,6 +9,8 @@ import { queues, posts, socialProfiles, users } from '@sms/db';
 
 type QueueInsert = InferInsertModel<typeof queues>;
 type PostInsert = InferInsertModel<typeof posts>;
+type QueueScheduleMode = 'specific' | 'fixed' | 'variable';
+type QueueIntervalType = 'fixed' | 'variable';
 
 const logger = createLogger('queue-service');
 
@@ -38,6 +40,19 @@ export function parseQueueStartDate(startDate: string | null | undefined, timezo
   return parsedStartDate;
 }
 
+export function assertQueueScheduleConsistency(
+  scheduleMode: QueueScheduleMode,
+  intervalType: QueueIntervalType,
+): void {
+  if (
+    (scheduleMode === 'specific' && intervalType === 'variable') ||
+    (scheduleMode === 'fixed' && intervalType === 'variable') ||
+    (scheduleMode === 'variable' && intervalType === 'fixed')
+  ) {
+    throw new QueueServiceError('Schedule mode and interval type are inconsistent', 400);
+  }
+}
+
 export async function createQueue(db: Db, userId: string, input: CreateQueueInput) {
   const [ownedProfile] = await db
     .select({ id: socialProfiles.id })
@@ -54,6 +69,7 @@ export async function createQueue(db: Db, userId: string, input: CreateQueueInpu
     .where(eq(users.id, userId));
   const userTimezone = userRow?.timezone ?? 'UTC';
   const startDate = parseQueueStartDate(input.startDate, userTimezone);
+  assertQueueScheduleConsistency(input.scheduleMode, input.intervalType);
 
   const nextRunAt = calculateNextRunAt(
     {
@@ -72,6 +88,7 @@ export async function createQueue(db: Db, userId: string, input: CreateQueueInpu
     userId,
     profileId: input.profileId,
     name: input.name,
+    scheduleMode: input.scheduleMode,
     intervalType: input.intervalType,
     intervalValue: input.intervalValue,
     intervalUnit: input.intervalUnit,
@@ -131,9 +148,13 @@ export async function updateQueue(
   if (input.seasonalEnd !== undefined) queuePatch.seasonalEnd = input.seasonalEnd;
   if (input.seasonalRepeat !== undefined) queuePatch.seasonalRepeat = input.seasonalRepeat;
   if (input.isRecycling !== undefined) queuePatch.isRecycling = input.isRecycling;
+  if (input.isPaused !== undefined) queuePatch.isPaused = input.isPaused;
   if (input.notes !== undefined) queuePatch.notes = input.notes;
 
-  const effectiveIntervalType = (input.intervalType ?? existingQueue.intervalType) as string;
+  if (input.scheduleMode !== undefined) queuePatch.scheduleMode = input.scheduleMode;
+  const effectiveScheduleMode = (input.scheduleMode ?? existingQueue.scheduleMode ?? 'fixed') as QueueScheduleMode;
+  const effectiveIntervalType = (input.intervalType ?? existingQueue.intervalType) as QueueIntervalType;
+  assertQueueScheduleConsistency(effectiveScheduleMode, effectiveIntervalType);
   const effectiveIntervalValue = input.intervalValue ?? existingQueue.intervalValue;
   const effectiveIntervalUnit = (input.intervalUnit ?? existingQueue.intervalUnit) as string;
   const effectiveHourSlots = (input.hourSlots ?? existingQueue.hourSlots) as number[];
@@ -198,7 +219,12 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
         name: queues.name,
         profileId: queues.profileId,
         profileName: socialProfiles.displayName,
+        profileHandle: socialProfiles.handle,
         network: socialProfiles.platform,
+        scheduleMode: queues.scheduleMode,
+        intervalType: queues.intervalType,
+        intervalValue: queues.intervalValue,
+        intervalUnit: queues.intervalUnit,
         isPaused: queues.isPaused,
         isRecycling: queues.isRecycling,
         lastPublishedAt: queues.lastPublishedAt,
@@ -256,9 +282,9 @@ export async function getQueues(db: Db, userId: string, filters: QueueQueryInput
     });
   }
 
-  return filteredQueues.map(({ profileName, network, ...q }) => ({
+  return filteredQueues.map(({ profileName, profileHandle, network, ...q }) => ({
     ...q,
-    profile: profileName ? { displayName: profileName, platform: network } : undefined,
+    profile: profileName ? { displayName: profileName, handle: profileHandle, platform: network } : undefined,
     postCount: postCountMap.get(q.id) ?? 0,
   }));
 }
@@ -273,7 +299,15 @@ export async function getQueueById(db: Db, userId: string, queueId: string) {
     return null;
   }
 
-  return rows[0];
+  const [postCountRow] = await db
+    .select({ postCount: drizzleCount() })
+    .from(posts)
+    .where(and(eq(posts.userId, userId), eq(posts.queueId, queueId)));
+
+  return {
+    ...rows[0],
+    postCount: Number(postCountRow?.postCount ?? 0),
+  };
 }
 
 export async function copyQueueConfig(db: Db, userId: string, queueId: string) {
@@ -286,11 +320,13 @@ export async function copyQueueConfig(db: Db, userId: string, queueId: string) {
   return {
     name: queue.name,
     profileId: queue.profileId,
+    scheduleMode: queue.scheduleMode,
     intervalType: queue.intervalType,
     intervalValue: queue.intervalValue,
     intervalUnit: queue.intervalUnit,
     daysOfWeek: queue.daysOfWeek,
     hourSlots: queue.hourSlots,
+    startDate: queue.startDate,
     seasonalStart: queue.seasonalStart,
     seasonalEnd: queue.seasonalEnd,
     seasonalRepeat: queue.seasonalRepeat,
@@ -402,7 +438,7 @@ export async function getQueuePosts(
   db: Db,
   userId: string,
   queueId: string,
-  query: { search?: string } = {},
+  query: { search?: string; limit?: number } = {},
 ) {
   const [queue] = await db
     .select({ id: queues.id })
@@ -445,11 +481,12 @@ export async function getQueuePosts(
       }
     : baseSelect;
 
-  const postRows = await db
+  const postQuery = db
     .select(selectMap)
     .from(posts)
     .where(and(...conditions))
     .orderBy(orderClause);
+  const postRows = query.limit ? await postQuery.limit(query.limit) : await postQuery;
 
   return postRows.map((post) => ({
     ...post,

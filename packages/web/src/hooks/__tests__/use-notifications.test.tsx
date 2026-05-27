@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api-client';
 
 import {
   useEmailLogs,
+  useClearRead,
   useMarkAllRead,
   useMarkRead,
   useNotificationPrefs,
@@ -77,20 +78,23 @@ describe('use-notifications hooks', () => {
     });
   });
 
-  it('invalidates notification queries after mark-read and mark-all-read mutations', async () => {
+  it('invalidates notification queries after notification mutations', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
     const markReadHook = renderHook(() => useMarkRead(), { wrapper: Wrapper });
     const markAllReadHook = renderHook(() => useMarkAllRead(), { wrapper: Wrapper });
+    const clearReadHook = renderHook(() => useClearRead(), { wrapper: Wrapper });
 
     await act(async () => {
       await markReadHook.result.current.mutateAsync('notification-1');
       await markAllReadHook.result.current.mutateAsync();
+      await clearReadHook.result.current.mutateAsync();
     });
 
     expect(apiClient.post).toHaveBeenCalledWith('/api/notifications/notification-1/read');
     expect(apiClient.post).toHaveBeenCalledWith('/api/notifications/read-all');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/notifications/clear-read');
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notifications'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notifications', 'unreadCount'] });
   });

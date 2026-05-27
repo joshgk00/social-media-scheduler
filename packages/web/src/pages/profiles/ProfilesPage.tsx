@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router';
 import {
@@ -9,32 +9,28 @@ import {
   type SocialProfile,
 } from '../../hooks/use-profiles';
 import { ConnectProfileDialog } from '../../components/profiles/ConnectProfileDialog';
+import { DeleteProfileDialog } from '../../components/profiles/DeleteProfileDialog';
+import { EditProfileDialog } from '../../components/profiles/EditProfileDialog';
+import { PageOrgPickerDialog } from '../../components/profiles/PageOrgPickerDialog';
 import { ProfileCard } from '../../components/profiles/ProfileCard';
 import { ProfileRateLimitIndicator } from '../../components/profiles/ProfileRateLimitIndicator';
 import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
-import {
-  ProfileNetworkFilter,
-  type NetworkFilterValue,
-} from '../../components/profiles/ProfileNetworkFilter';
-import { PageOrgPickerDialog } from '../../components/profiles/PageOrgPickerDialog';
-import { EditProfileDialog } from '../../components/profiles/EditProfileDialog';
-import { DeleteProfileDialog } from '../../components/profiles/DeleteProfileDialog';
 import { ReconnectMismatchDialog } from '../../components/profiles/ReconnectMismatchDialog';
 import { Button } from '../../components/ui/button';
+import { EmptyState } from '../../components/ui/empty-state';
+import { PageHeader } from '../../components/ui/page-header';
+import { Segmented } from '../../components/ui/segmented';
 import { Skeleton } from '../../components/ui/skeleton';
 
-function ProfilesLoadingSkeleton() {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {Array.from({ length: 3 }, (_, index) => (
-        <Skeleton key={index} className="h-[200px] rounded-lg" />
-      ))}
-    </div>
-  );
+type ProfileFilter = 'all' | Platform;
+
+interface MismatchDialogState {
+  existingHandle: string;
+  newHandle: string;
+  tempToken: string;
+  platformAccountId: string | null;
 }
 
-// UI-SPEC §OAuth error toast copy table. `access_denied` is info-level; the
-// rest are destructive.
 const OAUTH_ERROR_COPY: Record<
   string,
   { variant: 'error' | 'info'; msg: string }
@@ -57,23 +53,17 @@ const OAUTH_ERROR_COPY: Record<
   },
 };
 
-interface MismatchDialogState {
-  existingHandle: string;
-  newHandle: string;
-  tempToken: string;
-  // Carries the `platformAccountId` the user already selected in the picker,
-  // so "Connect as a new profile" persists that account rather than falling
-  // back to `accounts[0]`. See CR-01 in REVIEW.md.
-  platformAccountId: string | null;
-}
-
 function filterProfiles(
   profiles: SocialProfile[] | undefined,
-  networkFilter: NetworkFilterValue,
+  networkFilter: ProfileFilter,
 ): SocialProfile[] {
   if (!profiles) return [];
   if (networkFilter === 'all') return profiles;
-  return profiles.filter((p) => p.platform === networkFilter);
+  return profiles.filter((profile) => profile.platform === networkFilter);
+}
+
+function countProfiles(profiles: SocialProfile[] | undefined, filter: ProfileFilter): number {
+  return filterProfiles(profiles, filter).length;
 }
 
 export default function ProfilesPage() {
@@ -82,7 +72,7 @@ export default function ProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [isConnectOpen, setIsConnectOpen] = useState(false);
-  const [networkFilter, setNetworkFilter] = useState<NetworkFilterValue>('all');
+  const [networkFilter, setNetworkFilter] = useState<ProfileFilter>('all');
   const [rateLimitTarget, setRateLimitTarget] = useState<{
     profileId: string;
     handle: string;
@@ -94,7 +84,6 @@ export default function ProfilesPage() {
     null,
   );
 
-  // Handle OAuth callback query params on mount + param change.
   useEffect(() => {
     const connect = searchParams.get('connect');
     const oauthError = searchParams.get('oauth_error');
@@ -106,16 +95,10 @@ export default function ProfilesPage() {
     }
 
     if (oauthError === 'mismatched_account') {
-      const existingHandle = searchParams.get('existingHandle') ?? '';
-      const newHandle = searchParams.get('newHandle') ?? '';
-      const tempToken = searchParams.get('tempToken') ?? '';
-      // No selection context exists on the callback-redirect path (the user
-      // hasn't opened the picker yet), so leave `platformAccountId` null and
-      // let the mismatch dialog fall back to its legacy behavior only here.
       setMismatchDialog({
-        existingHandle,
-        newHandle,
-        tempToken,
+        existingHandle: searchParams.get('existingHandle') ?? '',
+        newHandle: searchParams.get('newHandle') ?? '',
+        tempToken: searchParams.get('tempToken') ?? '',
         platformAccountId: null,
       });
       const next = new URLSearchParams(searchParams);
@@ -164,9 +147,6 @@ export default function ProfilesPage() {
     existingHandle: string;
     incomingHandle: string;
     tempToken: string;
-    // Picker emits non-null after a selection (CR-08). The mismatch-dialog
-    // state is the wider `string | null` union so the entry-point flow above
-    // (which has no selection) can also populate it.
     platformAccountId: string;
   }) {
     setMismatchDialog({
@@ -177,53 +157,78 @@ export default function ProfilesPage() {
     });
   }
 
+  const filterOptions = useMemo(
+    () => [
+      { value: 'all' as const, label: `All (${countProfiles(profiles, 'all')})` },
+      { value: 'twitter' as const, label: `Twitter (${countProfiles(profiles, 'twitter')})` },
+      { value: 'linkedin' as const, label: `LinkedIn (${countProfiles(profiles, 'linkedin')})` },
+      { value: 'facebook' as const, label: `Facebook (${countProfiles(profiles, 'facebook')})` },
+    ],
+    [profiles],
+  );
   const filtered = filterProfiles(profiles, networkFilter);
   const hasAnyProfiles = (profiles?.length ?? 0) > 0;
   const hasProfilesForFilter = filtered.length > 0;
 
   return (
-    <main>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Profiles</h1>
-        <Button onClick={() => setIsConnectOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Connect Profile
-        </Button>
-      </div>
+    <main className="p-6">
+      <PageHeader
+        title="Profiles"
+        subtitle="Connected social accounts. Self-hosted OAuth keeps publishing access on your infrastructure."
+        actions={
+          <Button variant="accent" onClick={() => setIsConnectOpen(true)}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Connect profile
+          </Button>
+        }
+      />
 
-      {hasAnyProfiles && (
-        <ProfileNetworkFilter
+      <div className="mb-3">
+        <Segmented
+          label="Filter profiles by platform"
           value={networkFilter}
+          options={filterOptions}
           onChange={setNetworkFilter}
         />
-      )}
+      </div>
 
-      {isLoading && <ProfilesLoadingSkeleton />}
-
-      {!isLoading && !hasAnyProfiles && (
-        <div className="text-center py-12">
-          <h2 className="text-xl font-semibold mb-2">No profiles connected</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Connect your Twitter/X, LinkedIn, or Facebook account to start scheduling posts.
-          </p>
-          <Button onClick={() => setIsConnectOpen(true)}>Connect Profile</Button>
+      {isLoading ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} className="h-[148px] rounded-md" />
+          ))}
         </div>
-      )}
+      ) : null}
 
-      {!isLoading && hasAnyProfiles && !hasProfilesForFilter && (
-        <div className="text-center py-12">
-          <p className="text-sm text-muted-foreground mb-4">
-            No {networkFilter} profiles connected yet.
-          </p>
-          <Button onClick={() => setIsConnectOpen(true)}>
-            Connect {networkFilter}
-          </Button>
-        </div>
-      )}
+      {!isLoading && !hasAnyProfiles ? (
+        <EmptyState
+          icon={Users}
+          title="No profiles connected"
+          body="Connect Twitter / X, LinkedIn, or Facebook to start scheduling posts."
+          action={
+            <Button variant="accent" onClick={() => setIsConnectOpen(true)}>
+              Connect profile
+            </Button>
+          }
+        />
+      ) : null}
 
-      {hasProfilesForFilter && (
+      {!isLoading && hasAnyProfiles && !hasProfilesForFilter ? (
+        <EmptyState
+          icon={Users}
+          title={`No ${networkFilter} profiles`}
+          body="Switch filters or connect another profile for this platform."
+          action={
+            <Button variant="accent" onClick={() => setIsConnectOpen(true)}>
+              Connect profile
+            </Button>
+          }
+        />
+      ) : null}
+
+      {hasProfilesForFilter ? (
         <div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3"
           aria-live="polite"
           aria-label={
             networkFilter === 'all'
@@ -236,9 +241,7 @@ export default function ProfilesPage() {
               key={profile.id}
               profile={profile}
               rateLimitIndicator={
-                profile.platform === 'twitter' ? (
-                  <ProfileRateLimitIndicator profileId={profile.id} />
-                ) : null
+                <ProfileRateLimitIndicator profileId={profile.id} />
               }
               onEditRateLimit={
                 profile.platform === 'twitter'
@@ -250,14 +253,12 @@ export default function ProfilesPage() {
                   : undefined
               }
               onEdit={(profileId) => setEditTarget(profileId)}
-              onReconnect={(profileId, platform: Platform) =>
-                reconnect(profileId, platform)
-              }
+              onReconnect={(profileId, platform) => reconnect(profileId, platform)}
               onDelete={(profileId) => setDeleteTarget(profileId)}
             />
           ))}
         </div>
-      )}
+      ) : null}
 
       <ConnectProfileDialog
         open={isConnectOpen}

@@ -11,6 +11,7 @@ export const users = pgTable('users', {
   timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
   dateFormat: varchar('date_format', { length: 20 }).notNull().default('YYYY-MM-DD'),
   entriesPerPage: integer('entries_per_page').notNull().default(25),
+  defaultLandingPage: varchar('default_landing_page', { length: 40 }).notNull().default('/dashboard'),
   // Stored plaintext intentionally: (1) self-hosted single-user app where DB is on
   // the same trusted host, (2) encrypting TOTP secrets would require key rotation
   // coordination that adds complexity without meaningful security benefit for this

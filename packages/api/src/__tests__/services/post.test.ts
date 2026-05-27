@@ -16,13 +16,19 @@ function makeTableStub(tableName: string, columns: string[]) {
 const mockPosts = makeTableStub('posts', [
   'id', 'userId', 'profileId', 'text', 'isThread', 'status', 'scheduledAt',
   'publishedAt', 'failedAt', 'failureReason', 'platformPostId', 'postVersion',
-  'hasSpinnableText', 'autoDestructAfter', 'notes', 'createdAt', 'updatedAt',
-  'searchVector', 'tagSearchVector',
+  'hasSpinnableText', 'autoDestructAfter', 'queueId', 'queuePosition', 'notes',
+  'createdAt', 'updatedAt', 'searchVector', 'tagSearchVector',
 ]);
 
 const mockTags = makeTableStub('tags', ['id', 'name', 'color', 'userId', 'createdAt', 'updatedAt']);
 const mockPostTags = makeTableStub('post_tags', ['postId', 'tagId']);
 const mockSocialProfiles = makeTableStub('social_profiles', ['id', 'userId']);
+const mockQueues = makeTableStub('queues', [
+  'id', 'userId', 'isPaused', 'cursorPosition', 'intervalType', 'intervalValue',
+  'intervalUnit', 'daysOfWeek', 'hourSlots', 'startDate', 'lastPublishedAt',
+  'nextRunAt',
+]);
+const mockUsers = makeTableStub('users', ['id', 'timezone']);
 const mockPostMedia = makeTableStub('post_media', [
   'id', 'userId', 'postId', 'filePath', 'fileName', 'mimeType', 'fileSize', 'width', 'height',
   'thumbnailPath', 'sortOrder', 'transcodeStatus', 'transcodeError', 'deletedAt', 'createdAt',
@@ -33,6 +39,8 @@ vi.mock('@sms/db', () => ({
   tags: mockTags,
   postTags: mockPostTags,
   socialProfiles: mockSocialProfiles,
+  queues: mockQueues,
+  users: mockUsers,
   postMedia: mockPostMedia,
 }));
 
@@ -46,15 +54,16 @@ const mockCreateLogger = vi.fn().mockReturnValue({
 vi.mock('@sms/shared', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sms/shared')>();
 
-  const EDITABLE: readonly string[] = ['draft', 'scheduled', 'failed'];
-  const DELETABLE: readonly string[] = ['draft', 'scheduled', 'published', 'failed'];
+  const EDITABLE: readonly string[] = ['draft', 'scheduled', 'queued', 'paused', 'failed'];
+  const DELETABLE: readonly string[] = ['draft', 'scheduled', 'paused', 'published', 'failed'];
 
   const POST_STATE_TRANSITIONS: Record<string, readonly string[]> = {
-    draft: ['scheduled', 'publishing'],
-    scheduled: ['draft', 'queued', 'publishing'],
-    queued: ['publishing'],
+    draft: ['scheduled', 'queued', 'publishing'],
+    scheduled: ['draft', 'queued', 'publishing', 'paused'],
+    queued: ['draft', 'publishing'],
+    paused: ['scheduled', 'draft'],
     publishing: ['published', 'failed'],
-    published: ['auto_destructing'],
+    published: ['queued', 'auto_destructing'],
     failed: ['draft', 'scheduled'],
     auto_destructing: ['destroyed'],
     destroyed: [],
@@ -342,11 +351,56 @@ function createCheckConflictsMockDb(options: {
   } as any;
 }
 
+function createDashboardStatsMockDb(options: {
+  scheduled24Rows?: unknown[];
+  scheduledInRangeRows?: unknown[];
+  queuedDashboardQueueRows?: unknown[];
+  queuedPostRowsBySelect?: unknown[][];
+  failed24Rows?: unknown[];
+  failed7dCount?: number;
+}) {
+  const scheduled24Rows = options.scheduled24Rows ?? [];
+  const scheduledInRangeRows = options.scheduledInRangeRows ?? [];
+  const queuedDashboardQueueRows = options.queuedDashboardQueueRows ?? [];
+  const queuedPostRowsBySelect = [...(options.queuedPostRowsBySelect ?? [])];
+  const failed24Rows = options.failed24Rows ?? [];
+  const failed7dCount = options.failed7dCount ?? 0;
+  let selectCallIndex = 0;
+  const chains: Array<Record<string, any>> = [];
+
+  function makeSelectChain(result: unknown[]) {
+    const chain: Record<string, any> = {};
+    chain.from = vi.fn().mockReturnValue(chain);
+    chain.where = vi.fn().mockReturnValue(chain);
+    chain.innerJoin = vi.fn().mockReturnValue(chain);
+    chain.orderBy = vi.fn().mockReturnValue(chain);
+    chain.limit = vi.fn().mockReturnValue(chain);
+    chain.then = (resolve: (v: unknown) => void) => resolve(result);
+    chains.push(chain);
+    return chain;
+  }
+
+  return {
+    select: vi.fn().mockImplementation(() => {
+      selectCallIndex++;
+      if (selectCallIndex === 1) return makeSelectChain(scheduled24Rows);
+      if (selectCallIndex === 2) return makeSelectChain(scheduledInRangeRows);
+      if (selectCallIndex === 3) return makeSelectChain(queuedDashboardQueueRows);
+      if (queuedPostRowsBySelect.length > 0) return makeSelectChain(queuedPostRowsBySelect.shift()!);
+      if (selectCallIndex === queuedDashboardQueueRows.length + 4) return makeSelectChain(failed24Rows);
+      if (selectCallIndex === queuedDashboardQueueRows.length + 5) return makeSelectChain([{ failed7dCount }]);
+      return makeSelectChain([]);
+    }),
+    _chains: chains,
+  } as any;
+}
+
 describe('post.service', () => {
   let createPost: typeof import('../../services/post.service.js').createPost;
   let updatePost: typeof import('../../services/post.service.js').updatePost;
   let deletePost: typeof import('../../services/post.service.js').deletePost;
   let getPosts: typeof import('../../services/post.service.js').getPosts;
+  let getDashboardPostStats: typeof import('../../services/post.service.js').getDashboardPostStats;
   let checkConflicts: typeof import('../../services/post.service.js').checkConflicts;
   let PostServiceError: typeof import('../../services/post.service.js').PostServiceError;
   let getPostById: typeof import('../../services/post.service.js').getPostById;
@@ -367,6 +421,7 @@ describe('post.service', () => {
     updatePost = mod.updatePost;
     deletePost = mod.deletePost;
     getPosts = mod.getPosts;
+    getDashboardPostStats = mod.getDashboardPostStats;
     checkConflicts = mod.checkConflicts;
     PostServiceError = mod.PostServiceError;
     getPostById = mod.getPostById;
@@ -680,6 +735,56 @@ describe('post.service', () => {
       expect(setCall.notes).toBe('a note');
     });
 
+    it('updates queued posts without changing their queue status', async () => {
+      const updatedPost = {
+        id: 'post-1', userId: 'user-1', profileId: 'profile-1',
+        text: 'typo fixed', status: 'queued', postVersion: 2,
+        isThread: false, scheduledAt: null, hasSpinnableText: false,
+        autoDestructAfter: null, notes: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      };
+
+      const db = createPostUpdateMockDb({
+        updateResult: [updatedPost],
+        existingPost: { id: 'post-1', status: 'queued', postVersion: 1, scheduledAt: null },
+      });
+
+      await updatePost(db, 'user-1', 'post-1', {
+        text: 'typo fixed',
+        postVersion: 1,
+      });
+
+      const setCall = db._updateChain.set.mock.calls[0][0];
+      expect(setCall.text).toBe('typo fixed');
+      expect(setCall.status).toBeUndefined();
+      expect(setCall.scheduledAt).toBeUndefined();
+    });
+
+    it('moves queued posts back to draft when requested', async () => {
+      const updatedPost = {
+        id: 'post-1', userId: 'user-1', profileId: 'profile-1',
+        text: 'queued text', status: 'draft', postVersion: 2,
+        isThread: false, scheduledAt: null, hasSpinnableText: false,
+        autoDestructAfter: null, notes: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      };
+
+      const db = createPostUpdateMockDb({
+        updateResult: [updatedPost],
+        existingPost: { id: 'post-1', status: 'queued', postVersion: 1, scheduledAt: null },
+      });
+
+      await updatePost(db, 'user-1', 'post-1', {
+        status: 'draft',
+        scheduledAt: null,
+        postVersion: 1,
+      });
+
+      const setCall = db._updateChain.set.mock.calls[0][0];
+      expect(setCall.status).toBe('draft');
+      expect(setCall.scheduledAt).toBeNull();
+    });
+
     it('clears old associations and calls associateMediaToPost when mediaIds provided', async () => {
       const db = createPostUpdateMockDb({
         updateResult: [{ id: 'post-1' }],
@@ -904,6 +1009,64 @@ describe('post.service', () => {
       await getPosts(db, 'user-1', { search: 'hello', searchScope: 'queue' });
 
       expect(db.select).toHaveBeenCalled();
+    });
+  });
+
+  describe('getDashboardPostStats', () => {
+    it('merges one-off scheduled posts with queued posts projected from active queues', async () => {
+      const now = new Date('2026-05-26T12:00:00.000Z');
+      const scheduledPost = {
+        id: 'scheduled-1',
+        userId: 'user-1',
+        profileId: 'profile-1',
+        text: 'One-off scheduled',
+        status: 'scheduled',
+        scheduledAt: new Date('2026-05-26T15:00:00.000Z'),
+        createdAt: now,
+        updatedAt: now,
+      };
+      const queuedPost = {
+        id: 'queued-1',
+        userId: 'user-1',
+        profileId: 'profile-1',
+        text: 'Queued import item',
+        status: 'queued',
+        scheduledAt: null,
+        queueId: 'queue-1',
+        queuePosition: 1,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const db = createDashboardStatsMockDb({
+        scheduled24Rows: [scheduledPost],
+        scheduledInRangeRows: [scheduledPost],
+        queuedDashboardQueueRows: [{
+          queue: {
+            id: 'queue-1',
+            cursorPosition: 0,
+            intervalType: 'fixed',
+            intervalValue: 4,
+            intervalUnit: 'hours',
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            hourSlots: [14, 18],
+            startDate: null,
+            lastPublishedAt: null,
+            nextRunAt: new Date('2026-05-26T14:00:00.000Z'),
+          },
+          user: { timezone: 'UTC' },
+        }],
+        queuedPostRowsBySelect: [[queuedPost]],
+      });
+
+      const result = await getDashboardPostStats(db, 'user-1', '24h', now);
+
+      expect(result.scheduled24Count).toBe(2);
+      expect(result.scheduled24.map((post) => post.id)).toEqual(['queued-1', 'scheduled-1']);
+      expect(result.scheduled24[0].status).toBe('queued');
+      expect(result.scheduled24[0].scheduledAt?.toISOString()).toBe('2026-05-26T14:00:00.000Z');
+      expect(result.scheduledInRange.map((post) => post.id)).toEqual(['queued-1', 'scheduled-1']);
+      expect(result.scheduledProfileCount).toBe(1);
+      expect(db._chains[3].limit).toHaveBeenCalledWith(2);
     });
   });
 

@@ -457,7 +457,7 @@ export default function NewPostPage() {
   const previewVideoUrl = mediaItems.find((m) => m.mimeType.startsWith('video/'))?.thumbnailUrl ?? null;
 
   return (
-    <main>
+    <main className="px-4 py-6 sm:px-6 lg:px-8">
       <h1 className="text-2xl font-semibold mb-6">
         {isQueueMode ? 'Add Post to Queue' : 'New Post'}
       </h1>
@@ -614,7 +614,7 @@ export default function NewPostPage() {
               </Button>
             ) : (
               <SplitButton
-                onSchedule={() => validateAndSubmit('schedule')}
+                onPrimary={() => validateAndSubmit('schedule')}
                 onDraft={() => validateAndSubmit('draft')}
                 isLoading={createPostMutation.isPending}
                 disabled={scheduleDisabled}

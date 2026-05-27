@@ -1,5 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { DefaultLandingPage } from '@sms/shared';
 import { apiClient } from '../lib/api-client';
+
+export interface SystemHealthResponse {
+  status: 'healthy' | 'degraded';
+  timestamp: string;
+  checks: {
+    postgres?: { status: 'ok' | 'error'; message?: string };
+    redis?: { status: 'ok' | 'error'; message?: string };
+    worker?: { alive: boolean; lastHeartbeat: string | null };
+    pendingJobs?: number;
+    lastPublish?: string | null;
+  };
+}
 
 export function useUpdateProfile() {
   const qc = useQueryClient();
@@ -25,7 +38,7 @@ export function useUploadProfileImage() {
 export function useUpdatePreferences() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { timezone: string; dateFormat: string; entriesPerPage: number }) =>
+    mutationFn: (data: { timezone: string; dateFormat: string; entriesPerPage: number; defaultLandingPage: DefaultLandingPage }) =>
       apiClient.put('/api/settings/preferences', data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['auth', 'me'] }); },
   });
@@ -90,5 +103,21 @@ export function useLogoutOthers() {
   return useMutation({
     mutationFn: () => apiClient.post<{ success: boolean; deleted: number }>('/api/settings/sessions/logout-others'),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings', 'sessions'] }); },
+  });
+}
+
+export function useSystemHealth() {
+  return useQuery({
+    queryKey: ['system', 'health'],
+    queryFn: async () => {
+      const res = await fetch('/health', { credentials: 'include', cache: 'no-store' });
+      const body = await res.json();
+      if (!res.ok && res.status !== 503) {
+        throw new Error(`Health check failed: ${res.status}`);
+      }
+      return body as SystemHealthResponse;
+    },
+    retry: false,
+    staleTime: 30_000,
   });
 }

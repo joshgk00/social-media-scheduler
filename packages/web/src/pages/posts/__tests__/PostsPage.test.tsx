@@ -1,10 +1,38 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PostsPage from '../PostsPage';
 
 const setSearchParams = vi.fn();
+const mocks = vi.hoisted(() => ({
+  posts: [] as Array<{
+    id: string;
+    profileId: string | null;
+    text: string;
+    isThread: boolean;
+    status: string;
+    scheduledAt: string | null;
+    publishedAt: string | null;
+    platformPostId: string | null;
+    postVersion: number;
+    hasSpinnableText: boolean;
+    autoDestructAfter: string | null;
+    notes: string | null;
+    failureReason: string | null;
+    createdAt: string;
+    updatedAt: string;
+    tags: Array<{ id: string; name: string; color: string }>;
+    headline?: string;
+  }>,
+  counts: {
+    total: 0,
+    byStatus: {} as Record<string, number>,
+  },
+  bulkModifyTagsMutate: vi.fn(),
+  deletePostMutate: vi.fn(),
+}));
 
 vi.mock('react-router', async () => {
   const actual = await vi.importActual<typeof import('react-router')>('react-router');
@@ -17,13 +45,16 @@ vi.mock('react-router', async () => {
 
 vi.mock('../../../hooks/use-posts', () => ({
   usePosts: () => ({
-    data: { posts: [], total: 0, limit: 25, page: 1 },
+    data: { posts: mocks.posts, total: mocks.posts.length, limit: 25, page: 1 },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
     dataUpdatedAt: 0,
   }),
-  useDeletePost: () => ({ mutate: vi.fn(), isPending: false }),
+  usePostStatusCounts: () => ({
+    data: mocks.counts,
+  }),
+  useDeletePost: () => ({ mutate: mocks.deletePostMutate, isPending: false }),
 }));
 
 vi.mock('../../../hooks/use-tags', () => ({
@@ -41,7 +72,7 @@ vi.mock('../../../hooks/use-auth', () => ({
 vi.mock('../../../hooks/use-bulk-ops', () => ({
   useBulkDelete: () => ({ mutate: vi.fn(), isPending: false }),
   useBulkExport: () => ({ mutate: vi.fn(), isPending: false }),
-  useBulkModifyTags: () => ({ mutate: vi.fn(), isPending: false }),
+  useBulkModifyTags: () => ({ mutate: mocks.bulkModifyTagsMutate, isPending: false }),
   useBulkPause: () => ({ mutate: vi.fn(), isPending: false }),
   useBulkResume: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -71,7 +102,8 @@ vi.mock('../../../components/bulk/BulkPauseResumeDialog', () => ({
 }));
 
 vi.mock('../../../components/bulk/ModifyTagsDialog', () => ({
-  ModifyTagsDialog: () => null,
+  ModifyTagsDialog: ({ open, selectionCount }: { open: boolean; selectionCount: number }) =>
+    open ? <div>Modify tags dialog for {selectionCount} posts</div> : null,
 }));
 
 vi.mock('../../../components/bulk/SelectionSummaryBar', () => ({
@@ -95,6 +127,8 @@ describe('PostsPage URL-state', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    mocks.posts = [];
+    mocks.counts = { total: 0, byStatus: {} };
   });
 
   it('renders the posts search input', () => {
@@ -112,10 +146,12 @@ describe('PostsPage URL-state', () => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(setSearchParams).toHaveBeenLastCalledWith(
-      { search: 'announcement' },
-      { replace: true },
-    );
+    const [updateParams, options] = setSearchParams.mock.lastCall ?? [];
+    expect(options).toEqual({ replace: true });
+    expect(updateParams).toBeInstanceOf(Function);
+    const nextParams = updateParams(new URLSearchParams('bulkOp=55555555-5555-4555-8555-555555555555'));
+    expect(nextParams.get('search')).toBe('announcement');
+    expect(nextParams.get('bulkOp')).toBe('55555555-5555-4555-8555-555555555555');
   });
 
   it('removes the search param when the input is cleared', () => {
@@ -131,6 +167,103 @@ describe('PostsPage URL-state', () => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(setSearchParams).toHaveBeenLastCalledWith({}, { replace: true });
+    const [updateParams, options] = setSearchParams.mock.lastCall ?? [];
+    expect(options).toEqual({ replace: true });
+    expect(updateParams).toBeInstanceOf(Function);
+    const nextParams = updateParams(new URLSearchParams('bulkOp=55555555-5555-4555-8555-555555555555&search=announcement'));
+    expect(nextParams.has('search')).toBe(false);
+    expect(nextParams.get('bulkOp')).toBe('55555555-5555-4555-8555-555555555555');
+  });
+
+  it('shows every lifecycle status filter from the shared status model', () => {
+    mocks.counts = {
+      total: 9,
+      byStatus: {
+        draft: 1,
+        scheduled: 1,
+        queued: 1,
+        paused: 1,
+        publishing: 1,
+        published: 1,
+        failed: 1,
+        auto_destructing: 1,
+        destroyed: 1,
+      },
+    };
+
+    renderPage();
+
+    expect(screen.getByText('Paused (1)')).toBeInTheDocument();
+    expect(screen.getByText('Publishing (1)')).toBeInTheDocument();
+    expect(screen.getByText('Published (1)')).toBeInTheDocument();
+    expect(screen.getByText('Auto-destructing (1)')).toBeInTheDocument();
+    expect(screen.getByText('Destroyed (1)')).toBeInTheDocument();
+  });
+
+  it('restores the bulk tag editing dialog from the bulk actions menu', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+    mocks.posts = [
+      {
+        id: 'post-1',
+        profileId: null,
+        text: 'Queued launch copy',
+        isThread: false,
+        status: 'draft',
+        scheduledAt: null,
+        publishedAt: null,
+        platformPostId: null,
+        postVersion: 1,
+        hasSpinnableText: false,
+        autoDestructAfter: null,
+        notes: null,
+        failureReason: null,
+        createdAt: '2026-05-21T00:00:00.000Z',
+        updatedAt: '2026-05-21T00:00:00.000Z',
+        tags: [],
+      },
+    ];
+
+    renderPage();
+
+    await user.click(screen.getByLabelText('Select post post-1'));
+    await user.click(screen.getByRole('button', { name: /bulk actions/i }));
+    await user.click(await screen.findByText('Modify tags...'));
+
+    expect(screen.getByText('Modify tags dialog for 1 posts')).toBeInTheDocument();
+  });
+
+  it('does not offer deletion as an active action for non-deletable statuses', async () => {
+    vi.useRealTimers();
+    const user = userEvent.setup();
+    mocks.posts = [
+      {
+        id: 'post-1',
+        profileId: null,
+        text: 'Queued launch copy',
+        isThread: false,
+        status: 'queued',
+        scheduledAt: null,
+        publishedAt: null,
+        platformPostId: null,
+        postVersion: 1,
+        hasSpinnableText: false,
+        autoDestructAfter: null,
+        notes: null,
+        failureReason: null,
+        createdAt: '2026-05-21T00:00:00.000Z',
+        updatedAt: '2026-05-21T00:00:00.000Z',
+        tags: [],
+      },
+    ];
+
+    renderPage();
+
+    await user.click(screen.getByLabelText('Post actions'));
+    const deleteUnavailable = await screen.findByText('Delete unavailable');
+    await user.click(deleteUnavailable);
+
+    expect(screen.queryByText('Delete post?')).not.toBeInTheDocument();
+    expect(mocks.deletePostMutate).not.toHaveBeenCalled();
   });
 });

@@ -34,11 +34,11 @@ import { createTokenRefreshWorker } from './token-refresh-worker.js';
 import { createNotificationWorker } from './notification-worker.js';
 import { buildSmtpTransporter } from './notifications/smtp.js';
 import { createBulkOpsWorker } from './bulk-ops-worker.js';
+import { startNotificationPruneScheduler } from './notification-prune.js';
 
 const logger = createLogger('worker');
 
 const SHUTDOWN_TIMEOUT_MS = 30_000;
-
 async function main() {
   const REDIS_URL = requireEnv('REDIS_URL');
   const DATABASE_URL = requireEnv('DATABASE_URL');
@@ -56,6 +56,7 @@ async function main() {
   const { db, pgClient } = createWorkerDb(DATABASE_URL);
 
   const heartbeatInterval = startHeartbeat(redis);
+  const notificationPruneInterval = startNotificationPruneScheduler(db);
 
   const publishQueue = new Queue(QUEUE_NAMES.publish, { connection: redis });
   const bulkOpsQueue = new Queue(QUEUE_NAMES.bulkOps, { connection: redis });
@@ -167,6 +168,8 @@ async function main() {
     } catch (err) {
       logger.error({ err }, 'Heartbeat stop error');
     }
+
+    clearInterval(notificationPruneInterval);
 
     // Close order: workers first (stop accepting jobs, drain in-flight),
     // then queues (stop new enqueues), then DB, then Redis. Each in its
