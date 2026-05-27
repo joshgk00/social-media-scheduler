@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-18-642750077f_da3fc2d858",
+  "featureId": "feat_gh-18_93a07c6332",
+  "title": "gh#18: Fix: Media cleanup deletes storage before DB row — ordering risk",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/worker/src/media-cleanup-worker.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/18.\nBacklog section: P1 — Security & infra correctness.\n\n## Problem\n\nCleanup loop deletes storage file first, then DB row. If the worker crashes between steps, the DB row persists pointing to a missing file. Reversing the order (DB first, then storage) is safer — an orphaned storage file is harmless, but a DB row pointing to a missing file confuses the UI.\n\nAlso, db.delete failures inside the loop are uncaught — one failing row aborts the entire batch.\n\n## Identified by\n\nCode quality review Run 2 — security-auditor (finding 3), error-handling-reviewer (finding 3)\n\n## Fix\n\n1. Delete DB row first, then storage (best-effort).\n2. Wrap db.delete in try-catch with continue so remaining rows are processed.\n\n## Files\n\n- `packages/worker/src/media-cleanup-worker.ts:45-71, 83-105`",
+  "reproduction": "Cleanup loop deletes storage file first, then DB row. If the worker crashes between steps, the DB row persists pointing to a missing file. Reversing the order (DB first, then storage) is safer — an orphaned storage file is harmless, but a DB row pointing to a missing file confuses the UI.\n\nAlso, db.delete failures inside the loop are uncaught — one failing row aborts the entire batch.",
+  "recommendation": "1. Delete DB row first, then storage (best-effort).\n2. Wrap db.delete in try-catch with continue so remaining rows are processed.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/worker/src/media-cleanup-worker.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T041116-fb4bba",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists. In packages/worker/src/media-cleanup-worker.ts, expired media still deletes storage first at lines 50 and 60, then deletes the DB row at line 69. Orphan cleanup still deletes storage first at lines 88 and 98, then deletes the DB row at line 107. The DB delete calls are still outside try/catch blocks, so a db.delete failure would still abort the processor instead of continuing through the remaining rows. Existing media-cleanup tests cover storage.delete failure continuation but do not cover DB-delete failure continuation or DB-before-storage ordering. Targeted Vitest execution was attempted, but the read-only sandbox blocked Vite/Vitest temp directory creation with EPERM.",
+      "commands": [
+        "rg -n \"media-cleanup|cleanup|delete.*storage|storage.*delete|db\\\\.delete|delete\\\\(\" packages/worker src packages || true",
+        "nl -ba packages/worker/src/media-cleanup-worker.ts | sed -n '1,180p'",
+        "nl -ba packages/worker/src/__tests__/media-cleanup.test.ts | sed -n '1,340p'",
+        "cat packages/worker/package.json",
+        "cat package.json",
+        "pnpm --filter @sms/worker test -- --run src/__tests__/media-cleanup.test.ts",
+        "pnpm --filter @sms/worker exec vitest run --configLoader runner src/__tests__/media-cleanup.test.ts",
+        "node -e \"const fs=require('fs');const lines=fs.readFileSync('packages/worker/src/media-cleanup-worker.ts','utf8').split('\\\\n');for(const needle of ['await deps.storage.delete(row.filePath)','await deps.storage.delete(row.thumbnailPath)','await deps.db.delete(postMedia).where(eq(postMedia.id, row.id))','await deps.storage.delete(orphan.filePath)','await deps.storage.delete(orphan.thumbnailPath)','await deps.db.delete(postMedia).where(eq(postMedia.id, orphan.id))']){const i=lines.findIndex(l=>l.includes(needle));console.log((i+1)+': '+lines[i].trim())}\""
+      ],
+      "createdAt": "2026-05-27T04:12:38.333Z"
+    },
+    {
+      "runId": "20260527T041743-919aa3",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists. Current packages/worker/src/media-cleanup-worker.ts now deletes the DB row before storage for both expired media and orphan cleanup: expired media deletes the row at line 50, catches db errors and continues at lines 51-56, then deletes storage at lines 60 and 70; orphan cleanup deletes the row at line 97, catches db errors and continues at lines 98-103, then deletes storage at lines 107 and 117. Regression tests now exist in packages/worker/src/__tests__/media-cleanup.test.ts for DB-before-storage ordering and DB-delete failure continuation at lines 289, 323, and 359. Targeted Vitest execution was attempted but blocked by the read-only sandbox with EPERM creating Vitest temp directories; worker typecheck passed.",
+      "commands": [
+        "rg -n \"media-cleanup|delete\\(|storage\\.delete|db\\.delete|postMedia|thumbnailPath|filePath\" packages/worker/src packages/worker/src/__tests__",
+        "nl -ba packages/worker/src/media-cleanup-worker.ts | sed -n '1,220p'",
+        "nl -ba packages/worker/src/__tests__/media-cleanup.test.ts | sed -n '1,420p'",
+        "cat packages/worker/package.json",
+        "cat package.json",
+        "git status --short",
+        "pnpm --filter @sms/worker exec vitest run --configLoader runner src/__tests__/media-cleanup.test.ts",
+        "rg -n \"await deps\\.db\\.delete|await deps\\.storage\\.delete|catch \\(dbErr\\)|continue;|deletes .* before|continues .*database row fails\" packages/worker/src/media-cleanup-worker.ts packages/worker/src/__tests__/media-cleanup.test.ts",
+        "node -e 'const fs=require(\"fs\");const lines=fs.readFileSync(\"packages/worker/src/media-cleanup-worker.ts\",\"utf8\").split(\"\\n\");for (const [i,l] of lines.entries()) if (/await deps\\.(db\\.delete|storage\\.delete)|catch \\(dbErr\\)|continue;/.test(l)) console.log(`${i+1}: ${l.trim()}`);'",
+        "pnpm --filter @sms/worker typecheck"
+      ],
+      "createdAt": "2026-05-27T04:18:53.189Z"
+    }
+  ],
+  "signature": "sig_gh-18_642750077f",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-18-642750077f-da3fc2d_f6ae4cf443"
+  ],
+  "createdByRunId": "20260527T040704-625501",
+  "createdAt": "2026-05-27T04:07:04.328Z",
+  "updatedAt": "2026-05-27T04:18:53.189Z"
+}

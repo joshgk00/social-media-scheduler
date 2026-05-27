@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-16-af256e6111_9de04d4970",
+  "featureId": "feat_gh-16_a4a815281e",
+  "title": "gh#16: Perf: N+1 DELETE and unbounded SELECT in media-cleanup-worker",
+  "category": "performance",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/worker/src/media-cleanup-worker.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/16.\nBacklog section: Performance.\n\n## Problem\n\n1. Cleanup loops issue one DELETE per row (N round trips). Should batch into a single DELETE with inArray.\n2. SELECT queries fetch all matching rows with no LIMIT — unbounded memory if thousands of rows accumulate between weekly runs.\n\n## Identified by\n\nCode quality review Run 2 — performance-optimizer (perf-001, perf-002)\n\n## Fix\n\n1. Collect IDs after storage deletes, issue single batch DELETE.\n2. Add cursor-based batching with LIMIT 200 per batch.\n\n## Files\n\n- `packages/worker/src/media-cleanup-worker.ts`",
+  "reproduction": "1. Cleanup loops issue one DELETE per row (N round trips). Should batch into a single DELETE with inArray.\n2. SELECT queries fetch all matching rows with no LIMIT — unbounded memory if thousands of rows accumulate between weekly runs.",
+  "recommendation": "1. Collect IDs after storage deletes, issue single batch DELETE.\n2. Add cursor-based batching with LIMIT 200 per batch.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/worker/src/media-cleanup-worker.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T041912-11dab7",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists at packages/worker/src/media-cleanup-worker.ts. Current code still performs unbounded selects for expiredMedia and orphans with select().from(postMedia).where(...) and no limit/cursor batching at lines 41-46 and 87-93. It also still loops those result sets and issues one deps.db.delete(postMedia).where(eq(postMedia.id, ...)) per row at lines 48-51 and 95-98; the file imports eq but not inArray. The current media-cleanup tests reinforce the per-row behavior by expecting two delete calls when two rows are returned. A targeted vitest run was attempted but could not start because the read-only sandbox prevented Vite from writing its .vite-temp config artifact, so the conclusion is based on current source and test code inspection.",
+      "commands": [
+        "pwd && rg --files | rg '(^|/)media-cleanup-worker\\.ts$|package\\.json$|vitest|jest|test'",
+        "git status --short",
+        "nl -ba packages/worker/src/media-cleanup-worker.ts | sed -n '1,260p'",
+        "nl -ba packages/worker/src/__tests__/media-cleanup.test.ts | sed -n '1,360p'",
+        "rg -n \"delete\\(|inArray|limit\\(|MEDIA_CLEANUP|cleanup|mediaCleanup|cleanup\" packages/worker/src/media-cleanup-worker.ts packages/worker/src/__tests__/media-cleanup.test.ts packages -g '*.ts'",
+        "nl -ba package.json | sed -n '1,220p'",
+        "nl -ba packages/worker/package.json | sed -n '1,220p'",
+        "nl -ba packages/worker/src/__tests__/media-cleanup.test.ts | sed -n '359,460p'",
+        "pnpm --filter @sms/worker test -- --run src/__tests__/media-cleanup.test.ts"
+      ],
+      "createdAt": "2026-05-27T04:20:02.662Z"
+    },
+    {
+      "runId": "20260527T043002-a8ca73",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists, but the relevant implementation has changed. packages/worker/src/media-cleanup-worker.ts now imports inArray/asc/gt, defines MEDIA_CLEANUP_BATCH_SIZE = 200, deletes each fetched batch with one db.delete(postMedia).where(inArray(postMedia.id, mediaIds)), and both expired-media and orphan queries use id cursors with orderBy(asc(postMedia.id)) and limit(MEDIA_CLEANUP_BATCH_SIZE). Current tests include regression coverage for one batched delete and 200-row cursor-limited selects. A targeted Vitest run could not start because the read-only sandbox prevented Vite from writing its .vite-temp config file, but pnpm --filter @sms/worker typecheck passed. Search did not find another media-cleanup implementation still doing per-row postMedia deletes or unbounded cleanup selects.",
+      "commands": [
+        "pwd",
+        "git status --short",
+        "rg --files | rg '(^|/)media-cleanup-worker\\.ts$|(^|/)media-cleanup.*test\\.ts$|(^|/)media-cleanup.*\\.test\\.ts$|package\\.json$|vitest|jest'",
+        "nl -ba packages/worker/src/media-cleanup-worker.ts",
+        "nl -ba packages/worker/src/__tests__/media-cleanup.test.ts",
+        "rg -n \"select\\(|delete\\(|inArray|limit\\(|orderBy|cursor|MEDIA_CLEANUP|cleanupExpiredMedia|cleanupOrphanedMedia|BATCH\" packages/worker/src/media-cleanup-worker.ts packages/worker/src/__tests__/media-cleanup.test.ts",
+        "git diff -- packages/worker/src/media-cleanup-worker.ts packages/worker/src/__tests__/media-cleanup.test.ts .clawpatch/findings/fnd_sig-gh-16-af256e6111_9de04d4970.json",
+        "pnpm --filter @sms/worker test -- --run src/__tests__/media-cleanup.test.ts",
+        "rg -n \"media-cleanup|mediaCleanup|postMedia|delete\\(postMedia\\)|inArray\\(postMedia\\.id|limit\\(MEDIA_CLEANUP_BATCH_SIZE\\)|gt\\(postMedia\\.id\" packages . -g '*.ts' -g '*.json'",
+        "nl -ba packages/worker/package.json",
+        "nl -ba packages/worker/vitest.config.ts",
+        "pnpm --filter @sms/worker typecheck"
+      ],
+      "createdAt": "2026-05-27T04:31:24.339Z"
+    }
+  ],
+  "signature": "sig_gh-16_af256e6111",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:31:24.339Z"
+}

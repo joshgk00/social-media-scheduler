@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-18_93a07c6332",
+  "title": "gh#18: Fix: Media cleanup deletes storage before DB row — ordering risk",
+  "summary": "Imported from GitHub issue gh#18 in BACKLOG.md section \"P1 — Security & infra correctness\".",
+  "kind": "job",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/worker/src/media-cleanup-worker.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/worker/src/media-cleanup-worker.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#18"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#18",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/18",
+    "backlog-order:0010",
+    "backlog-section:p1-security-infra-correctness"
+  ],
+  "trustBoundaries": [
+    "filesystem",
+    "database",
+    "concurrency"
+  ],
+  "status": "fixed",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-18-642750077f_da3fc2d858"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040704-625501",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#18",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:07:04.328Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:07:04.328Z",
+  "updatedAt": "2026-05-27T04:18:53.243Z"
+}
