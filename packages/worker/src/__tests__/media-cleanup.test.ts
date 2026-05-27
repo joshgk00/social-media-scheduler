@@ -25,6 +25,16 @@ vi.mock('@sms/db', () => ({
   },
 }));
 
+vi.mock('@sms/shared', () => ({
+  QUEUE_NAMES: {
+    mediaCleanup: 'media-cleanup',
+  },
+  JOB_NAMES: {
+    mediaCleanupScheduler: 'weekly-media-cleanup',
+    mediaCleanup: 'media-cleanup',
+  },
+}));
+
 vi.mock('@sms/shared/storage', () => ({
   createStorageBackend: vi.fn(),
 }));
@@ -274,6 +284,115 @@ describe('createMediaCleanupWorker', () => {
     // Both files attempted
     expect(mockStorage.delete).toHaveBeenCalledWith('fail/path.jpg');
     expect(mockStorage.delete).toHaveBeenCalledWith('ok/path.jpg');
+  });
+
+  it('deletes expired media rows from the database before deleting storage files', async () => {
+    const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
+    const mockRedis = {} as never;
+    const { db } = createMockDb();
+    const mockStorage = createMockStorage();
+
+    const expiredRows = [
+      { id: 'media-1', filePath: 'media/p1/2026/01/abc.jpg', thumbnailPath: null },
+    ];
+
+    let selectCallCount = 0;
+    db.select.mockImplementation(() => ({
+      from: vi.fn().mockImplementation(() => ({
+        where: () => {
+          selectCallCount++;
+          if (selectCallCount === 1) return Promise.resolve(expiredRows);
+          return Promise.resolve([]);
+        },
+      })),
+    }));
+
+    const deleteWhere = vi.fn().mockResolvedValue(undefined);
+    db.delete.mockReturnValue({ where: deleteWhere });
+
+    createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
+    await capturedProcessor!({ data: {} });
+
+    expect(deleteWhere).toHaveBeenCalledTimes(1);
+    expect(mockStorage.delete).toHaveBeenCalledWith('media/p1/2026/01/abc.jpg');
+    expect(deleteWhere.mock.invocationCallOrder[0]).toBeLessThan(
+      mockStorage.delete.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('continues expired media cleanup when deleting one database row fails', async () => {
+    const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
+    const mockRedis = {} as never;
+    const { db } = createMockDb();
+    const mockStorage = createMockStorage();
+
+    const expiredRows = [
+      { id: 'media-1', filePath: 'fail/path.jpg', thumbnailPath: null },
+      { id: 'media-2', filePath: 'ok/path.jpg', thumbnailPath: null },
+    ];
+
+    let selectCallCount = 0;
+    db.select.mockImplementation(() => ({
+      from: vi.fn().mockImplementation(() => ({
+        where: () => {
+          selectCallCount++;
+          if (selectCallCount === 1) return Promise.resolve(expiredRows);
+          return Promise.resolve([]);
+        },
+      })),
+    }));
+
+    const deleteWhere = vi.fn()
+      .mockRejectedValueOnce(new Error('database unavailable'))
+      .mockResolvedValue(undefined);
+    db.delete.mockReturnValue({ where: deleteWhere });
+
+    createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
+
+    await expect(capturedProcessor!({ data: {} })).resolves.toBeUndefined();
+
+    expect(deleteWhere).toHaveBeenCalledTimes(2);
+    expect(mockStorage.delete).not.toHaveBeenCalledWith('fail/path.jpg');
+    expect(mockStorage.delete).toHaveBeenCalledWith('ok/path.jpg');
+  });
+
+  it('deletes orphan rows before storage and continues when deleting one orphan row fails', async () => {
+    const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
+    const mockRedis = {} as never;
+    const { db } = createMockDb();
+    const mockStorage = createMockStorage();
+
+    const orphanRows = [
+      { id: 'orphan-1', filePath: 'fail/orphan.jpg', thumbnailPath: null },
+      { id: 'orphan-2', filePath: 'ok/orphan.jpg', thumbnailPath: null },
+    ];
+
+    let selectCallCount = 0;
+    db.select.mockImplementation(() => ({
+      from: vi.fn().mockImplementation(() => ({
+        where: () => {
+          selectCallCount++;
+          if (selectCallCount === 1) return Promise.resolve([]);
+          return Promise.resolve(orphanRows);
+        },
+      })),
+    }));
+
+    const deleteWhere = vi.fn()
+      .mockRejectedValueOnce(new Error('database unavailable'))
+      .mockResolvedValue(undefined);
+    db.delete.mockReturnValue({ where: deleteWhere });
+
+    createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
+
+    await expect(capturedProcessor!({ data: {} })).resolves.toBeUndefined();
+
+    expect(deleteWhere).toHaveBeenCalledTimes(2);
+    expect(mockStorage.delete).not.toHaveBeenCalledWith('fail/orphan.jpg');
+    expect(mockStorage.delete).toHaveBeenCalledWith('ok/orphan.jpg');
+    expect(deleteWhere.mock.invocationCallOrder[1]).toBeLessThan(
+      mockStorage.delete.mock.invocationCallOrder[0],
+    );
   });
 });
 

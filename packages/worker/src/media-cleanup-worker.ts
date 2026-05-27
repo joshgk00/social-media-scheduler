@@ -47,6 +47,16 @@ export function createMediaCleanupWorker(
 
       for (const row of expiredMedia) {
         try {
+          await deps.db.delete(postMedia).where(eq(postMedia.id, row.id));
+        } catch (dbErr) {
+          jobLogger.error(
+            { err: dbErr, mediaId: row.id },
+            'Failed to delete media row from database, continuing',
+          );
+          continue;
+        }
+
+        try {
           await deps.storage.delete(row.filePath);
         } catch (storageErr) {
           jobLogger.error(
@@ -66,7 +76,6 @@ export function createMediaCleanupWorker(
           }
         }
 
-        await deps.db.delete(postMedia).where(eq(postMedia.id, row.id));
         jobLogger.info(
           { mediaId: row.id, filePath: row.filePath },
           'Permanently deleted soft-deleted media',
@@ -84,6 +93,16 @@ export function createMediaCleanupWorker(
         ));
 
       for (const orphan of orphans) {
+        try {
+          await deps.db.delete(postMedia).where(eq(postMedia.id, orphan.id));
+        } catch (dbErr) {
+          jobLogger.error(
+            { err: dbErr, mediaId: orphan.id },
+            'Failed to delete orphan media row from database, continuing',
+          );
+          continue;
+        }
+
         try {
           await deps.storage.delete(orphan.filePath);
         } catch (storageErr) {
@@ -103,8 +122,6 @@ export function createMediaCleanupWorker(
             );
           }
         }
-
-        await deps.db.delete(postMedia).where(eq(postMedia.id, orphan.id));
       }
 
       jobLogger.info(
