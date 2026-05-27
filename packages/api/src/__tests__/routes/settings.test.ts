@@ -27,16 +27,6 @@ vi.mock('../../services/session.service.js', () => ({
   SESSION_PREFIX: 'sms:sess:',
 }));
 
-vi.mock('../../middleware/auth-guard.js', () => ({
-  requireAuth: (req: any, res: any, next: any) => {
-    if (!req.session?.userId) {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
-    next();
-  },
-}));
-
 vi.mock('sharp', () => ({
   default: vi.fn().mockReturnValue({
     rotate: vi.fn().mockReturnThis(),
