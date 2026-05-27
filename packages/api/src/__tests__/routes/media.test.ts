@@ -14,11 +14,20 @@ vi.mock('node:fs/promises', () => ({
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
-vi.mock('../../services/media.service.js', () => ({
+vi.mock('../../services/media-upload.service.js', () => ({
   processImageUpload: (...args: unknown[]) => mockProcessImageUpload(...args),
   processVideoUpload: (...args: unknown[]) => mockProcessVideoUpload(...args),
+}));
+
+vi.mock('../../services/media-query.service.js', () => ({
   getMediaStatus: (...args: unknown[]) => mockGetMediaStatus(...args),
+}));
+
+vi.mock('../../services/media-lifecycle.service.js', () => ({
   softDeleteMedia: (...args: unknown[]) => mockSoftDeleteMedia(...args),
+}));
+
+vi.mock('../../services/media-retry.service.js', () => ({
   retryTranscode: (...args: unknown[]) => mockRetryTranscode(...args),
 }));
 

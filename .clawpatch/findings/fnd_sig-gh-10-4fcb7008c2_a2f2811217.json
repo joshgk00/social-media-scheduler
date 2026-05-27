@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-10-4fcb7008c2_a2f2811217",
+  "featureId": "feat_gh-10_f31d806dc5",
+  "title": "gh#10: Refactor: Split media.service.ts god module",
+  "category": "api-contract",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "contract-mismatch",
+  "evidence": [
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/10.\nBacklog section: Refactoring / type safety.\n\n## Problem\n\nmedia.service.ts bundles 7 functions across 4 concerns (upload processing, status queries, lifecycle management, retry logic) with 9 imports at 294 lines. SRP violation.\n\n## Identified by\n\nCode quality review Run 1 — architecture-reviewer (arch-002)\n\n## Fix\n\nSplit into: media-upload.service.ts, media-query.service.ts, media-lifecycle.service.ts, media-retry.service.ts. Export from barrel.\n\n## Files\n\n- `packages/api/src/services/media.service.ts`",
+  "reproduction": "media.service.ts bundles 7 functions across 4 concerns (upload processing, status queries, lifecycle management, retry logic) with 9 imports at 294 lines. SRP violation.",
+  "recommendation": "Split into: media-upload.service.ts, media-query.service.ts, media-lifecycle.service.ts, media-retry.service.ts. Export from barrel.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/services/media.service.ts",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T045843-b359f4",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence path still exists: packages/api/src/services/media.service.ts is currently 332 lines. The recommended split files are absent; find only reports packages/api/src/services/media.service.ts for media*.ts at service top level. Current code still centralizes the same concerns in one module: upload processing via processImageUpload/processVideoUpload, status query via getMediaStatus, lifecycle/deletion/association via softDeleteMedia/softDeleteMediaForPost/associateMediaToPost, and retry logic via retryTranscode. The module has 11 import statements and exports MediaServiceError plus seven functions. Current references and tests still import these APIs from media.service.ts rather than from split media-upload/query/lifecycle/retry services. Targeted Vitest was attempted but could not run in this read-only sandbox because Vite/Vitest tried to create temp files under packages/api/node_modules/.vite-temp and /var/folders; that failure is environmental, not evidence of a fix. Based on current code shape, the refactor finding remains open.",
+      "commands": [
+        "pwd",
+        "git status --short",
+        "rg --files packages/api/src/services",
+        "wc -l packages/api/src/services/media.service.ts",
+        "sed -n '1,220p' packages/api/src/services/media.service.ts",
+        "sed -n '221,420p' packages/api/src/services/media.service.ts",
+        "rg -n \"media-(upload|query|lifecycle|retry)|MediaUpload|MediaQuery|MediaLifecycle|MediaRetry|getMedia|retry|status|lifecycle|upload\" packages/api/src",
+        "rg -n \"from ['\\\"]\\.\\/media\\.service|from ['\\\"].*media\\.service|mediaService|MediaService|processMedia|retryMedia|deleteMedia|getMedia\" packages/api/src packages/api/tests 2>/dev/null",
+        "sed -n '1,220p' package.json",
+        "sed -n '1,220p' packages/api/package.json",
+        "sed -n '1,460p' packages/api/src/__tests__/services/media.test.ts",
+        "rg -n \"export .*media|services/index|media\\.service|media-upload.service|media-query.service|media-lifecycle.service|media-retry.service\" packages/api/src packages/api/package.json package.json",
+        "pnpm --filter @sms/api test -- --run packages/api/src/__tests__/services/media.test.ts",
+        "rg -n \"^import \" packages/api/src/services/media.service.ts",
+        "rg -n \"^export (async function|class)\" packages/api/src/services/media.service.ts",
+        "rg -n \"^export async function|^export class|^function|^interface|^const \" packages/api/src/services/media.service.ts",
+        "find packages/api/src/services -maxdepth 1 -type f \\( -name 'media*.ts' -o -name 'media-*.ts' \\) -print | sort",
+        "sed -n '1,220p' packages/api/vitest.config.ts",
+        "sed -n '1,220p' packages/api/tsconfig.json",
+        "pnpm --filter @sms/api exec vitest --help | sed -n '1,180p'",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/services/media.test.ts --configLoader runner --no-cache"
+      ],
+      "createdAt": "2026-05-27T05:00:45.807Z"
+    },
+    {
+      "runId": "20260527T050740-1b8561",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence path still exists, but it is no longer the 332-line god module described by the finding: packages/api/src/services/media.service.ts is now a 9-line barrel export. The requested split files exist at packages/api/src/services/media-upload.service.ts, media-query.service.ts, media-lifecycle.service.ts, and media-retry.service.ts. Current code separates the concerns as requested: upload processing is in media-upload.service.ts, status lookup is in media-query.service.ts, lifecycle/association/deletion is in media-lifecycle.service.ts, and retry logic is in media-retry.service.ts. Routes, post CRUD, and media/post tests now import the split service modules directly, and a search found no remaining imports from media.service.js. pnpm --filter @sms/api typecheck passed. Targeted Vitest execution was attempted but could not run in this read-only sandbox because Vitest/Vite tried to create temp/cache directories under packages/api/node_modules/.vite-temp and /var/folders; that is environmental and not evidence the issue remains open.",
+      "commands": [
+        "pwd",
+        "git status --short",
+        "rg --files packages/api/src/services",
+        "wc -l packages/api/src/services/media.service.ts",
+        "sed -n '1,120p' packages/api/src/services/media.service.ts",
+        "sed -n '1,260p' packages/api/src/services/media-upload.service.ts",
+        "sed -n '1,220p' packages/api/src/services/media-query.service.ts",
+        "sed -n '1,260p' packages/api/src/services/media-lifecycle.service.ts",
+        "sed -n '1,220p' packages/api/src/services/media-retry.service.ts",
+        "rg -n \"from ['\\\"].*media(\\.service|-upload\\.service|-query\\.service|-lifecycle\\.service|-retry\\.service)|media\\.service|media-upload.service|media-query.service|media-lifecycle.service|media-retry.service|processImageUpload|processVideoUpload|getMediaStatus|softDeleteMedia|softDeleteMediaForPost|associateMediaToPost|retryTranscode|MediaServiceError\" packages/api/src packages/api/tests",
+        "rg -n \"^export |^import \" packages/api/src/services/media*.service.ts",
+        "find packages/api/src/services -maxdepth 1 -type f \\( -name 'media*.ts' -o -name 'media-*.ts' \\) -print",
+        "sed -n '1,260p' packages/api/src/__tests__/services/media.test.ts",
+        "sed -n '1,260p' packages/api/src/__tests__/routes/media.test.ts",
+        "sed -n '1,220p' package.json",
+        "sed -n '1,220p' packages/api/package.json",
+        "sed -n '1,220p' packages/api/vitest.config.ts",
+        "sed -n '1,220p' packages/api/tsconfig.json",
+        "rg -n \"media.service|media-upload.service|media-query.service|media-lifecycle.service|media-retry.service\" packages/api/src package.json packages/api/package.json packages/api/tsconfig.json packages/api/vitest.config.ts",
+        "pnpm --filter @sms/api test -- --run src/__tests__/services/media.test.ts src/__tests__/routes/media.test.ts src/__tests__/services/post.test.ts",
+        "pnpm --filter @sms/api typecheck",
+        "pnpm --filter @sms/api exec vitest run src/__tests__/services/media.test.ts src/__tests__/routes/media.test.ts src/__tests__/services/post.test.ts --configLoader runner --no-cache",
+        "wc -l packages/api/src/services/media.service.ts packages/api/src/services/media-upload.service.ts packages/api/src/services/media-query.service.ts packages/api/src/services/media-lifecycle.service.ts packages/api/src/services/media-retry.service.ts",
+        "git diff -- packages/api/src/services/media.service.ts packages/api/src/services/media-upload.service.ts packages/api/src/services/media-query.service.ts packages/api/src/services/media-lifecycle.service.ts packages/api/src/services/media-retry.service.ts packages/api/src/routes/media.ts packages/api/src/services/post-crud.service.ts packages/api/src/__tests__/services/media.test.ts packages/api/src/__tests__/routes/media.test.ts packages/api/src/__tests__/services/post.test.ts",
+        "rg -n \"from ['\\\"](\\.\\./services/|\\.\\./\\.\\./services/|\\./).*media\\.service\\.js|media\\.service\\.js\" packages/api/src",
+        "rg -n \"processImageUpload|processVideoUpload|getMediaStatus|softDeleteMedia|softDeleteMediaForPost|associateMediaToPost|retryTranscode|MediaServiceError\" packages/api/src/services/media*.service.ts packages/api/src/routes/media.ts packages/api/src/services/post-crud.service.ts"
+      ],
+      "createdAt": "2026-05-27T05:09:16.282Z"
+    }
+  ],
+  "signature": "sig_gh-10_4fcb7008c2",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-10-4fcb7008c2-a2f2811_6a6467bba4"
+  ],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T05:09:16.282Z"
+}

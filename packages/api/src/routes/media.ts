@@ -8,13 +8,10 @@ import type { StorageBackend } from '@sms/shared/storage';
 import { socialProfiles, type Db } from '@sms/db';
 import { createLogger } from '@sms/shared/logger';
 
-import {
-  processImageUpload,
-  processVideoUpload,
-  getMediaStatus,
-  softDeleteMedia,
-  retryTranscode,
-} from '../services/media.service.js';
+import { processImageUpload, processVideoUpload } from '../services/media-upload.service.js';
+import { getMediaStatus } from '../services/media-query.service.js';
+import { softDeleteMedia } from '../services/media-lifecycle.service.js';
+import { retryTranscode } from '../services/media-retry.service.js';
 import { mediaUpload } from '../middleware/media-upload.js';
 import { requireAuth } from '../middleware/auth-guard.js';
 import { validateUuidParam } from '../middleware/validation.js';

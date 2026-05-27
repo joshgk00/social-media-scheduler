@@ -6,7 +6,7 @@ import type { PostStatus } from '@sms/shared';
 import type { Db } from '@sms/db';
 import { posts, postTags, tags, socialProfiles, postMedia, queues, users } from '@sms/db';
 
-import { softDeleteMediaForPost, associateMediaToPost } from './media.service.js';
+import { softDeleteMediaForPost, associateMediaToPost } from './media-lifecycle.service.js';
 
 const logger = createLogger('post-service');
 
