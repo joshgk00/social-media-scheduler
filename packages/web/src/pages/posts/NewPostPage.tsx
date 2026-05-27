@@ -167,25 +167,31 @@ export default function NewPostPage() {
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
       if (!platform) return;
-      for (const file of files) {
-        try {
-          const response = await upload(file, effectiveProfileId, platform);
-          setMediaItems((prev) => [
-            ...prev,
-            {
-              id: response.id,
-              fileName: response.fileName,
-              mimeType: response.mimeType,
-              thumbnailUrl: response.thumbnailUrl,
-              transcodeStatus: response.transcodeStatus,
-              transcodeError: null,
-            },
-          ]);
+      const uploadResults = await Promise.allSettled(
+        files.map((file) => upload(file, effectiveProfileId, platform)),
+      );
+      const uploadedMediaItems: MediaItem[] = [];
+
+      for (const result of uploadResults) {
+        if (result.status === 'fulfilled') {
+          const response = result.value;
+          uploadedMediaItems.push({
+            id: response.id,
+            fileName: response.fileName,
+            mimeType: response.mimeType,
+            thumbnailUrl: response.thumbnailUrl,
+            transcodeStatus: response.transcodeStatus,
+            transcodeError: null,
+          });
           toast.success('File uploaded.');
-        } catch (uploadError) {
-          const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed';
+        } else {
+          const errorMessage = result.reason instanceof Error ? result.reason.message : 'Upload failed';
           toast.error(`Upload failed: ${errorMessage}`);
         }
+      }
+
+      if (uploadedMediaItems.length > 0) {
+        setMediaItems((prev) => [...prev, ...uploadedMediaItems]);
       }
     },
     [effectiveProfileId, platform, upload],

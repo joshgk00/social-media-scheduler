@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-24-e0126d09e6_385542f774",
+  "featureId": "feat_gh-24_bde73fe024",
+  "title": "gh#24: Perf: Upload files concurrently instead of sequentially",
+  "category": "performance",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/web/src/pages/posts/NewPostPage.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/pages/posts/EditPostPage.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/24.\nBacklog section: Performance.\n\n## Problem\n\nWhen a user drops 4 images, they upload one at a time in a for loop. Each file waits for the previous to complete. useMediaUpload already tracks per-file state via tempId, so parallel uploads would work.\n\n## Identified by\n\nCode quality review Run 3 — web comprehensive review (M-1)\n\n## Fix\n\nReplace sequential for loop with Promise.allSettled (or Promise.all with per-file error handling).\n\n## Files\n\n- \\`packages/web/src/pages/posts/NewPostPage.tsx:143\\`\n- \\`packages/web/src/pages/posts/EditPostPage.tsx:163\\`",
+  "reproduction": "When a user drops 4 images, they upload one at a time in a for loop. Each file waits for the previous to complete. useMediaUpload already tracks per-file state via tempId, so parallel uploads would work.",
+  "recommendation": "Replace sequential for loop with Promise.allSettled (or Promise.all with per-file error handling).",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/pages/posts/NewPostPage.tsx, packages/web/src/pages/posts/EditPostPage.tsx",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T043142-27fb2d",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. The specific line numbers have moved, but both upload handlers are still sequential: packages/web/src/pages/posts/NewPostPage.tsx:170-172 and packages/web/src/pages/posts/EditPostPage.tsx:170-172 both loop over files and await upload(...) inside the loop. There is no Promise.all or Promise.allSettled in those handlers, and useMediaUpload still tracks each upload with its own tempId, so the reported parallelization opportunity remains valid. Existing page tests do not cover multi-file upload concurrency. I attempted the focused Vitest run, but it could not start in this read-only sandbox because Vite tried to write packages/web/node_modules/.vite-temp.",
+      "commands": [
+        "rg -n \"for \\(|for await|Promise\\.all|Promise\\.allSettled|upload\" packages/web/src/pages/posts/NewPostPage.tsx packages/web/src/pages/posts/EditPostPage.tsx",
+        "sed -n '1,260p' packages/web/src/pages/posts/NewPostPage.tsx",
+        "sed -n '1,300p' packages/web/src/pages/posts/EditPostPage.tsx",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '160,192p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '160,192p'",
+        "sed -n '1,260p' packages/web/src/hooks/use-media-upload.ts",
+        "rg -n \"Promise\\.all(Settled)?|handleFilesSelected|for \\(const file of files\\)|upload\\(file\" packages/web/src -g '*.tsx' -g '*.ts'",
+        "cat packages/web/package.json",
+        "rg -n \"handleFilesSelected|useMediaUpload|MediaDropZone|uploadingFiles\" packages/web/src -g '*.{test,spec}.{ts,tsx}' -g '*.{test,spec}.ts' -g '*.{test,spec}.tsx'",
+        "pnpm --filter @sms/web test -- --run packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx packages/web/src/pages/posts/__tests__/EditPostPage.test.tsx"
+      ],
+      "createdAt": "2026-05-27T04:32:41.989Z"
+    },
+    {
+      "runId": "20260527T044235-3f12a7",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original evidence paths still exist. The upload handlers have moved to packages/web/src/pages/posts/NewPostPage.tsx:167 and packages/web/src/pages/posts/EditPostPage.tsx:167, and both now call Promise.allSettled over files.map((file) => upload(...)), so selected files are started concurrently instead of awaiting each upload in sequence. A repo-wide search found no remaining sequential await upload loop for this flow; the only remaining for-of over files is validation in MediaDropZone, not upload execution. Focused regression tests now exist at packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx:261 and packages/web/src/pages/posts/__tests__/EditPostPage.test.tsx:220, asserting two selected uploads are started before either promise is resolved. I attempted to run the focused Vitest tests, but this read-only sandbox prevented Vite/Vitest temp file creation with EPERM, so execution could not complete here.",
+      "commands": [
+        "rg -n \"for \\(|for await|Promise\\.all|Promise\\.allSettled|upload\\(|handleFilesSelected|useMediaUpload\" packages/web/src/pages/posts/NewPostPage.tsx packages/web/src/pages/posts/EditPostPage.tsx",
+        "nl -ba packages/web/src/pages/posts/NewPostPage.tsx | sed -n '130,210p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '145,220p'",
+        "rg -n \"Promise\\.allSettled|allSettled|concurrent|handleFilesSelected|useMediaUpload|upload\\(\" packages/web/src -g '*.{test,spec}.{ts,tsx}' -g '*.{test,spec}.ts' -g '*.{test,spec}.tsx'",
+        "rg -n \"Promise\\.allSettled|for \\(const file of files\\)|files\\.map\\(\\(file\\) => upload|await upload\\(\" packages/web/src/pages/posts packages/web/src/hooks -g '*.ts' -g '*.tsx'",
+        "sed -n '1,260p' packages/web/src/hooks/use-media-upload.ts",
+        "nl -ba packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx | sed -n '240,310p'",
+        "nl -ba packages/web/src/pages/posts/__tests__/EditPostPage.test.tsx | sed -n '200,270p'",
+        "pnpm --filter @sms/web test -- --run packages/web/src/pages/posts/__tests__/NewPostPage.test.tsx packages/web/src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "pnpm exec vitest run --configLoader runner src/pages/posts/__tests__/NewPostPage.test.tsx src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "NODE_OPTIONS=\"--import=data:text/javascript,globalThis.__dirname='/Users/slaughterassistant/social-media-scheduler-backlog-sync/packages/web'\" pnpm exec vitest run --configLoader runner src/pages/posts/__tests__/NewPostPage.test.tsx src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "rg -n \"for \\(const file of files\\)|for await|await upload\\(|files\\.map\\(\\(file\\) => upload\\(|Promise\\.allSettled\\(\" packages/web/src -g '*.ts' -g '*.tsx'",
+        "nl -ba packages/web/src/components/posts/MediaDropZone.tsx | sed -n '35,85p'"
+      ],
+      "createdAt": "2026-05-27T04:45:05.678Z"
+    }
+  ],
+  "signature": "sig_gh-24_e0126d09e6",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-24-e0126d09e6-385542f_f24bf582fa"
+  ],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:45:05.678Z"
+}

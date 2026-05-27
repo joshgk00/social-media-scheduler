@@ -167,25 +167,31 @@ export default function EditPostPage() {
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
       if (!formState.platform || !formState.profileId) return;
-      for (const file of files) {
-        try {
-          const response = await upload(file, formState.profileId, formState.platform);
-          setMediaItems((prev) => [
-            ...prev,
-            {
-              id: response.id,
-              fileName: response.fileName,
-              mimeType: response.mimeType,
-              thumbnailUrl: response.thumbnailUrl,
-              transcodeStatus: response.transcodeStatus,
-              transcodeError: null,
-            },
-          ]);
+      const uploadResults = await Promise.allSettled(
+        files.map((file) => upload(file, formState.profileId, formState.platform)),
+      );
+      const uploadedMediaItems: MediaItem[] = [];
+
+      for (const result of uploadResults) {
+        if (result.status === 'fulfilled') {
+          const response = result.value;
+          uploadedMediaItems.push({
+            id: response.id,
+            fileName: response.fileName,
+            mimeType: response.mimeType,
+            thumbnailUrl: response.thumbnailUrl,
+            transcodeStatus: response.transcodeStatus,
+            transcodeError: null,
+          });
           toast.success('File uploaded.');
-        } catch (uploadError) {
-          const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed';
+        } else {
+          const errorMessage = result.reason instanceof Error ? result.reason.message : 'Upload failed';
           toast.error(`Upload failed: ${errorMessage}`);
         }
+      }
+
+      if (uploadedMediaItems.length > 0) {
+        setMediaItems((prev) => [...prev, ...uploadedMediaItems]);
       }
     },
     [formState.platform, formState.profileId, upload],
