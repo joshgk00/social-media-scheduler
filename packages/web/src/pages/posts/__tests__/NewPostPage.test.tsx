@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import NewPostPage from '../NewPostPage';
 
 const navigate = vi.fn();
@@ -119,6 +120,17 @@ vi.mock('../../../components/posts/TwitterPostFields', () => ({
       </button>
       <button
         type="button"
+        onClick={() =>
+          onFilesSelected([
+            new File(['first'], 'first.png', { type: 'image/png' }),
+            new File(['second'], 'second.png', { type: 'image/png' }),
+          ])
+        }
+      >
+        Add two images
+      </button>
+      <button
+        type="button"
         onClick={() => onMediaStatusUpdate(mediaItems[0].id, 'completed', null)}
         disabled={mediaItems.length === 0}
       >
@@ -198,7 +210,7 @@ function renderPage() {
 
 describe('NewPostPage scheduling validation', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     uploadMedia.mockResolvedValue({
       id: 'media-1',
       fileName: 'video.mp4',
@@ -244,5 +256,39 @@ describe('NewPostPage scheduling validation', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Schedule Post' })).not.toBeDisabled(),
     );
+  });
+
+  it('starts selected media uploads concurrently', async () => {
+    const user = userEvent.setup();
+    const resolvers: Array<() => void> = [];
+    uploadMedia.mockImplementation((file: File) => {
+      const response = {
+        id: `media-${resolvers.length + 1}`,
+        fileName: file.name,
+        mimeType: file.type,
+        thumbnailUrl: null,
+        transcodeStatus: 'completed',
+      };
+
+      return new Promise((resolve) => {
+        resolvers.push(() => resolve(response));
+      });
+    });
+    renderPage();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Use Twitter profile' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Add two images' }));
+
+    expect(uploadMedia).toHaveBeenCalledTimes(2);
+    expect(uploadMedia.mock.calls.map(([file]) => (file as File).name)).toEqual([
+      'first.png',
+      'second.png',
+    ]);
+
+    resolvers.forEach((resolve) => resolve());
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(2));
   });
 });

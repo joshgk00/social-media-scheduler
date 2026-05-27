@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-23-1a543eb81a_4eac5ef983",
+  "featureId": "feat_gh-23_202c2d6672",
+  "title": "gh#23: Type safety: Add media field to Post interface instead of as unknown cast",
+  "category": "api-contract",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "contract-mismatch",
+  "evidence": [
+    {
+      "path": "packages/web/src/hooks/use-posts.ts/",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/23.\nBacklog section: Refactoring / type safety.\n\n## Problem\n\nEditPostPage uses \\`post as unknown as { media?: Array<...> }\\` to access the media field on a Post response. The Post interface in use-posts.ts doesn't include media. This defeats the type system and will silently break if the API response shape changes.\n\n## Identified by\n\nCode quality review Run 3 — web comprehensive review (H-2)\n\n## Fix\n\nAdd \\`media?: MediaItem[]\\` to the Post interface in use-posts.ts (or a shared type from @sms/shared).\n\n## Files\n\n- \\`packages/web/src/pages/posts/EditPostPage.tsx:112-129\\`\n- \\`packages/web/src/hooks/use-posts.ts\\`",
+  "reproduction": "EditPostPage uses \\`post as unknown as { media?: Array<...> }\\` to access the media field on a Post response. The Post interface in use-posts.ts doesn't include media. This defeats the type system and will silently break if the API response shape changes.",
+  "recommendation": "Add \\`media?: MediaItem[]\\` to the Post interface in use-posts.ts (or a shared type from @sms/shared).",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/hooks/use-posts.ts/",
+  "status": "fixed",
+  "history": [
+    {
+      "runId": "20260527T053805-595df1",
+      "kind": "revalidate",
+      "status": "open",
+      "note": null,
+      "reasoning": "The trailing-slash evidence path packages/web/src/hooks/use-posts.ts/ does not exist, but the intended file packages/web/src/hooks/use-posts.ts still exists. Its Post interface at lines 17-37 still has no media field. EditPostPage.tsx still uses post as unknown as { media?: Array<...> } at lines 136-145 and then reads postWithMedia.media at lines 146-148. The API still returns a media field from getPostById in packages/api/src/services/post-crud.service.ts:590, so the type contract mismatch remains open. A direct web app tsc check passed, which is consistent with the unsafe cast hiding the mismatch. The package typecheck and focused Vitest run could not complete under the current read-only sandbox because they attempted to write tsbuildinfo/Vite temp files.",
+      "commands": [
+        "sed -n '1,220p' /Users/slaughterassistant/.codex/skills/clawpatch-fix-loop/SKILL.md",
+        "git status --short",
+        "rg --files | rg 'packages/web/src/(hooks/use-posts|pages/posts/EditPostPage)\\\\.tsx?$|package\\\\.json$|pnpm-lock\\\\.yaml$|yarn\\\\.lock$|package-lock\\\\.json$'",
+        "rg -n \"as unknown as|interface Post|type Post|media\\\\??:|MediaItem|post\\\\.media|\\\\.media\" packages/web/src packages/shared src 2>/dev/null",
+        "nl -ba packages/web/src/hooks/use-posts.ts | sed -n '1,140p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '1,220p'",
+        "test -e packages/web/src/hooks/use-posts.ts/ && printf exists || printf missing; printf '\\\\n'; test -f packages/web/src/hooks/use-posts.ts && printf file-exists || printf file-missing",
+        "sed -n '1,220p' package.json; sed -n '1,220p' packages/web/package.json",
+        "nl -ba packages/web/src/hooks/use-posts.ts | sed -n '140,320p'",
+        "rg --files packages/web | rg 'tsconfig|vitest|vite\\\\.config|__tests__|\\\\.test\\\\.'",
+        "sed -n '1,220p' packages/web/tsconfig.json; sed -n '1,220p' packages/web/tsconfig.app.json 2>/dev/null; sed -n '1,220p' packages/web/tsconfig.node.json 2>/dev/null",
+        "rg -n \"PostListItem|postListItemSchema|media\" packages/shared/src/schemas/posts.ts packages/api/src packages/web/src/hooks/use-posts.ts packages/web/src/pages/posts/EditPostPage.tsx",
+        "nl -ba packages/shared/src/schemas/posts.ts | sed -n '250,310p'",
+        "nl -ba packages/web/src/components/posts/MediaThumbnail.tsx | sed -n '1,50p'",
+        "nl -ba packages/api/src/services/post-crud.service.ts | sed -n '560,600p'",
+        "pnpm --filter @sms/web typecheck",
+        "pnpm --filter @sms/web exec tsc -p tsconfig.app.json --noEmit --pretty false",
+        "pnpm --filter @sms/web test -- --run src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "pnpm --filter @sms/web exec vitest --help | rg -n \"configLoader|cache|run\"",
+        "pnpm --filter @sms/web exec vitest run --configLoader runner src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "pnpm --filter @sms/web exec vitest run --configLoader native src/pages/posts/__tests__/EditPostPage.test.tsx"
+      ],
+      "createdAt": "2026-05-27T05:40:01.470Z"
+    },
+    {
+      "runId": "20260527T054454-a852cd",
+      "kind": "revalidate",
+      "status": "fixed",
+      "note": null,
+      "reasoning": "The original trailing-slash evidence path still does not exist, but the intended file does. In current packages/web/src/hooks/use-posts.ts, Post imports MediaItem and includes media?: MediaItem[] at line 35, and usePost still returns apiClient.get<Post>. In current EditPostPage.tsx, the previous postWithMedia/media?: Array<...> unknown cast is gone; media hydration now reads post.media directly at lines 136-138. The remaining post as unknown as cast at lines 112-115 is only for visibility/linkUrl and is outside this finding. The API still returns media from getPostById at packages/api/src/services/post-crud.service.ts:590, so the Post contract now covers that field. Direct app TypeScript validation passed. Package typecheck was blocked by read-only sandbox tsbuildinfo writes, and focused Vitest was blocked by the existing ESM __dirname config startup error, not by this media typing change.",
+      "commands": [
+        "git status --short",
+        "test -e packages/web/src/hooks/use-posts.ts/ && printf 'evidence-path-exists\\n' || printf 'evidence-path-missing\\n'; test -f packages/web/src/hooks/use-posts.ts && printf 'intended-file-exists\\n' || printf 'intended-file-missing\\n'; test -f packages/web/src/pages/posts/EditPostPage.tsx && printf 'edit-page-exists\\n' || printf 'edit-page-missing\\n'",
+        "rg --files | rg 'packages/web/src/(hooks/use-posts|pages/posts/EditPostPage)\\.tsx?$|packages/shared/src/schemas/posts\\.ts|packages/api/src/services/post-crud\\.service\\.ts|packages/web/package\\.json|package\\.json'",
+        "nl -ba packages/web/src/hooks/use-posts.ts | sed -n '1,220p'",
+        "nl -ba packages/web/src/pages/posts/EditPostPage.tsx | sed -n '1,240p'",
+        "rg -n \"as unknown as|interface Post|type Post|media\\??:|MediaItem|postWithMedia|post\\.media|\\.media\" packages/web/src/hooks/use-posts.ts packages/web/src/pages/posts/EditPostPage.tsx packages/shared/src/schemas/posts.ts packages/api/src/services/post-crud.service.ts",
+        "sed -n '1,220p' package.json",
+        "sed -n '1,220p' packages/web/package.json",
+        "git diff -- packages/web/src/hooks/use-posts.ts packages/web/src/pages/posts/EditPostPage.tsx .clawpatch/findings/fnd_sig-gh-23-1a543eb81a_4eac5ef983.json | sed -n '1,240p'",
+        "rg --files packages/web/src | rg 'EditPostPage.*\\.test\\.(ts|tsx)$|__tests__/.*EditPostPage'",
+        "pnpm --filter @sms/web exec tsc -p tsconfig.app.json --noEmit --pretty false",
+        "nl -ba packages/api/src/services/post-crud.service.ts | sed -n '560,600p'",
+        "pnpm --filter @sms/web exec vitest run --configLoader native src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "nl -ba packages/web/vitest.config.ts | sed -n '1,80p'",
+        "pnpm --filter @sms/web exec vitest run --configLoader runner src/pages/posts/__tests__/EditPostPage.test.tsx",
+        "pnpm --filter @sms/web typecheck",
+        "rg -n -C 4 \"postWithMedia|media\\?: Array|post\\.media|as unknown as\" packages/web/src/pages/posts/EditPostPage.tsx",
+        "nl -ba packages/web/src/components/posts/MediaThumbnail.tsx | sed -n '1,80p'",
+        "rg -n \"interface Post|media\\?: MediaItem\\[\\]|usePost\\(|apiClient\\.get<Post>|export type \\{ Post\" packages/web/src/hooks/use-posts.ts"
+      ],
+      "createdAt": "2026-05-27T05:47:06.620Z"
+    }
+  ],
+  "signature": "sig_gh-23_1a543eb81a",
+  "linkedPatchAttemptIds": [
+    "pat_fnd-sig-gh-23-1a543eb81a-4eac5ef_e1a1735975"
+  ],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T05:47:06.620Z"
+}

@@ -2,13 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import { DateTime } from 'luxon';
 import { toast } from 'sonner';
-import { EDITABLE_STATES, PLATFORM_MEDIA_LIMITS, type PostStatus } from '@sms/shared';
+import { EDITABLE_STATES, type PostStatus } from '@sms/shared';
 import type { Platform } from '../../hooks/use-profiles';
 import { useAuth } from '../../hooks/use-auth';
 import { useProfiles } from '../../hooks/use-profiles';
 import { usePost, useUpdatePost } from '../../hooks/use-posts';
-import { useMediaUpload } from '../../hooks/use-media-upload';
-import { useDeleteMedia, useRetryTranscode } from '../../hooks/use-media';
+import { usePostMedia } from '../../hooks/use-post-media';
 import { serializeThread, deserializeThread, type TweetSegment } from '../../lib/thread';
 import { ProfilePicker } from '../../components/posts/ProfilePicker';
 import { SharedPostFields } from '../../components/posts/SharedPostFields';
@@ -19,23 +18,20 @@ import { TweetPreview } from '../../components/posts/TweetPreview';
 import { LinkedInPreview } from '../../components/posts/LinkedInPreview';
 import { FacebookPreview } from '../../components/posts/FacebookPreview';
 import { CharacterCountRing } from '../../components/posts/CharacterCountRing';
-import { SplitButton } from '../../components/posts/SplitButton';
 import { TagManagementDialog } from '../../components/posts/TagManagementDialog';
 import { RateLimitBanner } from '../../components/posts/RateLimitBanner';
 import { RateLimitSettingsDialog } from '../../components/profiles/RateLimitSettingsDialog';
 import type { MediaItem } from '../../components/posts/MediaThumbnail';
+import {
+  INVALID_POST_LINK_URL_MESSAGE,
+  PostSubmitActions,
+  getPostSubmitDisabledReason,
+  isPostLinkUrlValid,
+} from '../../components/posts/PostSubmitActions';
 import { Textarea } from '../../components/ui/textarea';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
 import { Skeleton } from '../../components/ui/skeleton';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../../components/ui/tooltip';
-
-const URL_REGEX = /^https?:\/\/.+/i;
 
 interface EditFormState {
   platform: Platform;
@@ -85,10 +81,21 @@ export default function EditPostPage() {
   const scheduleInputRef = useRef<HTMLInputElement>(null);
   const [scheduledAtError, setScheduledAtError] = useState<string | null>(null);
 
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
-  const { upload, uploadingFiles, isUploading } = useMediaUpload();
-  const deleteMediaMutation = useDeleteMedia();
-  const retryTranscodeMutation = useRetryTranscode();
+  const {
+    mediaItems,
+    setMediaItems,
+    uploadingFiles,
+    isUploading,
+    maxFilesForPlatform,
+    hasTranscodingMedia,
+    hasFailedMedia,
+    isMediaBlocking,
+    handleFilesSelected,
+    handleRemoveMedia,
+    handleReorderMedia,
+    handleRetryTranscode,
+    handleMediaStatusUpdate,
+  } = usePostMedia(formState.profileId, formState.platform);
 
   const updateForm = useCallback(
     <K extends keyof EditFormState>(key: K, value: EditFormState[K]) => {
@@ -126,133 +133,20 @@ export default function EditPostPage() {
       }
       setIsFormInitialized(true);
 
-      const postWithMedia = post as unknown as {
-        media?: Array<{
-          id: string;
-          fileName: string;
-          mimeType: string;
-          thumbnailUrl: string | null;
-          transcodeStatus: string;
-          transcodeError: string | null;
-        }>;
-      };
-      if (postWithMedia.media && Array.isArray(postWithMedia.media)) {
+      if (post.media && Array.isArray(post.media)) {
         setMediaItems(
-          postWithMedia.media.map((m) => ({
+          post.media.map((m) => ({
             id: m.id,
             fileName: m.fileName,
             mimeType: m.mimeType,
             thumbnailUrl: m.thumbnailUrl,
-            transcodeStatus: m.transcodeStatus as MediaItem['transcodeStatus'],
+            transcodeStatus: m.transcodeStatus,
             transcodeError: m.transcodeError,
           })),
         );
       }
     }
-  }, [post, profiles, isFormInitialized]);
-
-  const platformLimits = PLATFORM_MEDIA_LIMITS[formState.platform];
-  const maxFilesForPlatform = (() => {
-    if (!platformLimits) return 4;
-    const hasVideo = mediaItems.some((m) => m.mimeType.startsWith('video/'));
-    return hasVideo ? platformLimits.maxVideos : platformLimits.maxImages;
-  })();
-
-  const hasTranscodingMedia = mediaItems.some(
-    (m) => m.transcodeStatus === 'pending' || m.transcodeStatus === 'processing',
-  );
-  const hasFailedMedia = mediaItems.some((m) => m.transcodeStatus === 'failed');
-  const isMediaBlocking = hasTranscodingMedia || hasFailedMedia;
-
-  const handleFilesSelected = useCallback(
-    async (files: File[]) => {
-      if (!formState.platform || !formState.profileId) return;
-      for (const file of files) {
-        try {
-          const response = await upload(file, formState.profileId, formState.platform);
-          setMediaItems((prev) => [
-            ...prev,
-            {
-              id: response.id,
-              fileName: response.fileName,
-              mimeType: response.mimeType,
-              thumbnailUrl: response.thumbnailUrl,
-              transcodeStatus: response.transcodeStatus,
-              transcodeError: null,
-            },
-          ]);
-          toast.success('File uploaded.');
-        } catch (uploadError) {
-          const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed';
-          toast.error(`Upload failed: ${errorMessage}`);
-        }
-      }
-    },
-    [formState.platform, formState.profileId, upload],
-  );
-
-  function handleRemoveMedia(mediaId: string) {
-    deleteMediaMutation.mutate(mediaId, {
-      onSuccess: () => {
-        setMediaItems((prev) => prev.filter((m) => m.id !== mediaId));
-      },
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Failed to remove media.');
-      },
-    });
-  }
-
-  function handleReorderMedia(newOrder: string[]) {
-    setMediaItems((prev) => {
-      const itemMap = new Map(prev.map((m) => [m.id, m]));
-      return newOrder.map((id) => itemMap.get(id)).filter((m): m is MediaItem => m !== undefined);
-    });
-  }
-
-  function handleRetryTranscode(mediaId: string) {
-    retryTranscodeMutation.mutate(mediaId, {
-      onSuccess: () => {
-        setMediaItems((prev) =>
-          prev.map((m) =>
-            m.id === mediaId
-              ? { ...m, transcodeStatus: 'pending' as const, transcodeError: null }
-              : m,
-          ),
-        );
-      },
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : 'Retry failed.');
-      },
-    });
-  }
-
-  const handleMediaStatusUpdate = useCallback(
-    (
-      mediaId: string,
-      status: MediaItem['transcodeStatus'],
-      error: string | null,
-    ) => {
-      setMediaItems((prev) =>
-        prev.map((m) => {
-          if (m.id !== mediaId) return m;
-          if (m.transcodeStatus === status && m.transcodeError === error) {
-            return m;
-          }
-          return { ...m, transcodeStatus: status, transcodeError: error };
-        }),
-      );
-    },
-    [],
-  );
-
-  function getSubmitDisabledReason(): string | null {
-    if (hasTranscodingMedia) return 'Video is still transcoding.';
-    if (hasFailedMedia) return 'Fix or remove failed media before submitting.';
-    if (formState.platform === 'facebook' && formState.linkUrl && !URL_REGEX.test(formState.linkUrl)) {
-      return 'Enter a valid http or https URL.';
-    }
-    return null;
-  }
+  }, [post, profiles, isFormInitialized, setMediaItems]);
 
   const hasLinkedProfile = !!post?.profileId;
   const isEditable = post ? hasLinkedProfile && EDITABLE_STATES.includes(post.status as PostStatus) : false;
@@ -541,6 +435,12 @@ export default function EditPostPage() {
   const previewVideoUrl = mediaItems.find((m) => m.mimeType.startsWith('video/'))?.thumbnailUrl ?? null;
   const primaryAction = post.status === 'queued' ? 'keepQueued' : 'schedule';
   const primaryLabel = primaryAction === 'keepQueued' ? 'Update Queued Post' : 'Schedule Post';
+  const submitDisabledReason = getPostSubmitDisabledReason({
+    hasTranscodingMedia,
+    hasFailedMedia,
+    platform: formState.platform,
+    linkUrl: formState.linkUrl,
+  });
 
   return (
     <main className="px-4 py-6 sm:px-6 lg:px-8">
@@ -635,8 +535,8 @@ export default function EditPostPage() {
                 linkUrl={formState.linkUrl}
                 onLinkUrlChange={(value) => updateForm('linkUrl', value)}
                 linkUrlError={
-                  formState.linkUrl && !URL_REGEX.test(formState.linkUrl)
-                    ? 'Enter a valid http or https URL.'
+                  formState.linkUrl && !isPostLinkUrlValid(formState.linkUrl)
+                    ? INVALID_POST_LINK_URL_MESSAGE
                     : null
                 }
                 mediaItems={mediaItems}
@@ -676,42 +576,15 @@ export default function EditPostPage() {
           />
 
           {/* SplitButton — Update as primary, Save as Draft in dropdown */}
-          {(() => {
-            const disabledReason = getSubmitDisabledReason();
-            const scheduleDisabled = updatePostMutation.isPending || isUploading || !!disabledReason;
-
-            const submitContent = (
-              <SplitButton
-                onPrimary={() => handleSubmit(primaryAction)}
-                onDraft={() => handleSubmit('draft')}
-                primaryLabel={primaryLabel}
-                isLoading={updatePostMutation.isPending}
-                disabled={scheduleDisabled}
-              />
-            );
-
-            if (disabledReason) {
-              return (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span aria-describedby="submit-disabled-reason">
-                        {submitContent}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{disabledReason}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <span id="submit-disabled-reason" className="sr-only">
-                    {disabledReason}
-                  </span>
-                </TooltipProvider>
-              );
-            }
-
-            return submitContent;
-          })()}
+          <PostSubmitActions
+            mode="split"
+            onPrimary={() => handleSubmit(primaryAction)}
+            onDraft={() => handleSubmit('draft')}
+            primaryLabel={primaryLabel}
+            isLoading={updatePostMutation.isPending}
+            disabled={updatePostMutation.isPending || isUploading}
+            disabledReason={submitDisabledReason}
+          />
         </div>
 
         {/* Right column: live preview */}

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client';
 import type { CreatePostInput, UpdatePostInput } from '@sms/shared';
+import type { MediaItem } from '../components/posts/MediaThumbnail';
 
 interface PostTag {
   id: string;
@@ -31,6 +32,7 @@ interface Post {
   createdAt: string;
   updatedAt: string;
   tags: PostTag[];
+  media?: MediaItem[];
   profile?: PostProfile;
   headline?: string;
   rank?: number;
