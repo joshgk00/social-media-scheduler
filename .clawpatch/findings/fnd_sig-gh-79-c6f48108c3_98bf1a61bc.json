@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-79-c6f48108c3_98bf1a61bc",
+  "featureId": "feat_gh-79_bd4a6dc63c",
+  "title": "gh#79: Assert handler-level + central log both fire on PATCH 500 (prevent silent regression)",
+  "category": "test-gap",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "test-gap",
+  "evidence": [
+    {
+      "path": "packages/api/src/__tests__/routes/profiles.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/79.\nBacklog section: Tests.\n\n## Context\n\nPR #77 introduces two structured log lines per profile-PATCH unhandled failure, correlated by `correlationId`:\n\n- **Handler-level** (in `routes/profiles.ts`): `{err, profileId, userId, correlationId}` with message `Profile update failed`. Carries domain context the central handler doesn't have.\n- **Central error handler** (in `middleware/error-handler.ts`): `{err, method, route, correlationId}` with message `Unhandled error`. Carries route context the handler doesn't have.\n\nTests in #77 assert each log line independently in different test files. Nothing asserts both fire on the same PATCH failure with the same correlationId. If a future refactor accidentally drops the handler-level log (e.g., someone removes the `logger.error(...)` line in profiles.ts thinking the central handler covers it), the API tests would still pass — the regression slips through.\n\n## Proposed change\n\nAdd one assertion to the existing PATCH 500 test in `packages/api/src/__tests__/routes/profiles.test.ts` (the test added in #77: *\"returns 500 with stable code and correlation id for unexpected update failures (gh#54)\"*). Specifically, spy on `logger.error` and confirm at least one call carries the `Profile update failed` message and the same correlationId as the response.\n\nOR: add a small standalone test asserting both messages fire in the same request flow.\n\nEither path is fine — pick whichever fits the existing test file style.\n\n## Out of scope\n\n- Changing the two-log-line design itself (intentional; tracks two distinct concerns).\n- Equivalent coverage on the DELETE path — DELETE was hardened in `cbde4a0` without this assertion either; either backfill there in this issue or in a follow-up, editorial call.\n\n## Acceptance\n\n- `pnpm --filter @sms/api test` passes.\n- The new assertion would fail if the `logger.error(...)` call inside the PATCH catch block in `routes/profiles.ts` is deleted.\n\n## References\n\n- Surfaced by the code review on [PR #77](https://github.com/joshgk00/social-media-scheduler/pull/77) (suggestion 3).",
+  "reproduction": "PR #77 introduces two structured log lines per profile-PATCH unhandled failure, correlated by `correlationId`:\n\n- **Handler-level** (in `routes/profiles.ts`): `{err, profileId, userId, correlationId}` with message `Profile update failed`. Carries domain context the central handler doesn't have.\n- **Central error handler** (in `middleware/error-handler.ts`): `{err, method, route, correlationId}` with message `Unhandled error`. Carries route context the handler doesn't have.\n\nTests in #77 assert each log line independently in different test files. Nothing asserts both fire on the same PATCH failure with the same correlationId. If a future refactor accidentally drops the handler-level log (e.g., someone removes the `logger.error(...)` line in profiles.ts thinking the central handler covers it), the API tests would still pass — the regression slips through.",
+  "recommendation": "Add one assertion to the existing PATCH 500 test in `packages/api/src/__tests__/routes/profiles.test.ts` (the test added in #77: *\"returns 500 with stable code and correlation id for unexpected update failures (gh#54)\"*). Specifically, spy on `logger.error` and confirm at least one call carries the `Profile update failed` message and the same correlationId as the response.\n\nOR: add a small standalone test asserting both messages fire in the same request flow.\n\nEither path is fine — pick whichever fits the existing test file style.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": "- `pnpm --filter @sms/api test` passes.\n- The new assertion would fail if the `logger.error(...)` call inside the PATCH catch block in `routes/profiles.ts` is deleted.",
+  "minimumFixScope": "packages/api/src/__tests__/routes/profiles.test.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-79_c6f48108c3",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

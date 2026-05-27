@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-42_a592ab5953",
+  "title": "gh#42: Phase 11 follow-up: calendar today-cell highlighting regression test",
+  "summary": "Imported from GitHub issue gh#42 in BACKLOG.md section \"Tests\".",
+  "kind": "test-suite",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#42"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "command": null
+    }
+  ],
+  "tags": [
+    "github-issue",
+    "gh#42",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/42",
+    "backlog-order:0060",
+    "backlog-section:tests",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-42-51da7024fd_f8c9f57d02"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#42",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

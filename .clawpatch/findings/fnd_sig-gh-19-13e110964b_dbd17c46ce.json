@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-19-13e110964b_dbd17c46ce",
+  "featureId": "feat_gh-19_a519c9818b",
+  "title": "gh#19: Config: Add transcode retries and align auto-destruct backoff",
+  "category": "build-release",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "packages/api/src/services/media.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/api/src/services/auto-destruct-queue.service.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/transcode-worker.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/auto-destruct-worker.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/backoff.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/19.\nBacklog section: Enhancements / config.\n\n## Problem\n\nTranscode jobs are still enqueued with `attempts: 1`, so transient failures such as disk I/O, temporary storage reads, or ffmpeg resource pressure permanently fail the media on the first error.\n\nAuto-destruct has drifted since this issue was filed: the queue service now sets `attempts: 4`, but it uses BullMQ's built-in `exponential` backoff while the worker registers the project custom provider backoff strategy. The producer and worker should be explicit and aligned.\n\n## Decision\n\nUse a small retry budget for transcode and align auto-destruct with the same named custom backoff pattern used by publish jobs.\n\n## Implementation direction\n\n### Transcode\n\n- Enqueue initial transcode jobs with `attempts: 3`.\n- Enqueue manual retry transcode jobs with `attempts: 3`.\n- Use `backoff: { type: 'exponential', delay: 60_000 }` for transcode jobs.\n- In `transcode-worker`, mark media `failed` only on the final attempt. On non-final failures, leave or restore the row to a retryable non-final state, preferably `pending`, so the UI does not show a permanent failure while BullMQ is still backing off.\n- Preserve temp-file cleanup in `finally`.\n\n### Auto-destruct\n\n- Keep `attempts: 4`.\n- Replace built-in `backoff: { type: 'exponential', delay: 30_000 }` with a named custom backoff type that is handled by the worker's registered strategy.\n- Prefer a specific name such as `autoDestructBackoff` rather than reusing `publishBackoff`, even if the implementation delegates to the same schedule helper.\n- Add or update tests so the queue default job options and worker `settings.backoffStrategy` are visibly aligned.\n\n## Acceptance criteria\n\n- Initial video upload enqueue uses `attempts: 3` plus exponential backoff.\n- Manual transcode retry enqueue uses `attempts: 3` plus exponential backoff.\n- A non-final transcode failure does not permanently mark media as `failed`.\n- A final transcode failure records `transcodeStatus='failed'` and a bounded `transcodeError`.\n- Auto-destruct enqueue uses `attempts: 4` and the named custom backoff type expected by the worker.\n- Existing auto-destruct final-failure notification behavior remains unchanged.\n- Focused API/worker tests for media and auto-destruct pass.\n\n## Files\n\n- `packages/api/src/services/media.service.ts`\n- `packages/api/src/services/auto-destruct-queue.service.ts`\n- `packages/worker/src/transcode-worker.ts`\n- `packages/worker/src/auto-destruct-worker.ts`\n- `packages/worker/src/backoff.ts`\n- Relevant API/worker tests",
+  "reproduction": "Transcode jobs are still enqueued with `attempts: 1`, so transient failures such as disk I/O, temporary storage reads, or ffmpeg resource pressure permanently fail the media on the first error.\n\nAuto-destruct has drifted since this issue was filed: the queue service now sets `attempts: 4`, but it uses BullMQ's built-in `exponential` backoff while the worker registers the project custom provider backoff strategy. The producer and worker should be explicit and aligned.",
+  "recommendation": "Implement the fix described by GitHub issue gh#19 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/api/src/services/media.service.ts, packages/api/src/services/auto-destruct-queue.service.ts, packages/worker/src/transcode-worker.ts, packages/worker/src/auto-destruct-worker.ts, packages/worker/src/backoff.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-19_13e110964b",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

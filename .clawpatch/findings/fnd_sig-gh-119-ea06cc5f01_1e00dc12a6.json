@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-119-ea06cc5f01_1e00dc12a6",
+  "featureId": "feat_gh-119_e7ffbb4d06",
+  "title": "gh#119: Tests: Extract and cover MediaDropZone file validation",
+  "category": "test-gap",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "test-gap",
+  "evidence": [
+    {
+      "path": "packages/web/src/components/posts/MediaDropZone.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/119.\nBacklog section: Tests.\n\n## Problem\n\n`packages/web/src/components/posts/MediaDropZone.tsx` contains a meaningful `validateFiles(...)` helper, but it is private to the component and coupled directly to `toast.error(...)`. That makes the platform media-limit rules harder to test directly and encourages future changes to rely only on component-level behavior.\n\nThis was originally listed inside #28, but it is a web/component concern and should not be bundled with shared storage backend tests.\n\n## Decision\n\nExtract the validation logic into a pure, testable helper that returns valid files plus validation errors. Keep toast rendering inside the component.\n\nSuggested shape:\n\n```ts\nexport function validateMediaFiles(input): {\n  validFiles: File[];\n  errors: string[];\n}\n```\n\n`MediaDropZone` should call the helper, toast each returned error, and pass only valid files to `onFilesSelected`.\n\n## Acceptance criteria\n\n- `MediaDropZone` no longer owns unexported toast-coupled validation logic.\n- Unit tests cover representative validation cases:\n  - no selected platform\n  - unsupported MIME type\n  - image/video file size limits\n  - image/video mixing rejection\n  - max image count and max video count enforcement\n  - valid files are returned unchanged\n- Existing `MediaDropZone` user interactions still work.\n- `pnpm --filter @sms/web test -- MediaDropZone` passes, or the closest focused web test command if the test file name differs.\n\n## Out of scope\n\n- Changing platform media limits.\n- Changing upload transport or API behavior.\n- Redesigning the drop zone UI.\n\n## References\n\n- Split out of #28 during issue grooming.",
+  "reproduction": "`packages/web/src/components/posts/MediaDropZone.tsx` contains a meaningful `validateFiles(...)` helper, but it is private to the component and coupled directly to `toast.error(...)`. That makes the platform media-limit rules harder to test directly and encourages future changes to rely only on component-level behavior.\n\nThis was originally listed inside #28, but it is a web/component concern and should not be bundled with shared storage backend tests.",
+  "recommendation": "Implement the fix described by GitHub issue gh#119 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/components/posts/MediaDropZone.tsx",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-119_ea06cc5f01",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

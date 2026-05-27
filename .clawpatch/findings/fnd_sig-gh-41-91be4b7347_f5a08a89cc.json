@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-41-91be4b7347_f5a08a89cc",
+  "featureId": "feat_gh-41_f1090fbcfd",
+  "title": "gh#41: Phase 11 follow-up: SnippetPicker arrow-nav + Enter regression test",
+  "category": "test-gap",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "test-gap",
+  "evidence": [
+    {
+      "path": "packages/web/src/components/ui/command.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/web/src/components/snippets/__tests__/SnippetPicker.test.tsx",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/41.\nBacklog section: Tests.\n\n## Context\n\nPhase 11 UAT (test 8) confirmed the snippet picker keyboard navigation works via the cmdk-backed primitives in `packages/web/src/components/ui/command.tsx` — arrow-key navigation, Enter selection, and Escape are inherited from cmdk. The existing Vitest tests cover Escape close + focus-return, substring filtering, cursor-position insertion, and selected-range replacement.\n\nWhat's missing is an explicit guard that **arrow-key + Enter** still inserts the highlighted snippet at the cursor. cmdk covers it today, but a guarded regression test is cheap insurance against a future cmdk swap or upgrade silently breaking the contract.\n\n## Acceptance criteria\n\n- New Vitest case in `packages/web/src/components/snippets/__tests__/SnippetPicker.test.tsx`:\n  1. Render the picker with multiple snippets\n  2. Press `ArrowDown` to move highlight off the first item\n  3. Press `Enter`\n  4. Assert the **highlighted** snippet's body was inserted at the captured cursor position (not the first item, not nothing)\n- All existing tests in the file still pass.\n\n## Why now\n\nDiscovered as a non-blocking gap during Phase 11 UAT (see `.planning/phases/11-snippets-search-calendar-polish/11-UAT.md` test 8 note). Filed for later because Phase 11's substance ships green without it.",
+  "reproduction": "Phase 11 UAT (test 8) confirmed the snippet picker keyboard navigation works via the cmdk-backed primitives in `packages/web/src/components/ui/command.tsx` — arrow-key navigation, Enter selection, and Escape are inherited from cmdk. The existing Vitest tests cover Escape close + focus-return, substring filtering, cursor-position insertion, and selected-range replacement.\n\nWhat's missing is an explicit guard that **arrow-key + Enter** still inserts the highlighted snippet at the cursor. cmdk covers it today, but a guarded regression test is cheap insurance against a future cmdk swap or upgrade silently breaking the contract.",
+  "recommendation": "Implement the fix described by GitHub issue gh#41 and satisfy its acceptance criteria.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/web/src/components/ui/command.tsx, packages/web/src/components/snippets/__tests__/SnippetPicker.test.tsx",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-41_91be4b7347",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

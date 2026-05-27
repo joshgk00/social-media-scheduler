@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-28_5d6f2e5a41",
+  "title": "gh#28: Tests: Shared storage backend coverage gaps",
+  "summary": "Imported from GitHub issue gh#28 in BACKLOG.md section \"Tests\".",
+  "kind": "test-suite",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/shared/src/index.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/shared/src/__tests__/storage.test.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/shared/src/index.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/shared/src/__tests__/storage.test.ts",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#28"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/shared/src/__tests__/storage.test.ts",
+      "command": null
+    }
+  ],
+  "tags": [
+    "github-issue",
+    "gh#28",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/28",
+    "backlog-order:0057",
+    "backlog-section:tests"
+  ],
+  "trustBoundaries": [
+    "filesystem"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-28-9091f7c2b4_366d6e084c"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#28",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

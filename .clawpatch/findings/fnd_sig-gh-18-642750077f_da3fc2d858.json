@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-18-642750077f_da3fc2d858",
+  "featureId": "feat_gh-18_93a07c6332",
+  "title": "gh#18: Fix: Media cleanup deletes storage before DB row — ordering risk",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "packages/worker/src/media-cleanup-worker.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/18.\nBacklog section: P1 — Security & infra correctness.\n\n## Problem\n\nCleanup loop deletes storage file first, then DB row. If the worker crashes between steps, the DB row persists pointing to a missing file. Reversing the order (DB first, then storage) is safer — an orphaned storage file is harmless, but a DB row pointing to a missing file confuses the UI.\n\nAlso, db.delete failures inside the loop are uncaught — one failing row aborts the entire batch.\n\n## Identified by\n\nCode quality review Run 2 — security-auditor (finding 3), error-handling-reviewer (finding 3)\n\n## Fix\n\n1. Delete DB row first, then storage (best-effort).\n2. Wrap db.delete in try-catch with continue so remaining rows are processed.\n\n## Files\n\n- `packages/worker/src/media-cleanup-worker.ts:45-71, 83-105`",
+  "reproduction": "Cleanup loop deletes storage file first, then DB row. If the worker crashes between steps, the DB row persists pointing to a missing file. Reversing the order (DB first, then storage) is safer — an orphaned storage file is harmless, but a DB row pointing to a missing file confuses the UI.\n\nAlso, db.delete failures inside the loop are uncaught — one failing row aborts the entire batch.",
+  "recommendation": "1. Delete DB row first, then storage (best-effort).\n2. Wrap db.delete in try-catch with continue so remaining rows are processed.",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/worker/src/media-cleanup-worker.ts",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-18_642750077f",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040704-625501",
+  "createdAt": "2026-05-27T04:07:04.328Z",
+  "updatedAt": "2026-05-27T04:07:04.328Z"
+}

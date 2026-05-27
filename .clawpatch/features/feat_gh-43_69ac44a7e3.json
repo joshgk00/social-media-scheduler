@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-43_69ac44a7e3",
+  "title": "gh#43: Phase 11 follow-up: calendar conflict tooltip interaction regression test",
+  "summary": "Imported from GitHub issue gh#43 in BACKLOG.md section \"Tests\".",
+  "kind": "test-suite",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/api/src/__tests__/integration/calendar-api.test.ts",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/api/src/__tests__/integration/calendar-api.test.ts",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#43"
+    }
+  ],
+  "tests": [
+    {
+      "path": "packages/api/src/__tests__/integration/calendar-api.test.ts",
+      "command": null
+    },
+    {
+      "path": "packages/web/src/pages/calendar/__tests__/CalendarPage.test.tsx",
+      "command": null
+    }
+  ],
+  "tags": [
+    "github-issue",
+    "gh#43",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/43",
+    "backlog-order:0061",
+    "backlog-section:tests",
+    "label:enhancement"
+  ],
+  "trustBoundaries": [
+    "network",
+    "filesystem"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-43-4c75fa7f7d_a468ec441c"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#43",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

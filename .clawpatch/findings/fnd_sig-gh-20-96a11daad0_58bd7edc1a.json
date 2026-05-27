@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-gh-20-96a11daad0_58bd7edc1a",
+  "featureId": "feat_gh-20_1467c11429",
+  "title": "gh#20: Tests: Transcode worker processor has zero test coverage",
+  "category": "test-gap",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "test-gap",
+  "evidence": [
+    {
+      "path": "packages/worker/src/__tests__/transcode.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/__tests__/media-cleanup.test.ts",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "packages/worker/src/__tests__/helpers/",
+      "startLine": null,
+      "endLine": null,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "Imported from https://github.com/joshgk00/social-media-scheduler/issues/20.\nBacklog section: Tests.\n\n## Problem\n\nThe transcode worker processor — which handles download/transcode/upload/DB-update — has no unit test coverage. Tests only verify the factory creates a Worker with the right options. The error handler (marks media as failed, nested catch for DB write failure, temp file cleanup) is entirely untested.\n\nAlso: media-cleanup tests missing DB delete failure path, and duplicated mock setup across 4 test files.\n\n## Identified by\n\nCode quality review Run 2 — test-quality-analyzer (findings 1, 2, 4, 8)\n\n## Fix\n\n- Capture processor via MockWorker pattern (same as media-cleanup.test.ts)\n- Test: successful transcode, ffmpeg failure marks status as failed, DB failure during error path, temp file cleanup\n- Extract shared mock-logger.ts and mock-bullmq.ts helpers\n- Add vi.resetModules() to media-cleanup beforeEach\n\n## Files\n\n- `packages/worker/src/__tests__/transcode.test.ts`\n- `packages/worker/src/__tests__/media-cleanup.test.ts`\n- `packages/worker/src/__tests__/helpers/`",
+  "reproduction": "The transcode worker processor — which handles download/transcode/upload/DB-update — has no unit test coverage. Tests only verify the factory creates a Worker with the right options. The error handler (marks media as failed, nested catch for DB write failure, temp file cleanup) is entirely untested.\n\nAlso: media-cleanup tests missing DB delete failure path, and duplicated mock setup across 4 test files.",
+  "recommendation": "- Capture processor via MockWorker pattern (same as media-cleanup.test.ts)\n- Test: successful transcode, ffmpeg failure marks status as failed, DB failure during error path, temp file cleanup\n- Extract shared mock-logger.ts and mock-bullmq.ts helpers\n- Add vi.resetModules() to media-cleanup beforeEach",
+  "whyTestsDoNotAlreadyCoverThis": "Imported from GitHub issue. Preserve or add focused regression coverage when the issue acceptance criteria calls for it.",
+  "suggestedRegressionTest": null,
+  "minimumFixScope": "packages/worker/src/__tests__/transcode.test.ts, packages/worker/src/__tests__/media-cleanup.test.ts, packages/worker/src/__tests__/helpers/",
+  "status": "open",
+  "history": [],
+  "signature": "sig_gh-20_96a11daad0",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260527T040617-93c83b",
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}

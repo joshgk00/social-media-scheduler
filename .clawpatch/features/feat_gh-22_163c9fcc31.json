@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_gh-22_163c9fcc31",
+  "title": "gh#22: Refactor: Extract shared usePostMedia hook from NewPostPage/EditPostPage",
+  "summary": "Imported from GitHub issue gh#22 in BACKLOG.md section \"Refactoring / type safety\".",
+  "kind": "ui-flow",
+  "source": "github-issue-import",
+  "confidence": "high",
+  "entrypoints": [
+    {
+      "path": "packages/web/src/pages/posts/NewPostPage.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    },
+    {
+      "path": "packages/web/src/pages/posts/EditPostPage.tsx",
+      "symbol": null,
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/web/src/pages/posts/NewPostPage.tsx",
+      "reason": "mentioned by issue body"
+    },
+    {
+      "path": "packages/web/src/pages/posts/EditPostPage.tsx",
+      "reason": "mentioned by issue body"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "BACKLOG.md",
+      "reason": "backlog queue item for gh#22"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "github-issue",
+    "gh#22",
+    "github-url:https://github.com/joshgk00/social-media-scheduler/issues/22",
+    "backlog-order:0050",
+    "backlog-section:refactoring-type-safety"
+  ],
+  "trustBoundaries": [
+    "filesystem"
+  ],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-gh-22-7d002311ef_9bb9359c10"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260527T040617-93c83b",
+      "kind": "github-issue-import",
+      "summary": "Imported GitHub issue gh#22",
+      "provider": "gh",
+      "model": null,
+      "createdAt": "2026-05-27T04:06:17.910Z"
+    }
+  ],
+  "createdAt": "2026-05-27T04:06:17.910Z",
+  "updatedAt": "2026-05-27T04:06:17.910Z"
+}
