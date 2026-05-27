@@ -4,9 +4,11 @@
 //   1. Soft-deleted files older than 30 days (deletedAt < 30 days ago)
 //   2. Orphaned uploads with no postId older than 24 hours
 //
-// Both storage backend files and database rows are removed. Storage
-// deletion errors are caught and logged — one unreachable file must
-// not prevent cleanup of the rest (T-06-16).
+// Database rows are removed before storage files so cleanup never leaves a
+// database reference to a missing object. If storage deletion then fails, the
+// file can remain unreachable because the row is gone; that leak is logged and
+// accepted so one unreachable object does not block cleanup of the rest
+// (T-06-16).
 
 import { Worker, Queue, type Job } from 'bullmq';
 import type { Redis } from 'ioredis';
@@ -84,6 +86,23 @@ async function deleteMediaRows(
   }
 }
 
+function logSkippedBatch(
+  rows: MediaCleanupRow[],
+  logWarn: (metadata: Record<string, unknown>, message: string) => void,
+  message: string,
+): void {
+  const firstRow = rows[0];
+  const lastRow = rows[rows.length - 1];
+  logWarn(
+    {
+      firstMediaId: firstRow?.id,
+      lastMediaId: lastRow?.id,
+      mediaCount: rows.length,
+    },
+    message,
+  );
+}
+
 export interface MediaCleanupWorkerDeps {
   redis: Redis;
   db: WorkerDb;
@@ -134,6 +153,11 @@ export function createMediaCleanupWorker(
         );
 
         if (!rowsDeleted) {
+          logSkippedBatch(
+            expiredMedia,
+            (metadata, message) => jobLogger.warn(metadata, message),
+            'Skipping expired media batch after database delete failure',
+          );
           continue;
         }
 
@@ -194,6 +218,11 @@ export function createMediaCleanupWorker(
         );
 
         if (!rowsDeleted) {
+          logSkippedBatch(
+            orphans,
+            (metadata, message) => jobLogger.warn(metadata, message),
+            'Skipping orphan media batch after database delete failure',
+          );
           continue;
         }
 
@@ -208,6 +237,10 @@ export function createMediaCleanupWorker(
               fileFailure: 'Failed to delete orphan file from storage, continuing',
               thumbnailFailure: 'Failed to delete orphan thumbnail from storage, continuing',
             },
+          );
+          jobLogger.info(
+            { mediaId: orphan.id, filePath: orphan.filePath },
+            'Permanently deleted orphaned media',
           );
         }
       }

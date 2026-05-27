@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const logMocks = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 // Mock logger before any imports that use it
 vi.mock('@sms/shared/logger', () => ({
   createLogger: () => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: () => ({
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    }),
+    info: logMocks.info,
+    warn: logMocks.warn,
+    error: logMocks.error,
+    child: () => logMocks,
   }),
 }));
 
@@ -245,7 +247,7 @@ describe('createMediaCleanupWorker', () => {
     expect(deleteFn).not.toHaveBeenCalled();
   });
 
-  it('handles storage.delete() failure gracefully and continues', async () => {
+  it('logs and accepts unreachable storage files after database row deletion succeeds', async () => {
     const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
     const mockRedis = {} as never;
     const { db } = createMockDb();
@@ -258,7 +260,8 @@ describe('createMediaCleanupWorker', () => {
 
     mockSelectBatches(db, [expiredRows, [], []]);
 
-    db.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+    const deleteWhere = vi.fn().mockResolvedValue(undefined);
+    db.delete.mockReturnValue({ where: deleteWhere });
 
     // First call fails, second succeeds
     mockStorage.delete
@@ -271,8 +274,20 @@ describe('createMediaCleanupWorker', () => {
     await expect(capturedProcessor!({ data: {} })).resolves.toBeUndefined();
 
     // Both files attempted
+    expect(deleteWhere).toHaveBeenCalledWith({
+      type: 'inArray',
+      col: 'mock_id_col',
+      vals: ['media-1', 'media-2'],
+    });
+    expect(deleteWhere.mock.invocationCallOrder[0]).toBeLessThan(
+      mockStorage.delete.mock.invocationCallOrder[0],
+    );
     expect(mockStorage.delete).toHaveBeenCalledWith('fail/path.jpg');
     expect(mockStorage.delete).toHaveBeenCalledWith('ok/path.jpg');
+    expect(logMocks.error).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaId: 'media-1', filePath: 'fail/path.jpg' }),
+      'Failed to delete file from storage, continuing',
+    );
   });
 
   it('deletes expired media rows in one batch before deleting storage files', async () => {
@@ -319,6 +334,10 @@ describe('createMediaCleanupWorker', () => {
         { id: 'media-2', filePath: 'media/p1/2026/01/def.jpg', thumbnailPath: null },
       ],
       [],
+      [
+        { id: 'orphan-1', filePath: 'media/p2/2026/01/orphan-a.jpg', thumbnailPath: null },
+        { id: 'orphan-2', filePath: 'media/p2/2026/01/orphan-b.jpg', thumbnailPath: null },
+      ],
       [],
     ]);
 
@@ -327,13 +346,18 @@ describe('createMediaCleanupWorker', () => {
     createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
     await capturedProcessor!({ data: {} });
 
-    expect(queries).toHaveLength(3);
+    expect(queries).toHaveLength(4);
     for (const query of queries) {
       expect(query.limit).toHaveBeenCalledWith(200);
     }
     expect(queries[1].where).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining([
         { type: 'gt', col: 'mock_id_col', val: 'media-2' },
+      ]),
+    }));
+    expect(queries[3].where).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.arrayContaining([
+        { type: 'gt', col: 'mock_id_col', val: 'orphan-2' },
       ]),
     }));
   });
@@ -377,6 +401,14 @@ describe('createMediaCleanupWorker', () => {
     expect(mockStorage.delete).not.toHaveBeenCalledWith('batch-1/path-a.jpg');
     expect(mockStorage.delete).not.toHaveBeenCalledWith('batch-1/path-b.jpg');
     expect(mockStorage.delete).toHaveBeenCalledWith('batch-2/path-c.jpg');
+    expect(logMocks.warn).toHaveBeenCalledWith(
+      {
+        firstMediaId: 'media-1',
+        lastMediaId: 'media-2',
+        mediaCount: 2,
+      },
+      'Skipping expired media batch after database delete failure',
+    );
   });
 
   it('deletes orphan rows in one batch before storage even when storage deletion fails', async () => {
@@ -412,6 +444,52 @@ describe('createMediaCleanupWorker', () => {
     expect(mockStorage.delete).toHaveBeenCalledWith('ok/orphan.jpg');
     expect(deleteWhere.mock.invocationCallOrder[0]).toBeLessThan(
       mockStorage.delete.mock.invocationCallOrder[0],
+    );
+    expect(logMocks.info).toHaveBeenCalledWith(
+      { mediaId: 'orphan-1', filePath: 'fail/orphan.jpg' },
+      'Permanently deleted orphaned media',
+    );
+    expect(logMocks.info).toHaveBeenCalledWith(
+      { mediaId: 'orphan-2', filePath: 'ok/orphan.jpg' },
+      'Permanently deleted orphaned media',
+    );
+  });
+
+  it('logs skipped orphan cursor range when an orphan batch database delete fails', async () => {
+    const { createMediaCleanupWorker } = await import('../media-cleanup-worker.js');
+    const mockRedis = {} as never;
+    const { db } = createMockDb();
+    const mockStorage = createMockStorage();
+
+    const orphanRows = [
+      { id: 'orphan-1', filePath: 'batch-1/orphan-a.jpg', thumbnailPath: null },
+      { id: 'orphan-2', filePath: 'batch-1/orphan-b.jpg', thumbnailPath: null },
+    ];
+    const nextOrphanRows = [
+      { id: 'orphan-3', filePath: 'batch-2/orphan-c.jpg', thumbnailPath: null },
+    ];
+
+    mockSelectBatches(db, [[], orphanRows, nextOrphanRows, []]);
+
+    const deleteWhere = vi.fn()
+      .mockRejectedValueOnce(new Error('database unavailable'))
+      .mockResolvedValue(undefined);
+    db.delete.mockReturnValue({ where: deleteWhere });
+
+    createMediaCleanupWorker({ redis: mockRedis, db: db as never, storage: mockStorage });
+
+    await expect(capturedProcessor!({ data: {} })).resolves.toBeUndefined();
+
+    expect(mockStorage.delete).not.toHaveBeenCalledWith('batch-1/orphan-a.jpg');
+    expect(mockStorage.delete).not.toHaveBeenCalledWith('batch-1/orphan-b.jpg');
+    expect(mockStorage.delete).toHaveBeenCalledWith('batch-2/orphan-c.jpg');
+    expect(logMocks.warn).toHaveBeenCalledWith(
+      {
+        firstMediaId: 'orphan-1',
+        lastMediaId: 'orphan-2',
+        mediaCount: 2,
+      },
+      'Skipping orphan media batch after database delete failure',
     );
   });
 });
